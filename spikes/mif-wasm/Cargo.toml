@@ -1,0 +1,36 @@
+# Spike A: mif-rs compiled to WASM for the Obsidian plugin.
+# Depends on the mif-rs working clone by path (read-only); nothing here is
+# meant to merge into mif-rs as-is. See docs/adr/0001-engine-implementation.md.
+[package]
+name = "mif-wasm"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mif-frontmatter = { path = "../../../mif-rs/crates/mif-frontmatter" }
+mif-schema = { path = "../../../mif-rs/crates/mif-schema", optional = true }
+mif-ontology = { path = "../../../mif-rs/crates/mif-ontology", optional = true }
+serde_json = { version = "1", features = ["preserve_order"] }
+wasm-bindgen = "0.2"
+
+[features]
+default = ["schema", "ontology"]
+schema = ["dep:mif-schema"]
+ontology = ["dep:mif-ontology"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", "--enable-sign-ext", "--enable-mutable-globals", "--enable-reference-types", "--enable-multivalue", "--enable-simd"]
+
+# Standalone: not a member of any parent workspace.
+[workspace]

@@ -1,0 +1,2 @@
+# Line endings are the point of this fixture.
+tests/fixtures/edge/crlf.md -text

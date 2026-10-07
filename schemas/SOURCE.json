@@ -1,0 +1,15 @@
+{
+  "repo": "modeled-information-format/MIF",
+  "commit": "e5803021d27fe6214aa1770b97a07b9f20bc89a5",
+  "branch": "main",
+  "syncedAt": "2026-10-07T18:29:14.647Z",
+  "files": [
+    "citation.schema.json",
+    "container.schema.json",
+    "definitions/entity-reference.schema.json",
+    "document-reference.schema.json",
+    "mif.schema.json",
+    "ontology/ontology.schema.json",
+    "relationship-types-config.schema.json"
+  ]
+}

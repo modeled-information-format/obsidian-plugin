@@ -1,0 +1,33 @@
+{
+  "@context": [
+    "https://mif-spec.dev/schema/context.jsonld",
+    {
+      "farm": "https://example.org/farm/"
+    }
+  ],
+  "@type": "Concept",
+  "@id": "urn:mif:0b6f3a8e-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+  "conceptType": "episodic",
+  "created": "2026-01-15T10:30:00Z",
+  "modified": "2026-01-20T14:22:00.500000Z",
+  "title": "Timestamp forms",
+  "temporal": {
+    "validFrom": "2026-01-15T00:00:00+05:30",
+    "validUntil": null,
+    "recordedAt": "2026-01-15T10:30:00",
+    "lastAccessed": "2026-01-20T14:22:00Z"
+  },
+  "citations": [
+    {
+      "@type": "Citation",
+      "citationType": "article",
+      "title": "Dated source",
+      "url": "https://example.org/a",
+      "citationRole": "supports",
+      "date": "2024-06-15",
+      "accessed": "2026-01-20"
+    }
+  ],
+  "timestamp": "2026-01-20T14:22:00.500000Z",
+  "content": "Each timestamp form PyYAML resolves differently."
+}

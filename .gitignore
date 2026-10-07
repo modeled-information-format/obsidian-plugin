@@ -1,0 +1,11 @@
+node_modules/
+main.js
+*.js.map
+data.json
+test-vault/.obsidian/
+test-vault/_spike/
+.DS_Store
+test-vault/_fixtures/
+spikes/mif-wasm/target/
+spikes/mif-wasm/pkg-*/
+spikes/mif-wasm/Cargo.lock

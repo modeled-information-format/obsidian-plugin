@@ -1,0 +1,5 @@
+---
+{}
+---
+
+Body after empty frontmatter.

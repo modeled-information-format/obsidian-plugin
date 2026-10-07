@@ -1,0 +1,6 @@
+relationship_types:
+  - name: BreedsWith
+    namespace: farm
+    inverse: BredBy
+namespaces:
+  farm: https://example.org/farm/

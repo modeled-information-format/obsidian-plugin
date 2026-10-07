@@ -1,0 +1,421 @@
+[
+  {
+    "text": "yes",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "Yes",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "YES",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "no",
+    "value": false,
+    "kind": "bool"
+  },
+  {
+    "text": "NO",
+    "value": false,
+    "kind": "bool"
+  },
+  {
+    "text": "on",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "ON",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "off",
+    "value": false,
+    "kind": "bool"
+  },
+  {
+    "text": "Off",
+    "value": false,
+    "kind": "bool"
+  },
+  {
+    "text": "true",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "True",
+    "value": true,
+    "kind": "bool"
+  },
+  {
+    "text": "FALSE",
+    "value": false,
+    "kind": "bool"
+  },
+  {
+    "text": "y",
+    "value": "y",
+    "kind": "str"
+  },
+  {
+    "text": "Y",
+    "value": "Y",
+    "kind": "str"
+  },
+  {
+    "text": "n",
+    "value": "n",
+    "kind": "str"
+  },
+  {
+    "text": "N",
+    "value": "N",
+    "kind": "str"
+  },
+  {
+    "text": "yEs",
+    "value": "yEs",
+    "kind": "str"
+  },
+  {
+    "text": "tRue",
+    "value": "tRue",
+    "kind": "str"
+  },
+  {
+    "text": "~",
+    "value": null,
+    "kind": "NoneType"
+  },
+  {
+    "text": "null",
+    "value": null,
+    "kind": "NoneType"
+  },
+  {
+    "text": "Null",
+    "value": null,
+    "kind": "NoneType"
+  },
+  {
+    "text": "NULL",
+    "value": null,
+    "kind": "NoneType"
+  },
+  {
+    "text": "nULL",
+    "value": "nULL",
+    "kind": "str"
+  },
+  {
+    "text": "",
+    "value": null,
+    "kind": "NoneType"
+  },
+  {
+    "text": "0",
+    "value": 0,
+    "kind": "int"
+  },
+  {
+    "text": "-0",
+    "value": 0,
+    "kind": "int"
+  },
+  {
+    "text": "+7",
+    "value": 7,
+    "kind": "int"
+  },
+  {
+    "text": "010",
+    "value": 8,
+    "kind": "int"
+  },
+  {
+    "text": "08",
+    "value": "08",
+    "kind": "str"
+  },
+  {
+    "text": "09",
+    "value": "09",
+    "kind": "str"
+  },
+  {
+    "text": "0o17",
+    "value": "0o17",
+    "kind": "str"
+  },
+  {
+    "text": "0b101",
+    "value": 5,
+    "kind": "int"
+  },
+  {
+    "text": "0x1F",
+    "value": 31,
+    "kind": "int"
+  },
+  {
+    "text": "0X1F",
+    "value": "0X1F",
+    "kind": "str"
+  },
+  {
+    "text": "1_000",
+    "value": 1000,
+    "kind": "int"
+  },
+  {
+    "text": "1:20",
+    "value": 80,
+    "kind": "int"
+  },
+  {
+    "text": "-1:20:30",
+    "value": -4830,
+    "kind": "int"
+  },
+  {
+    "text": "01:20",
+    "value": "01:20",
+    "kind": "str"
+  },
+  {
+    "text": "190:20:30",
+    "value": 685230,
+    "kind": "int"
+  },
+  {
+    "text": "1.0",
+    "value": 1.0,
+    "kind": "float"
+  },
+  {
+    "text": "1.",
+    "value": 1.0,
+    "kind": "float"
+  },
+  {
+    "text": ".5",
+    "value": 0.5,
+    "kind": "float"
+  },
+  {
+    "text": "-.5",
+    "value": "-.5",
+    "kind": "str"
+  },
+  {
+    "text": "1e3",
+    "value": "1e3",
+    "kind": "str"
+  },
+  {
+    "text": "1E3",
+    "value": "1E3",
+    "kind": "str"
+  },
+  {
+    "text": "1.0e3",
+    "value": "1.0e3",
+    "kind": "str"
+  },
+  {
+    "text": "1.0e+3",
+    "value": 1000.0,
+    "kind": "float"
+  },
+  {
+    "text": "1.0E-3",
+    "value": 0.001,
+    "kind": "float"
+  },
+  {
+    "text": "6.8523015e+5",
+    "value": 685230.15,
+    "kind": "float"
+  },
+  {
+    "text": "685.230_15e+03",
+    "value": 685230.15,
+    "kind": "float"
+  },
+  {
+    "text": "190:20:30.15",
+    "value": 685230.15,
+    "kind": "float"
+  },
+  {
+    "text": ".inf",
+    "value": {
+      "$float": "inf"
+    },
+    "kind": "float"
+  },
+  {
+    "text": "-.Inf",
+    "value": {
+      "$float": "-inf"
+    },
+    "kind": "float"
+  },
+  {
+    "text": "+.INF",
+    "value": {
+      "$float": "inf"
+    },
+    "kind": "float"
+  },
+  {
+    "text": ".nan",
+    "value": {
+      "$float": "nan"
+    },
+    "kind": "float"
+  },
+  {
+    "text": ".NaN",
+    "value": {
+      "$float": "nan"
+    },
+    "kind": "float"
+  },
+  {
+    "text": "inf",
+    "value": "inf",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15",
+    "value": "2026-01-15",
+    "kind": "str"
+  },
+  {
+    "text": "2026-1-15",
+    "value": "2026-1-15",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00Z",
+    "value": "2026-01-15T10:30:00Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15t10:30:00z",
+    "value": "2026-01-15t10:30:00z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15 10:30:00",
+    "value": "2026-01-15T10:30:00",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15  10:30:00",
+    "value": "2026-01-15T10:30:00",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00.5Z",
+    "value": "2026-01-15T10:30:00.500000Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00.123456789Z",
+    "value": "2026-01-15T10:30:00.123456Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00.000Z",
+    "value": "2026-01-15T10:30:00Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00.Z",
+    "value": "2026-01-15T10:30:00Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00+05:30",
+    "value": "2026-01-15T10:30:00+05:30",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00-08",
+    "value": "2026-01-15T10:30:00-08:00",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00 -08:00",
+    "value": "2026-01-15T10:30:00-08:00",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00+00:00",
+    "value": "2026-01-15T10:30:00Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30:00-00:00",
+    "value": "2026-01-15T10:30:00Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-1-5T1:02:03Z",
+    "value": "2026-01-05T01:02:03Z",
+    "kind": "str"
+  },
+  {
+    "text": "2026-01-15T10:30",
+    "value": "2026-01-15T10:30",
+    "kind": "str"
+  },
+  {
+    "text": "1.2.3",
+    "value": "1.2.3",
+    "kind": "str"
+  },
+  {
+    "text": "0x",
+    "value": "0x",
+    "kind": "str"
+  },
+  {
+    "text": "+",
+    "value": "+",
+    "kind": "str"
+  },
+  {
+    "text": "-",
+    "error": "ScannerError"
+  },
+  {
+    "text": "v1",
+    "value": "v1",
+    "kind": "str"
+  },
+  {
+    "text": "1_",
+    "value": 1,
+    "kind": "int"
+  },
+  {
+    "text": "._",
+    "value": "._",
+    "kind": "str"
+  },
+  {
+    "text": "12:60",
+    "value": "12:60",
+    "kind": "str"
+  }
+]

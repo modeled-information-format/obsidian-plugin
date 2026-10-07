@@ -1,0 +1,11 @@
+{
+  "@context": [
+    "https://mif-spec.dev/schema/context.jsonld",
+    {
+      "farm": "https://example.org/farm/"
+    }
+  ],
+  "@type": "Concept",
+  "timestamp": null,
+  "content": "Body after empty frontmatter."
+}

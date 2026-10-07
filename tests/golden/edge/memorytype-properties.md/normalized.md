@@ -1,0 +1,19 @@
+---
+id: 6bc29a4e-7283-44b5-8a51-6c7d8e9fa0b1
+type: semantic
+memoryType: preference
+created: '2026-01-15T10:30:00Z'
+properties:
+  theme: dark
+  contrast: high
+provenance:
+  sourceType: user_explicit
+  confidence: 0.95
+  trustLevel: user_stated
+embedding:
+  model: text-embedding-3-small
+  dimensions: 1536
+  sourceText: User prefers dark mode
+---
+
+User prefers dark mode.

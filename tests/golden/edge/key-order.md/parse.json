@@ -1,0 +1,20 @@
+{
+  "frontmatter": {
+    "title": "Keys out of canonical order",
+    "extensions": {
+      "zeta": 1,
+      "2024": "numeric-looking key",
+      "alpha": 2,
+      "1": "another"
+    },
+    "created": "2026-01-15T10:30:00Z",
+    "customTopLevel": "kept and appended",
+    "type": "procedural",
+    "id": "5ab18f3d-6172-43a4-9f40-5b6c7d8e9fa0",
+    "tags": [
+      "z",
+      "a"
+    ]
+  },
+  "body": "\n\nLeading blank lines above, trailing spaces after this line.   \n\n---\n\nA horizontal rule above, which must not be mistaken for frontmatter.\n\n"
+}

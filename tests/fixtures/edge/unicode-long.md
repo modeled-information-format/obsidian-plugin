@@ -1,0 +1,20 @@
+---
+id: 2d8b5c0a-3e4f-4071-8c1d-2e3f4a5b6c7d
+type: semantic
+created: 2026-01-15T10:30:00Z
+title: "Ünïcödé — 日本語 🚀 title"
+summary: A deliberately long summary line that exceeds eighty characters so that serializers which fold long plain scalars will reveal their folding behaviour here.
+aliases:
+  - "Colon: inside"
+  - "#hash-start"
+  - "- dash-start"
+tags: [a, b/c, "d e"]
+description: |
+  Literal block
+    with indentation
+  and a trailing line
+---
+
+# Ünïcödé
+
+Body with unicode — ✓.
