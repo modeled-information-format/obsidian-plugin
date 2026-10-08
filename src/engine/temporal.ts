@@ -8,7 +8,7 @@
 //   - validUntil in the past, or ttl elapsed since recordedAt, is "expired"
 //     whatever the strength; validFrom in the future is "not yet valid".
 
-import type { Diagnostic } from "./analyze";
+import type { Diagnostic, Fix } from "./analyze";
 import { scalarText, type Frontmatter } from "./convert";
 
 export type FreshnessState = "fresh" | "ageing" | "stale" | "expired" | "not-yet-valid" | "timeless";
@@ -158,33 +158,102 @@ export function urgency(f: Freshness, now: Date = new Date()): number {
 const pct = (n: number) => n.toFixed(2);
 
 /** Advisory freshness diagnostics for one concept at `now`. */
+/** "90 days", "2 weeks", "1 year" → an ISO 8601 duration ("P90D"), when unambiguous. */
+export function toIsoDuration(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const m = /^\s*(\d+)\s*(day|days|d|week|weeks|w|month|months|mo|year|years|y)\s*$/i.exec(v);
+  if (!m) return undefined;
+  const unit = m[2]!.toLowerCase();
+  const code = unit.startsWith("d") ? "D" : unit.startsWith("w") ? "W" : unit.startsWith("mo") ? "M" : "Y";
+  return `P${m[1]}${code}`;
+}
+
+const SUPERSEDE: Fix = { label: "Supersede with a new concept", transform: "supersede" };
+
+/** Advisory freshness diagnostics for one concept at `now`, each with ways to resolve it. */
 export function temporalDiagnostics(fm: Frontmatter, now: Date = new Date(), thresholds: Thresholds = DEFAULT_THRESHOLDS): Diagnostic[] {
   const f = freshness(fm, now, thresholds);
   const out: Diagnostic[] = [];
   const stamp = iso(now.getTime());
   const temporal = (fm.temporal && typeof fm.temporal === "object" ? fm.temporal : {}) as Record<string, unknown>;
   const decay = (temporal.decay && typeof temporal.decay === "object" ? temporal.decay : {}) as Record<string, unknown>;
-  for (const p of f.problems) out.push({ severity: "warning", code: "temporal-invalid", message: `Temporal data: ${p}.`, path: ["temporal"], fixes: [] });
+  const set = (path: Array<string | number>, value: unknown) => ({ path: ["temporal", ...path], value });
+
+  // Problems with the temporal data itself, with a repair where one is clear.
+  for (const p of f.problems) {
+    const fixes: Fix[] = [];
+    if (p.startsWith("ttl ")) {
+      const iso8601 = toIsoDuration(temporal.ttl);
+      if (iso8601) fixes.push({ label: `Use ${iso8601}`, edits: [set(["ttl"], iso8601)] });
+      fixes.push({ label: "Remove ttl", edits: [set(["ttl"], undefined)] });
+    } else if (p.startsWith("decay.halfLife ")) {
+      const iso8601 = toIsoDuration(decay.halfLife);
+      if (iso8601) fixes.push({ label: `Use ${iso8601}`, edits: [set(["decay", "halfLife"], iso8601)] });
+    } else if (p === "exponential decay needs decay.halfLife") {
+      fixes.push({ label: "Set halfLife to P30D", edits: [set(["decay", "halfLife"], "P30D")] });
+    } else if (/decay needs temporal\.ttl$/.test(p)) {
+      fixes.push({ label: "Set ttl to P90D", edits: [set(["ttl"], "P90D")] });
+    } else if (p === "validUntil is before validFrom") {
+      fixes.push({ label: "Swap validFrom and validUntil", edits: [set(["validFrom"], temporal.validUntil), set(["validUntil"], temporal.validFrom)] });
+    } else if (p.includes("aliases) disagree") && typeof decay.currentStrength === "number") {
+      fixes.push({ label: `Use ${String(decay.currentStrength)} for both`, edits: [set(["decay", "strength"], decay.currentStrength)] });
+    }
+    out.push({ severity: "warning", code: "temporal-invalid", message: `Temporal data: ${p}.`, path: ["temporal"], fixes });
+  }
 
   if (f.state === "expired") {
     const ttlExpired = /ttl/.test(f.reason);
+    const fixes: Fix[] = [];
+    if (ttlExpired) {
+      fixes.push({ label: "Renew: set recordedAt to now", edits: [set(["recordedAt"], stamp)] });
+      fixes.push({ label: "Remove ttl (no expiry)", edits: [set(["ttl"], undefined)] });
+    } else {
+      // Extend by the concept's own validity span, or a year when it has none.
+      const from = typeof temporal.validFrom === "string" ? Date.parse(temporal.validFrom) : NaN;
+      const until = typeof temporal.validUntil === "string" ? Date.parse(temporal.validUntil) : NaN;
+      const span = !Number.isNaN(from) && !Number.isNaN(until) && until > from ? until - from : 365 * DAY;
+      const extended = iso(now.getTime() + span);
+      fixes.push({ label: `Extend validUntil to ${extended.slice(0, 10)}`, edits: [set(["validUntil"], extended)] });
+      fixes.push({ label: "Remove validUntil (no end)", edits: [set(["validUntil"], undefined)] });
+    }
+    fixes.push(SUPERSEDE);
     out.push({
       severity: "warning",
       code: "freshness-expired",
-      message: `Expired: ${f.reason}. Review whether this still holds, supersede it, or renew it.`,
+      message: `Expired: ${f.reason}. Extend or renew it if it still holds, or supersede it with a new concept.`,
       path: ["temporal", ttlExpired ? "ttl" : "validUntil"],
-      fixes: ttlExpired ? [{ label: "Renew: set recordedAt to now", updates: { temporal: { ...temporal, recordedAt: stamp } } }] : [],
+      fixes,
     });
-  } else if (f.state === "stale") {
+  } else if (f.state === "stale" || f.state === "ageing") {
+    const reviewed: Fix = {
+      label: "Mark reviewed now",
+      edits: [set(["decay", "lastReinforced"], stamp)],
+    };
+    if (f.state === "stale") {
+      out.push({
+        severity: "info",
+        code: "freshness-stale",
+        message: `Stale: strength ${pct(f.strength!)} (${f.reason}). Mark it reviewed if it still holds, or supersede it.`,
+        path: ["temporal", "decay"],
+        fixes: [reviewed, SUPERSEDE],
+      });
+    } else {
+      out.push({
+        severity: "info",
+        code: "freshness-ageing",
+        message: `Ageing: strength ${pct(f.strength!)} (${f.reason}). Mark it reviewed if it still holds.`,
+        path: ["temporal", "decay"],
+        fixes: [reviewed],
+      });
+    }
+  } else if (f.state === "not-yet-valid") {
     out.push({
       severity: "info",
-      code: "freshness-stale",
-      message: `Stale: strength ${pct(f.strength!)} (${f.reason}).`,
-      path: ["temporal", "decay"],
-      fixes: [{ label: "Mark reviewed now", updates: { temporal: { ...temporal, decay: { ...decay, lastReinforced: stamp } } } }],
+      code: "freshness-future",
+      message: `Not yet valid: ${f.reason}.`,
+      path: ["temporal", "validFrom"],
+      fixes: [{ label: "Make it valid now", edits: [set(["validFrom"], stamp)] }],
     });
-  } else if (f.state === "not-yet-valid") {
-    out.push({ severity: "info", code: "freshness-future", message: `Not yet valid: ${f.reason}.`, path: ["temporal", "validFrom"], fixes: [] });
   }
   if (f.storedStrength !== undefined && f.strength !== undefined && Math.abs(f.storedStrength - f.strength) > 0.2) {
     const key = typeof decay.currentStrength === "number" ? "currentStrength" : "strength";
@@ -193,7 +262,7 @@ export function temporalDiagnostics(fm: Frontmatter, now: Date = new Date(), thr
       code: "freshness-recorded",
       message: `Recorded strength ${pct(f.storedStrength)} differs from the computed ${pct(f.strength)}.`,
       path: ["temporal", "decay", key],
-      fixes: [{ label: `Record ${pct(f.strength)}`, updates: { temporal: { ...temporal, decay: { ...decay, [key]: Math.round(f.strength * 100) / 100 } } } }],
+      fixes: [{ label: `Record ${pct(f.strength)}`, edits: [set(["decay", key], Math.round(f.strength * 100) / 100)] }],
     });
   }
   return out;

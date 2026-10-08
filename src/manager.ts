@@ -7,6 +7,8 @@ import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } f
 
 import {
   scalarText,
+  revisedPath,
+  supersedingConceptText,
   addRelationship,
   exportPath,
   roundtripDrift,
@@ -605,6 +607,10 @@ export class MifManager extends Events {
       this.refreshCorpora();
       return;
     }
+    if (fix.transform === "supersede") {
+      await this.supersede(file);
+      return;
+    }
     if (fix.transform === "create-entity") {
       const root = this.rootFor(file.path);
       if (root !== null) {
@@ -885,6 +891,34 @@ export class MifManager extends Events {
       }
       return out;
     });
+  }
+
+  /**
+   * Create a concept that supersedes `file` (same type and namespace, valid
+   * from now, with a `supersedes` relationship), end the old concept's
+   * validity now if it is still open, and open the new one.
+   */
+  async supersede(file: TFile): Promise<TFile | undefined> {
+    const root = this.rootFor(file.path);
+    const fm = this.files.get(file.path)?.analysis.frontmatter;
+    if (root === null || !fm) return undefined;
+    const now = new Date();
+    const oldPath = this.toBundlePath(root, file.path);
+    const nextPath = revisedPath(oldPath, (p) => this.app.vault.getAbstractFileByPath(this.toVaultPath(root, p)) !== null);
+    const text = supersedingConceptText({ path: oldPath, frontmatter: fm }, { path: nextPath, id: crypto.randomUUID(), now });
+    const created = await this.app.vault.create(this.toVaultPath(root, nextPath), text);
+    const temporal = fm.temporal && typeof fm.temporal === "object" ? (fm.temporal as Record<string, unknown>) : {};
+    const until = typeof temporal.validUntil === "string" ? Date.parse(temporal.validUntil) : NaN;
+    if (Number.isNaN(until) || until > now.getTime()) {
+      await this.write(file, (t) => applyEdit(t, ["temporal", "validUntil"], isoSeconds(now)));
+    }
+    this.debug("supersede", { from: file.path, to: created.path });
+    await this.analyzeFile(created, { quiet: true });
+    await this.analyzeFile(file, { quiet: true });
+    this.rebuildIndexes(); // the "superseded" banner shows at once
+    new Notice(`MIF: created ${created.basename}, which supersedes ${file.basename}.`);
+    void this.app.workspace.openLinkText(created.path, "", false);
+    return created;
   }
 
   // --- JSON-LD export and the round-trip check ---------------------------

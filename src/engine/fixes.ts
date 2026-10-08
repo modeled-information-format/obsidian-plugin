@@ -8,7 +8,7 @@ import { applyEdit } from "./form";
 import { adoptMirror, syncMirror } from "./relationships";
 import { toLf, updateFrontmatter, WriteError } from "./writer";
 
-export const VAULT_TRANSFORMS = new Set<Fix["transform"]>(["migrate", "download-ontology", "create-entity"]);
+export const VAULT_TRANSFORMS = new Set<Fix["transform"]>(["migrate", "download-ontology", "create-entity", "supersede"]);
 
 export function applyTextFix(text: string, fix: Fix, opts: { titleFor?: (target: string) => string | undefined; now?: Date } = {}): string {
   switch (fix.transform) {

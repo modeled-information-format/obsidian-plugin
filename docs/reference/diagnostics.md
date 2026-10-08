@@ -73,11 +73,12 @@ disagree.
 
 | Code | Severity | Meaning | Fixes |
 |---|---|---|---|
-| `freshness-expired` | warning | Past `validUntil`, or `ttl` elapsed since `recordedAt` | Renew (ttl) |
-| `freshness-stale` | info | Decay strength below the ageing threshold | Mark reviewed now |
-| `freshness-future` | info | Before `validFrom` | — |
+| `freshness-expired` | warning | Past `validUntil`, or `ttl` elapsed since `recordedAt` | Extend `validUntil` by its own span; remove `validUntil`; renew or remove `ttl`; supersede with a new concept |
+| `freshness-stale` | info | Decay strength below the ageing threshold | Mark reviewed now; supersede with a new concept |
+| `freshness-ageing` | info | Decay strength between the ageing and fresh thresholds | Mark reviewed now |
+| `freshness-future` | info | Before `validFrom` | Make it valid now |
 | `freshness-recorded` | info | Recorded decay strength far from the computed value | Record the computed value |
-| `temporal-invalid` | warning | Inconsistent temporal data (bad duration, `validUntil` before `validFrom`, …) | — |
+| `temporal-invalid` | warning | Inconsistent temporal data (bad duration, `validUntil` before `validFrom`, …) | Convert "90 days" → `P90D`; swap the dates; add a missing `halfLife` / `ttl`; reconcile strength aliases |
 
 ## Citations, provenance, compression
 

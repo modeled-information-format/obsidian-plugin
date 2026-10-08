@@ -31,11 +31,12 @@ export interface Fix {
    * missing .mif/entities file for the diagnostic's entities[] entry;
    * citations-sync / citations-adopt: update the ## Citations section from
    * frontmatter, or the reverse for body-only entries; citation-note-to-body:
-   * move a long note into the body; compress / decompress (spec §5.6.3).
+   * move a long note into the body; compress / decompress (spec §5.6.3);
+   * supersede: create a new concept that supersedes this one.
    */
   transform?:
     | "lf" | "mirror" | "mirror-adopt" | "migrate" | "download-ontology" | "create-entity"
-    | "citations-sync" | "citations-adopt" | "citation-note-to-body" | "compress" | "decompress";
+    | "citations-sync" | "citations-adopt" | "citation-note-to-body" | "compress" | "decompress" | "supersede";
   /** Path-level edits, applied in order with minimal line changes (form.applyEdit). */
   edits?: Array<{ path: Array<string | number>; value: unknown }>;
   /** Parameters for a transform (e.g. the ontology id, or the entity to create). */

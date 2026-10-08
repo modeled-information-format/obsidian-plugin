@@ -30,9 +30,11 @@ describe("temporal fixtures", () => {
   it("stale.md also reports its out-of-date recorded strength", () => {
     expect(temporalDiagnostics(load("stale.md"), at).map((d) => d.code)).toEqual(["freshness-stale", "freshness-recorded"]);
   });
-  it("only the ttl expiry offers a renewal", () => {
-    expect(temporalDiagnostics(load("expired-ttl.md"), at)[0]!.fixes).toHaveLength(1);
-    expect(temporalDiagnostics(load("expired-until.md"), at)[0]!.fixes).toHaveLength(0);
+  it("every expired fixture offers ways to resolve it", () => {
+    const labels = (f: string) => temporalDiagnostics(load(f), at).find((d) => d.code === "freshness-expired")!.fixes.map((x) => x.label);
+    expect(labels("expired-ttl.md")[0]).toMatch(/^Renew/);
+    expect(labels("expired-until.md")[0]).toMatch(/^Extend validUntil/);
+    for (const f of ["expired-ttl.md", "expired-until.md"]) expect(labels(f)).toContain("Supersede with a new concept");
   });
   // A bundle-root target ("/fresh.md") broke once the folder
   // was staged inside a larger bundle, hiding the superseded banner.

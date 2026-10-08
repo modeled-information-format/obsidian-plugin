@@ -21,12 +21,22 @@ Freshness is computed live from `temporal` (decay model, `validFrom`,
 
 ## Act on it
 
-| State | Action |
+Every state has buttons in the freshness panel and the diagnostics panel:
+
+| State | Actions |
 |---|---|
-| Expired by `ttl` | **Renew** sets `recordedAt` to now |
-| Expired by `validUntil` | Review it, then supersede it with a newer concept or change `validUntil` |
-| Stale | **Mark reviewed now** sets `decay.lastReinforced` to now |
+| Expired by `validUntil` | **Extend validUntil** by the concept's own validity span (a year if it has none); **Remove validUntil**; **Supersede with a new concept** |
+| Expired by `ttl` | **Renew** (sets `recordedAt` to now); **Remove ttl**; **Supersede with a new concept** |
+| Stale | **Mark reviewed now** (sets `decay.lastReinforced`); **Supersede with a new concept** |
+| Ageing | **Mark reviewed now** |
+| Not yet valid | **Make it valid now** (sets `validFrom` to now) |
+| Invalid temporal data | Repairs where they are clear: `90 days` → `P90D`, swap reversed dates, add a missing `halfLife` or `ttl` |
 | Recorded strength far from the computed one | **Record** the computed value |
+
+**Supersede with a new concept** creates `<name>-revised.md` beside the old
+note — same type and namespace, valid from now, with a `supersedes`
+relationship to the old one — ends the old concept's validity now if it was
+still open, and opens the new note for you to write.
 
 ## Tune it
 

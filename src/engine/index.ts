@@ -24,7 +24,7 @@ export {
 export { CONFIG_SCHEMA_ID, MIF_SCHEMA_ID, validateAgainst, validateBundleConfig, validateJsonLd, type SchemaIssue } from "./validate";
 export { dumpYaml, loadYaml, pythonIsoTimestamp } from "./yaml11";
 export { analyze, ambiguities, detectRewrites, BASE_TYPES, isoSeconds, L2_FIELDS, levelOf, type Analysis, type AnalyzeOptions, type Diagnostic, type Fix, type Level, type Severity } from "./analyze";
-export { newConceptText, promoteToConcept, type BaseType, type NewConcept, type Promotion } from "./concept";
+export { newConceptText, promoteToConcept, revisedPath, supersedingConceptText, type BaseType, type NewConcept, type Promotion } from "./concept";
 export { toLf, updateFrontmatter, WriteError } from "./writer";
 export {
   addRelationship,
@@ -66,7 +66,7 @@ export {
 export { entityReference, entitySlug, entityUrn, parseEntityFile, referencedEntities, renderEntityFile, ENTITY_URN, type EntityRecord } from "./entities";
 export { semanticDiagnostics, usefulSuggestions, type SemanticContext, type SemanticReport } from "./semantics";
 export { applyEdit, checkInput, FORM_KEYS, SECTIONS, topLevelModel, type Checked, type FieldKind, type FieldModel } from "./form";
-export { DEFAULT_THRESHOLDS, durationMs, freshness, temporalDiagnostics, urgency, type Freshness, type FreshnessState, type Thresholds } from "./temporal";
+export { DEFAULT_THRESHOLDS, durationMs, freshness, temporalDiagnostics, toIsoDuration, urgency, type Freshness, type FreshnessState, type Thresholds } from "./temporal";
 export {
   adoptCitations, authorText, bodyCitations, citationAuthors, citationDiagnostics, citationMirrorDiagnostics, CITATION_ROLES, CITATION_TYPES,
   hasCitationSection, moveNoteToBody, syncCitations, type BodyCitation,

@@ -264,3 +264,23 @@ describe("Citations and compression through the manager", () => {
     expect(notices.at(-1)).toBe("MIF: original content restored.");
   });
 });
+
+describe("superseding an expired concept", () => {
+  it("creates the revision, links it, ends the old validity, and opens it", async () => {
+    const TEMP = join(__dirname, "fixtures", "temporal");
+    const v = memoryApp({ "temporal/stale.md": readFileSync(join(TEMP, "stale.md"), "utf8") });
+    const opened: string[] = [];
+    (v.app as { workspace: Record<string, unknown> }).workspace = { iterateAllLeaves: () => {}, openLinkText: async (p: string) => void opened.push(p) };
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const d = manager.get("temporal/stale.md")!.diagnostics.find((x) => x.code === "freshness-stale")!;
+    await manager.applyFix(v.files.get("temporal/stale.md") as never, d.fixes.find((f) => f.transform === "supersede")!);
+    const revised = v.texts.get("temporal/stale-revised.md")!;
+    expect(revised).toContain("- supersedes [Stale incident note](stale.md)");
+    expect(manager.get("temporal/stale-revised.md")!.level).toBeGreaterThanOrEqual(1);
+    expect(v.texts.get("temporal/stale.md")).toMatch(/validUntil: /);
+    expect(manager.get("temporal/stale.md")!.diagnostics.map((x) => x.code)).toContain("superseded");
+    expect(opened).toEqual(["temporal/stale-revised.md"]);
+  });
+});

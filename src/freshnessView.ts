@@ -111,9 +111,10 @@ export class FreshnessView extends ItemView {
       };
       tr.createEl("td", { cls: "mif-muted", text: f.reason });
       const actions = tr.createEl("td");
-      const fix = a.diagnostics.find((d) => d.code === "freshness-stale" || d.code === "freshness-expired")?.fixes[0];
-      if (fix) {
-        const b = actions.createEl("button", { text: fix.label.replace(/:.*/, "") });
+      // Every way to resolve it: extend, renew, mark reviewed, supersede, …
+      const fixes = a.diagnostics.filter((d) => d.code.startsWith("freshness-")).flatMap((d) => d.fixes);
+      for (const fix of fixes) {
+        const b = actions.createEl("button", { text: fix.label.replace(/:.*/, ""), cls: "mif-fresh-action" });
         b.onclick = () => {
           const file = this.app.vault.getAbstractFileByPath(a.path);
           if (file instanceof TFile) void this.host.manager.applyFix(file, fix);
