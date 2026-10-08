@@ -9,3 +9,4 @@ test-vault/_fixtures/
 spikes/mif-wasm/target/
 spikes/mif-wasm/pkg-*/
 spikes/mif-wasm/Cargo.lock
+src/engine/generated/

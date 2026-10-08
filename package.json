@@ -6,13 +6,14 @@
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "tsc --noEmit && node esbuild.config.mjs production",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "dev": "npm run -s validators && node esbuild.config.mjs",
+    "build": "npm run -s validators && tsc --noEmit && node esbuild.config.mjs production",
+    "typecheck": "npm run -s validators && tsc --noEmit",
+    "test": "npm run -s validators && vitest run",
     "golden": "python3 scripts/gen_golden.py",
-    "sync-schemas": "node scripts/sync-schemas.mjs",
-    "install-vault": "node scripts/install-vault.mjs"
+    "sync-schemas": "node scripts/sync-schemas.mjs && npm run -s validators",
+    "install-vault": "node scripts/install-vault.mjs",
+    "validators": "node scripts/build-validators.mjs"
   },
   "license": "MIT",
   "devDependencies": {

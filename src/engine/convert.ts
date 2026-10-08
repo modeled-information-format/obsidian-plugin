@@ -73,7 +73,7 @@ export function parseMarkdown(md: string): { frontmatter: Frontmatter; body: str
   try {
     loaded = loadYaml(yamlText);
   } catch (err) {
-    throw new FrontmatterError(`Invalid YAML frontmatter: ${(err as Error).message}`);
+    throw new FrontmatterError(`Invalid YAML frontmatter: ${(err as Error).message}`, { cause: err });
   }
   if (loaded === null || loaded === undefined) return { frontmatter: {}, body };
   if (!isPlainObject(loaded)) throw new FrontmatterError("Frontmatter is not a mapping");

@@ -1,1 +1,78 @@
-/* MIF plugin styles — brand tokens arrive in . */
+/* MIF plugin styles. Brand accents from the mif-brand tokens
+   (references/tokens.json): machine-cyan for structure, human-amber for
+   meaning, valid/invalid as state colours only. Values flip with Obsidian's
+   theme class. */
+
+.theme-dark {
+  --mif-machine: #34d3e8;
+  --mif-machine-soft: #0a2630;
+  --mif-human: #f5b642;
+  --mif-human-soft: #2a2110;
+  --mif-valid: #34c77b;
+  --mif-valid-soft: #0b2618;
+  --mif-invalid: #ff5c6c;
+  --mif-invalid-soft: #2a1014;
+}
+
+.theme-light {
+  --mif-machine: #0b7488;
+  --mif-machine-soft: #e1f5f9;
+  --mif-human: #8a5e00;
+  --mif-human-soft: #fbf1d8;
+  --mif-valid: #0f8a5c;
+  --mif-valid-soft: #e4f7ef;
+  --mif-invalid: #c6303f;
+  --mif-invalid-soft: #fbe9eb;
+}
+
+.mif-level {
+  display: inline-block;
+  min-width: 2.2em;
+  padding: 0 0.4em;
+  border-radius: var(--radius-s);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+}
+.mif-level-0 { color: var(--mif-invalid); background: var(--mif-invalid-soft); }
+.mif-level-1 { color: var(--mif-machine); background: var(--mif-machine-soft); }
+.mif-level-2 { color: var(--mif-machine); background: var(--mif-machine-soft); font-weight: 600; }
+.mif-level-3 { color: var(--mif-valid); background: var(--mif-valid-soft); font-weight: 600; }
+.mif-level-none { color: var(--text-muted); }
+
+.mif-status .mif-level { background: none; padding: 0; min-width: 0; }
+
+.mif-error-text { color: var(--mif-invalid); }
+.mif-warning-text { color: var(--mif-human); }
+.mif-muted { color: var(--text-muted); }
+.mif-ok { color: var(--mif-valid); }
+
+.mif-view .mif-header { display: flex; align-items: center; gap: var(--size-4-2); }
+.mif-view .mif-header h4 { margin: 0; }
+
+.mif-diagnostic {
+  margin: var(--size-4-2) 0;
+  padding: var(--size-4-2);
+  border-left: 3px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+.mif-diagnostic.mif-error { border-left-color: var(--mif-invalid); }
+.mif-diagnostic.mif-warning { border-left-color: var(--mif-human); }
+.mif-diagnostic.mif-info { border-left-color: var(--mif-machine); }
+.mif-diagnostic-head { display: flex; gap: var(--size-4-2); align-items: flex-start; }
+.mif-diagnostic .mif-icon { flex: none; }
+.mif-error .mif-icon { color: var(--mif-invalid); }
+.mif-warning .mif-icon { color: var(--mif-human); }
+.mif-info .mif-icon { color: var(--mif-machine); }
+.mif-diagnostic .mif-message { flex: 1; user-select: text; }
+.mif-diagnostic .mif-line { flex: none; font-size: var(--font-ui-smaller); color: var(--mif-machine); }
+.mif-fixes { display: flex; flex-wrap: wrap; gap: var(--size-4-1); margin-top: var(--size-4-2); }
+.mif-fixes button { font-size: var(--font-ui-smaller); }
+
+.mif-controls { display: flex; flex-wrap: wrap; gap: var(--size-4-2); align-items: center; margin-bottom: var(--size-4-2); }
+.mif-controls input[type="search"] { flex: 1; min-width: 8em; }
+.mif-report table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-small); }
+.mif-report th, .mif-report td { padding: var(--size-4-1) var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); text-align: left; }
+.mif-report td:nth-child(4), .mif-report td:nth-child(5) { text-align: right; }
+.mif-report a { color: var(--mif-machine); word-break: break-all; }

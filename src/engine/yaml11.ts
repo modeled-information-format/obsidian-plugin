@@ -175,22 +175,37 @@ const floatTag: ScalarTag = {
 // matching TIMESTAMP_RE is quoted (the test regex marks it as ambiguous),
 // which mirrors PyYAML's safe_dump of a str that looks like a timestamp.
 const timestampTag: ScalarTag = {
+  // On output, a string already in the exact form PyYAML would produce for
+  // it is written plain (`created: 2026-01-15T10:30:00Z`), as MIF examples
+  // do; it reads back as the same string. Any other timestamp-looking
+  // string is quoted by the string tag.
+  identify: (v) => typeof v === "string" && TIMESTAMP_RE.test(v) && safeIso(v) === v,
   default: true,
   tag: TIMESTAMP_TAG,
   test: TIMESTAMP_RE,
   resolve: pythonIsoTimestamp,
+  stringify: (item) => String(item.value),
 };
 
+function safeIso(v: string): string | null {
+  try {
+    return pythonIsoTimestamp(v);
+  } catch {
+    return null;
+  }
+}
+
+// timestampTag goes first so its identify() is tried before the string tag's.
 const pyyamlTags = (tags: Tags): Tags => [
+  timestampTag,
   ...tags.filter((t) => (typeof t === "string" ? !REPLACED_NAMES.has(t) : !REPLACED.has(t.tag))),
   boolTrue,
   boolFalse,
   intTag,
   floatTag,
-  timestampTag,
 ];
 
-const LOAD_OPTIONS = {
+export const LOAD_OPTIONS = {
   version: "1.1",
   schema: "yaml-1.1",
   customTags: pyyamlTags,
