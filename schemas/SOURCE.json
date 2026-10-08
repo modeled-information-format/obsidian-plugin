@@ -1,8 +1,8 @@
 {
   "repo": "modeled-information-format/MIF",
-  "commit": "e5803021d27fe6214aa1770b97a07b9f20bc89a5",
-  "branch": "main",
-  "syncedAt": "2026-10-07T18:29:14.647Z",
+  "commit": "f4a1879ec1a3a11cb475945818dbda18f8c2b2f5",
+  "branch": "origin/main",
+  "syncedAt": "2026-10-08T14:03:40.760Z",
   "files": [
     "citation.schema.json",
     "container.schema.json",

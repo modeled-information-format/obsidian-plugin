@@ -1,5 +1,5 @@
-// Compression (spec §5.6). The schema field is `compressedAt`; §5.6 writes
-// `compressed_at`. Compressing replaces the body with the
+// Compression (spec §5.6). The field is `compressedAt`; specs before 1.4
+// wrote `compressed_at`. Compressing replaces the body with the
 // summary and keeps the original in `extensions.original_content` (§5.6.3),
 // but never removes the `## Relationships` or `## Citations` sections: the
 // relationship mirror is required (Invariant 3), which §5.6.3 does not
@@ -69,7 +69,7 @@ export function compressionDiagnostics(fm: Frontmatter, body: string, opts: { no
       code: "compressed-at-name",
       message: both
         ? "Both `compressed_at` and `compressedAt` are set; the schema and tools read only `compressedAt`."
-        : "`compressed_at` is the spelling in spec §5.6, but the schema, the JSON-LD context, and the tools read `compressedAt`.",
+        : "`compressed_at` is the pre-1.4 spelling; MIF 1.4 (§5.6), the schema, the JSON-LD context, and the tools use `compressedAt`.",
       path: ["compressed_at"],
       fixes: [both
         ? { label: "Remove compressed_at", edits: [{ path: ["compressed_at"], value: undefined }] }

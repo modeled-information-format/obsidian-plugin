@@ -37,7 +37,12 @@ export class TFile extends TAbstractFile {
   }
 }
 
-export class TFolder extends TAbstractFile {}
+export class TFolder extends TAbstractFile {
+  constructor(path = "") {
+    super();
+    this.path = path;
+  }
+}
 
 export class MarkdownView {}
 
@@ -57,6 +62,8 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
   const texts = new Map(Object.entries(initial));
   const files = new Map([...texts.keys()].map((p) => [p, new TFile(p)]));
   const modifyHandlers: Array<(f: TFile) => void> = [];
+  const folders = new Set<string>();
+  const trashed: string[] = [];
   const app = {
     vault: {
       getMarkdownFiles: () => [...files.values()].filter((f) => f.extension === "md"),
@@ -70,8 +77,23 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
         return out;
       },
       adapter: { exists: async () => false, read: async () => "" },
-      getAbstractFileByPath: (p: string) => files.get(p) ?? null,
+      getAbstractFileByPath: (p: string) => files.get(p) ?? (folders.has(p) ? new TFolder(p) : null),
       getConfig: (key: string) => config[key],
+      getName: () => "test-vault",
+      create: async (p: string, data: string) => {
+        if (files.has(p)) throw new Error(`exists: ${p}`);
+        const f = new TFile(p);
+        files.set(p, f);
+        texts.set(p, data);
+        return f;
+      },
+      modify: async (f: TFile, data: string) => void texts.set(f.path, data),
+      createFolder: async (p: string) => void folders.add(p),
+      trash: async (f: TFile) => {
+        files.delete(f.path);
+        texts.delete(f.path);
+        trashed.push(f.path);
+      },
     },
     fileManager: {},
     workspace: { iterateAllLeaves: () => {} },
@@ -96,7 +118,7 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
     texts.set(path, now.slice(0, at) + newLink + now.slice(at + oldLink.length));
     modifyHandlers.forEach((h) => h(files.get(path)!));
   };
-  return { app, texts, files, move, staleReplace, onModify: (h: (f: TFile) => void) => modifyHandlers.push(h) };
+  return { app, texts, files, folders, trashed, move, staleReplace, onModify: (h: (f: TFile) => void) => modifyHandlers.push(h) };
 }
 
 export const normalizePath = (p: string) => p.replace(/\/+/g, "/").replace(/^\/|\/$/g, "");

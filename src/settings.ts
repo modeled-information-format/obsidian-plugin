@@ -20,6 +20,10 @@ export interface MifSettings {
   accessTracking: boolean;
   /** Freshness dots in the file explorer (uses an undocumented Obsidian API). */
   explorerBadges: boolean;
+  /** Vault folder for JSON-LD exports: <folder>/<bundle>/<path>.jsonld (spec §3.2: dist/jsonld). */
+  exportFolder: string;
+  /** Desktop only: absolute path to mif-rs's `mif-cli`; empty turns the bridge off. */
+  mifCliPath: string;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -33,6 +37,8 @@ export const DEFAULT_SETTINGS: MifSettings = {
   ageingThreshold: 0.5,
   accessTracking: false,
   explorerBadges: true,
+  exportFolder: "dist/jsonld",
+  mifCliPath: "",
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

@@ -7,6 +7,10 @@ import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } f
 
 import {
   addRelationship,
+  exportPath,
+  roundtripDrift,
+  serializeJsonLd,
+  staleExports,
   analyze,
   applyEdit,
   applyTextFix,
@@ -880,6 +884,81 @@ export class MifManager extends Events {
       }
       return out;
     });
+  }
+
+  // --- JSON-LD export and the round-trip check ---------------------------
+
+  /** A bundle's name in export paths: its folder name, or the vault's name for the root bundle. */
+  bundleName(root: string): string {
+    return root ? root.split("/").pop()! : this.app.vault.getName();
+  }
+
+  /**
+   * Write JSON-LD projections for the concepts at or under `scope` (a vault
+   * path: one note, a folder, a bundle root, or "" for every bundle), laid
+   * out as mif_convert's emit-jsonld. When a whole bundle is exported,
+   * projections whose concept no longer exists go to the trash.
+   */
+  async exportJsonLd(scope: string): Promise<{ written: number; skipped: string[]; removed: number; folder: string }> {
+    const folder = this.settings().exportFolder.replace(/^\/+|\/+$/g, "") || "dist/jsonld";
+    const inScope = (p: string) => scope === "" || p === scope || p.startsWith(`${scope}/`);
+    let written = 0;
+    const skipped: string[] = [];
+    const byBundle = new Map<string, string[]>();
+    for (const [path, state] of [...this.files].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!inScope(path) || !state.analysis.isConcept) continue;
+      const bundlePath = this.toBundlePath(state.root, path);
+      byBundle.set(state.root, [...(byBundle.get(state.root) ?? []), bundlePath]);
+      const jsonld = state.analysis.jsonld;
+      if (!jsonld) {
+        skipped.push(path);
+        continue;
+      }
+      await this.writeVaultFile(exportPath(folder, this.bundleName(state.root), bundlePath), serializeJsonLd(jsonld));
+      written++;
+    }
+    let removed = 0;
+    for (const root of this.bundleRoots()) {
+      if (!(scope === "" || scope === root) || !this.bundles.has(root)) continue;
+      const existing = this.app.vault.getFiles().map((f) => f.path);
+      for (const stale of staleExports(existing, folder, this.bundleName(root), byBundle.get(root) ?? [])) {
+        const f = this.app.vault.getAbstractFileByPath(stale);
+        if (f instanceof TFile) {
+          await this.app.vault.trash(f, true);
+          removed++;
+        }
+      }
+    }
+    this.debug("export-jsonld", { scope, folder, written, skipped: skipped.length, removed });
+    return { written, skipped, removed, folder };
+  }
+
+  private async writeVaultFile(path: string, text: string): Promise<void> {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      const dir = parts.slice(0, i).join("/");
+      if (!this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
+    }
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof TFile) {
+      if ((await this.app.vault.read(existing)) !== text) await this.app.vault.modify(existing, text);
+    } else {
+      await this.app.vault.create(path, text);
+    }
+  }
+
+  /** Invariant 4 for every concept: markdown → JSON-LD → markdown must be lossless. */
+  async roundtripReport(): Promise<Array<{ path: string; drift: string }>> {
+    const out: Array<{ path: string; drift: string }> = [];
+    for (const [path, state] of [...this.files].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!state.analysis.isConcept || !state.analysis.jsonld) continue;
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile)) continue;
+      const drift = roundtripDrift(await this.app.vault.cachedRead(file), this.bundles.get(state.root)?.namespaces);
+      if (drift) out.push({ path, drift });
+    }
+    this.debug("roundtrip", { drifting: out.length });
+    return out;
   }
 
   dispose(): void {

@@ -15,6 +15,7 @@ import {
   roundtripDrift,
   type Namespaces,
 } from "../src/engine/convert";
+import { serializeJsonLd } from "../src/engine/export";
 import { validateJsonLd } from "../src/engine/validate";
 import { loadYaml } from "../src/engine/yaml11";
 
@@ -100,6 +101,16 @@ describe("golden parity with mif_convert.py", () => {
       it("parses frontmatter and body identically", () => {
         expect(frontmatter).toEqual(parsedGolden.frontmatter);
         expect(body).toBe(parsedGolden.body);
+      });
+
+      it("exports byte-identical JSON-LD to mif_convert emit-jsonld", () => {
+        const ours = mdToJsonLd(frontmatter, body, namespaces);
+        const theirs = readFileSync(golden("jsonld.json"), "utf8");
+        // Keys the reference drops (F10) and its non-finite floats cannot match byte for byte.
+        const extra = Object.keys(ours).some((k) => !(k in readJson(golden("jsonld.json"))));
+        if (extra || key in DIVERGENCES) return;
+        // The one unavoidable difference: Python prints an integral float as 1.0, JavaScript as 1.
+        expect(serializeJsonLd(ours)).toBe(theirs.replace(/(: |^\s+)(-?\d+)\.0(,?)$/gm, "$1$2$3"));
       });
 
       it("projects JSON-LD identically for reference keys, and passes the rest through", () => {

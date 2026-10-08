@@ -141,3 +141,42 @@
 .mif-compressed-original summary { cursor: pointer; color: var(--mif-human); margin-top: var(--size-4-1); }
 .mif-section-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-4-1); margin: var(--size-4-1) 0 var(--size-4-2); font-size: var(--font-ui-smaller); }
 .mif-inline-action { font-size: var(--font-ui-smaller); margin-bottom: var(--size-4-1); }
+
+/* JSON-LD pane, typed graph, search results, Bases view. */
+.theme-dark {
+  --mif-graph-1: #34d3e8; --mif-graph-2: #f5b642; --mif-graph-3: #34c77b; --mif-graph-4: #b58cff;
+  --mif-graph-5: #ff7a8a; --mif-graph-6: #6ca8ff; --mif-graph-7: #e2e36b; --mif-graph-8: #ff9f5a;
+}
+.theme-light {
+  --mif-graph-1: #0b7488; --mif-graph-2: #8a5e00; --mif-graph-3: #0f8a5c; --mif-graph-4: #6a3fc1;
+  --mif-graph-5: #c6303f; --mif-graph-6: #1f5fbf; --mif-graph-7: #7a7a00; --mif-graph-8: #b8561a;
+}
+.mif-jsonld, .mif-drift { font-size: var(--font-ui-smaller); max-height: 70vh; overflow: auto; user-select: text; white-space: pre; }
+.mif-drift { color: var(--mif-invalid); max-height: 12em; }
+.mif-graph-view { display: flex; flex-direction: column; }
+.mif-graph { width: 100%; height: 60vh; min-height: 300px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); cursor: grab; touch-action: none; }
+.mif-graph-legend { display: flex; flex-wrap: wrap; gap: var(--size-4-2); margin-bottom: var(--size-4-2); font-size: var(--font-ui-smaller); font-family: var(--font-monospace); }
+.mif-graph-type { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.mif-graph-type.is-hidden { opacity: 0.35; text-decoration: line-through; }
+.mif-graph-swatch { width: 14px; height: 3px; display: inline-block; background: currentColor; }
+.mif-graph { --mif-graph-scale: 1; }
+.mif-graph-edge { stroke-width: calc(1.6px * var(--mif-graph-scale)); opacity: 0.8; }
+.mif-graph-fill { stroke: none; }
+.mif-graph-node { cursor: pointer; }
+.mif-graph-node circle { r: calc(6px * var(--mif-graph-scale)); stroke: var(--background-primary); stroke-width: calc(1.5px * var(--mif-graph-scale)); fill: var(--text-muted); }
+.mif-graph-node circle.is-center { r: calc(9px * var(--mif-graph-scale)); }
+.mif-graph-node.mif-graph-semantic circle { fill: var(--mif-machine); }
+.mif-graph-node.mif-graph-episodic circle { fill: var(--mif-human); }
+.mif-graph-node.mif-graph-procedural circle { fill: var(--mif-valid); }
+.mif-graph-node.is-center circle { stroke: var(--text-normal); stroke-width: calc(2.5px * var(--mif-graph-scale)); }
+.mif-graph-node text { font-size: calc(12px * var(--mif-graph-scale)); transform: translate(calc(10px * var(--mif-graph-scale)), calc(4px * var(--mif-graph-scale))); fill: var(--text-normal); pointer-events: none; paint-order: stroke; stroke: var(--background-primary); stroke-width: calc(3px * var(--mif-graph-scale)); }
+.mif-graph-c1 { color: var(--mif-graph-1); stroke: var(--mif-graph-1); } .mif-graph-fill.mif-graph-c1 { fill: var(--mif-graph-1); }
+.mif-graph-c2 { color: var(--mif-graph-2); stroke: var(--mif-graph-2); } .mif-graph-fill.mif-graph-c2 { fill: var(--mif-graph-2); }
+.mif-graph-c3 { color: var(--mif-graph-3); stroke: var(--mif-graph-3); } .mif-graph-fill.mif-graph-c3 { fill: var(--mif-graph-3); }
+.mif-graph-c4 { color: var(--mif-graph-4); stroke: var(--mif-graph-4); } .mif-graph-fill.mif-graph-c4 { fill: var(--mif-graph-4); }
+.mif-graph-c5 { color: var(--mif-graph-5); stroke: var(--mif-graph-5); } .mif-graph-fill.mif-graph-c5 { fill: var(--mif-graph-5); }
+.mif-graph-c6 { color: var(--mif-graph-6); stroke: var(--mif-graph-6); } .mif-graph-fill.mif-graph-c6 { fill: var(--mif-graph-6); }
+.mif-graph-c7 { color: var(--mif-graph-7); stroke: var(--mif-graph-7); } .mif-graph-fill.mif-graph-c7 { fill: var(--mif-graph-7); }
+.mif-graph-c8 { color: var(--mif-graph-8); stroke: var(--mif-graph-8); } .mif-graph-fill.mif-graph-c8 { fill: var(--mif-graph-8); }
+.mif-search-results { max-height: 50vh; overflow: auto; margin-top: var(--size-4-2); }
+.mif-bases-group td { font-weight: 600; padding-top: var(--size-4-3); }

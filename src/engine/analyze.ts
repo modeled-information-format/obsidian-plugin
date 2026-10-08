@@ -277,7 +277,7 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
   } else if (typeof frontmatter.id === "string" && !UUID_RE.test(frontmatter.id)) {
     const aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [];
     diagnostics.push({ severity: "warning", code: "id-not-uuid",
-      message: `\`id\` should be a UUID (spec §4.1); "${frontmatter.id}" is not. Conformance tooling does not enforce this yet.`,
+      message: `\`id\` must be a UUID (spec §4.1, §13.1); "${frontmatter.id}" is not.`,
       path: ["id"], line: locator.line(["id"]),
       fixes: [{ label: "Replace with a new UUID, keeping the old id as an alias",
         updates: { id: uuid(), aliases: [...aliases, frontmatter.id] } }] });
@@ -327,6 +327,14 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
     for (const issue of issues) {
       const mapped = frontmatterPath(issue.path);
       const path = mapped === "body" ? [] : mapped;
+      // The 1.4 schema requires @id = urn:mif:<uuid>: its pattern error is
+      // reported as the id-not-uuid diagnostic (with the fix), not twice.
+      const idDiag = diagnostics.find((d) => d.code === "id-not-uuid");
+      if (idDiag && issue.keyword === "pattern" && path.length === 1 && path[0] === "id") {
+        idDiag.severity = "error";
+        idDiag.message = `\`id\` must be a UUID: the schema requires \`@id\` to be urn:mif:<uuid>, and "${String(frontmatter.id)}" is not a UUID.`;
+        continue;
+      }
       const effective = issue.property ? [...path, issue.property] : path;
       if (covered.has(effective.join(".")) || (path[0] === "citations" && covered.has(path.join(".")))) continue;
       // `required` errors for id/type/created are already reported above.

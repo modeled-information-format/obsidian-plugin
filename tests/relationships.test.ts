@@ -228,3 +228,23 @@ describe("damaged mirror lines", () => {
     expect(out).not.toContain("Concep[");
   });
 });
+
+describe("type tokens follow spec §8.1.1 (MIF 1.4.0)", async () => {
+  const { buildRegistry, CORE_TYPES, kebab } = await import("../src/engine/relationships");
+  it("rule 1: hyphen before every capital but the first, lower-cased", () => {
+    expect(["DerivedFrom", "ConflictsWith", "Uses", "HttpProxy", "HTTPProxy"].map(kebab)).toEqual(["derived-from", "conflicts-with", "uses", "http-proxy", "h-t-t-p-proxy"]);
+  });
+  it("rules 2–3: a namespace prefixes the type and its inverse", () => {
+    const r = buildRegistry({ relationship_types: [
+      { name: "BreedsWith", namespace: "farm", symmetric: true },
+      { name: "Reinforces", inverse: "ReinforcedBy", namespace: "subcog" },
+    ] } as never);
+    expect(r.types.get("farm:breeds-with")).toMatchObject({ inverse: "farm:breeds-with" });
+    expect(r.types.get("subcog:reinforces")).toMatchObject({ inverse: "subcog:reinforced-by" });
+    expect(CORE_TYPES.find((t) => t.token === "derived-from")!.inverse).toBe("derives");
+  });
+  it("every token matches the schema's Relationship.type pattern", () => {
+    const re = /^[a-z0-9][a-z0-9-]*(:[a-z0-9][a-z0-9-]*)?$/;
+    expect(CORE_TYPES.every((t) => re.test(t.token) && (!t.inverse || re.test(t.inverse)))).toBe(true);
+  });
+});

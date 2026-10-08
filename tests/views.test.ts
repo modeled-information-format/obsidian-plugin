@@ -70,8 +70,10 @@ describe("panels render without errors", () => {
     const { RelatedView } = await import("../src/relations");
     const { DiagnosticsView, ReportView } = await import("../src/views");
     const { FreshnessView } = await import("../src/freshnessView");
+    const { JsonLdView } = await import("../src/jsonldView");
+    const { GraphView } = await import("../src/graphView");
     const { v, host } = await setup({ "soil.md": soil }, "soil.md");
-    for (const View of [OntologyView, RelatedView, DiagnosticsView, ReportView, FreshnessView]) {
+    for (const View of [OntologyView, RelatedView, DiagnosticsView, ReportView, FreshnessView, JsonLdView, GraphView]) {
       const view = new (View as never as new (l: unknown, h: unknown) => { open(): Promise<void>; contentEl: HTMLElement })({ app: v.app }, host);
       await (view as unknown as { open(): Promise<void> }).open();
       expect(view.contentEl.textContent!.length, View.name).toBeGreaterThan(0);
@@ -86,9 +88,11 @@ describe("panels do not shadow Obsidian's View internals", () => {
     const { RelatedView } = await import("../src/relations");
     const { DiagnosticsView, ReportView } = await import("../src/views");
     const { FreshnessView } = await import("../src/freshnessView");
+    const { JsonLdView } = await import("../src/jsonldView");
+    const { GraphView } = await import("../src/graphView");
     const { v, host } = await setup({ "soil.md": soil }, "soil.md");
     const allowed = new Set(["contentEl", "app", "leaf"]); // set by the base class itself
-    for (const View of [PropertiesView, OntologyView, EntitiesView, RelatedView, DiagnosticsView, ReportView, FreshnessView]) {
+    for (const View of [PropertiesView, OntologyView, EntitiesView, RelatedView, DiagnosticsView, ReportView, FreshnessView, JsonLdView, GraphView]) {
       const view = new (View as never as new (l: unknown, h: unknown) => object)({ app: v.app }, host);
       const clashes = Object.keys(view).filter((k) => (VIEW_INTERNALS as readonly string[]).includes(k) && !allowed.has(k));
       expect(clashes, View.name).toEqual([]);
@@ -173,5 +177,39 @@ describe("reading-view banner placement", () => {
     expect(isFirstBodySection(h1, null)).toBe(true);
     expect(isFirstBodySection(p, null)).toBe(false);
     expect(isFirstBodySection(document.createElement("div"), null)).toBeUndefined(); // not attached yet
+  });
+});
+
+describe("JSON-LD and graph panels", () => {
+  const rel = (f: string) => readFileSync(join(__dirname, "fixtures/rel", f), "utf8");
+  const files = Object.fromEntries(["a.md", "b.md", "d.md", "e.md", "sub/c.md"].map((f) => [f, rel(f)]));
+  type Viewish = { open(): Promise<void>; contentEl: HTMLElement };
+  const make = (View: unknown, app: unknown, host: unknown) => new (View as new (l: unknown, h: unknown) => Viewish)({ app }, host);
+
+  it("graph draws typed edges with a legend that hides types", async () => {
+    const { GraphView } = await import("../src/graphView");
+    const { v, host } = await setup(files, "a.md");
+    const view = make(GraphView, v.app, host);
+    await view.open();
+    const el = view.contentEl;
+    const edges = () => el.querySelectorAll("line.mif-graph-edge").length;
+    expect(el.querySelectorAll("g.mif-graph-node").length).toBeGreaterThan(1);
+    expect(el.querySelector("g.mif-graph-node.is-center")).not.toBeNull();
+    const before = edges();
+    expect(before).toBeGreaterThan(0);
+    const legend = [...el.querySelectorAll(".mif-graph-type")] as HTMLElement[];
+    expect(legend.length).toBeGreaterThan(0);
+    legend[0]!.click();
+    expect(edges()).toBeLessThan(before);
+    expect(el.querySelector(".mif-graph-type.is-hidden")).not.toBeNull();
+  });
+
+  it("JSON-LD panel shows the projection and a lossless round trip", async () => {
+    const { JsonLdView } = await import("../src/jsonldView");
+    const { v, host } = await setup(files, "a.md");
+    const view = make(JsonLdView, v.app, host);
+    await view.open();
+    expect(view.contentEl.textContent).toContain("Round trip: lossless");
+    expect(JSON.parse(view.contentEl.querySelector("pre.mif-jsonld")!.textContent!)["@id"]).toMatch(/^urn:mif:/);
   });
 });

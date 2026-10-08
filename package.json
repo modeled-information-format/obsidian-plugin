@@ -13,7 +13,8 @@
     "golden": "python3 scripts/gen_golden.py",
     "sync-schemas": "node scripts/sync-schemas.mjs && npm run -s validators",
     "install-vault": "node scripts/install-vault.mjs",
-    "validators": "node scripts/build-validators.mjs"
+    "validators": "node scripts/build-validators.mjs",
+    "mif-align": "node scripts/mif-align.mjs"
   },
   "license": "MIT",
   "devDependencies": {

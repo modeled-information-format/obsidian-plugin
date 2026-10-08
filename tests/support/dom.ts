@@ -26,6 +26,22 @@ export function installDom(): Window {
     return el;
   }
   proto.createEl = createEl;
+  // Obsidian defines createSvg on every Element (SVG children included).
+  (win.Element.prototype as unknown as Record<string, unknown>).createSvg = function (this: Element, tag: string, o: Opts | string = {}) {
+    const opts: Opts = typeof o === "string" ? { cls: o } : o;
+    const el = win.document.createElementNS("http://www.w3.org/2000/svg", tag) as unknown as Element;
+    // As Obsidian: each cls entry goes to classList.add, which rejects a
+    // space-separated string (createEl splits on spaces; createSvg does not).
+    if (opts.cls) {
+      for (const c of Array.isArray(opts.cls) ? opts.cls : [opts.cls]) {
+        if (/\s/.test(c)) throw new Error(`Failed to execute 'add' on 'DOMTokenList': The token provided ('${c}') contains HTML space characters, which are not valid in tokens.`);
+        el.classList.add(c);
+      }
+    }
+    for (const [k, v] of Object.entries(opts.attr ?? {})) el.setAttribute(k, v);
+    this.appendChild(el as never);
+    return el;
+  };
   proto.createDiv = function (this: HTMLElement, o?: Opts | string) {
     return createEl.call(this, "div", o);
   };

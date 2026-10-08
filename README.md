@@ -17,6 +17,31 @@ plugin folder. Nothing about your vault is sent. Turn the setting off to
 never contact the network; ontologies in a bundle's `.mif/ontologies/`
 folder always work offline.
 
+The optional **mif-cli bridge** (desktop only, off until **Settings → MIF →
+mif-cli path** is set) runs mif-rs's `mif-cli` on your machine. The plugin
+itself sends nothing; `mif-cli ingest` downloads its embedding model
+(`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face the first time
+and caches it. Embeddings are stored in each bundle's `.mif/vectors.db`.
+
+## Using MIF data elsewhere
+
+- **JSON-LD export:** commands export a note, a folder, or every bundle to
+  `dist/jsonld/<bundle>/<path>.jsonld` (spec §3.2, the layout of MIF's `emit-jsonld`); the
+  **MIF JSON-LD** panel shows the active note's projection and round trip.
+- **Bases:** choose the **MIF table** view in any base to see level,
+  freshness, trust, and issues beside your properties.
+- **Dataview / scripts:** `app.plugins.plugins.mif.api` is read-only:
+
+  ```js
+  // DataviewJS
+  const mif = app.plugins.plugins.mif.api;
+  dv.table(["Note", "Level", "Freshness", "Trust"],
+    mif.concepts().map((c) => [dv.fileLink(c.path), c.level, c.freshness ?? "", c.trust ?? ""]));
+  ```
+
+  `concept(path)`, `concepts()`, `relations(path)`, and `jsonld(path)` return
+  values computed live; nothing is written to frontmatter.
+
 ## Layout
 
 | Path | What it is |

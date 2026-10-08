@@ -6,7 +6,9 @@ import standaloneCode from "ajv/dist/standalone/index.js";
 import addFormats from "ajv-formats";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
-const load = (p) => JSON.parse(readFileSync(new URL(`../schemas/${p}`, import.meta.url), "utf8"));
+// MIF_SCHEMAS_DIR: compile another copy of the schemas (scripts/mif-align.mjs).
+const schemasDir = process.env.MIF_SCHEMAS_DIR ? new URL(`file://${process.env.MIF_SCHEMAS_DIR.replace(/\/?$/, "/")}`) : new URL("../schemas/", import.meta.url);
+const load = (p) => JSON.parse(readFileSync(new URL(p, schemasDir), "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: false, code: { source: true, esm: true } });
 addFormats(ajv);
 for (const p of [

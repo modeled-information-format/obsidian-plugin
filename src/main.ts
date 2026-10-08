@@ -1,6 +1,6 @@
 // MIF for Obsidian — authoring and Level 1 validation.
 
-import { MarkdownRenderChild, normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
 import { isFirstBodySection, renderCompressed } from "./compressionView";
@@ -16,11 +16,19 @@ import { decorateExplorer, FRESHNESS_VIEW, FreshnessView, freshnessLabel } from 
 import { PROPERTIES_VIEW, PropertiesView } from "./propertiesView";
 import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, OntologyView } from "./semanticViews";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
+import { MifApi } from "./api";
+import { BASES_VIEW, MifBasesView } from "./basesView";
+import { ingestNotice, MifCli, SearchModal } from "./cliBridge";
+import { GRAPH_VIEW, GraphView } from "./graphView";
+import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
 
 export default class MifPlugin extends Plugin {
   override settings: MifSettings = DEFAULT_SETTINGS;
   manager!: MifManager;
   store!: OntologyStore;
+  /** Read-only API for other plugins and DataviewJS: app.plugins.plugins.mif.api */
+  api!: MifApi;
+  cli!: MifCli;
   private statusEl?: HTMLElement;
 
   override async onload(): Promise<void> {
@@ -48,6 +56,18 @@ export default class MifPlugin extends Plugin {
     view(ENTITIES_VIEW, (leaf) => new EntitiesView(leaf, this));
     view(PROPERTIES_VIEW, (leaf) => new PropertiesView(leaf, this));
     view(FRESHNESS_VIEW, (leaf) => new FreshnessView(leaf, this));
+    view(JSONLD_VIEW, (leaf) => new JsonLdView(leaf, this));
+    view(GRAPH_VIEW, (leaf) => new GraphView(leaf, this));
+    this.api = new MifApi(this.manager);
+    this.cli = new MifCli(this.app, this.manager, () => this.settings);
+    // Bases (Obsidian 1.10+): a "MIF table" view with level, freshness, trust.
+    if (typeof this.registerBasesView === "function") {
+      this.registerBasesView(BASES_VIEW, {
+        name: "MIF table",
+        icon: "list-checks",
+        factory: (controller, containerEl) => new MifBasesView(controller, containerEl, this.api, this.manager),
+      });
+    }
 
     this.settings = loadSettings(await this.loadData());
     this.addSettingTab(new MifSettingTab(this.app, this));
@@ -287,6 +307,101 @@ export default class MifPlugin extends Plugin {
       callback: () => new MigrationModal(this.app, this.manager, this.manager.legacyFiles()).open(),
     });
     this.addCommand({ id: "open-report", name: "Open bundle report", callback: () => void this.revealView(REPORT_VIEW) });
+
+    // JSON-LD, round trip, graph, and the mif-cli bridge.
+    this.addCommand({ id: "open-jsonld", name: "Open JSON-LD panel", callback: () => void this.revealView(JSONLD_VIEW) });
+    this.addCommand({ id: "open-graph", name: "Open typed relationship graph", callback: () => void this.revealView(GRAPH_VIEW) });
+    const exportScope = async (scope: string, what: string) => {
+      const r = await this.manager.exportJsonLd(scope);
+      new Notice(`MIF: exported ${r.written} JSON-LD file${r.written === 1 ? "" : "s"} for ${what} to ${r.folder}/${r.skipped.length ? `; ${r.skipped.length} skipped (no projection — fix their errors)` : ""}${r.removed ? `; ${r.removed} stale moved to trash` : ""}.`, 8000);
+    };
+    this.addCommand({
+      id: "export-jsonld-note",
+      name: "Export this note as JSON-LD",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.get(file.path)?.isConcept;
+        if (ok && !checking) void exportScope(file!.path, file!.basename);
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "export-jsonld-folder",
+      name: "Export this note's folder as JSON-LD",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && this.manager.rootFor(file.path) !== null;
+        if (ok && !checking) void exportScope(file!.parent?.path === "/" ? "" : file!.parent?.path ?? "", file!.parent?.path || "the vault");
+        return ok;
+      },
+    });
+    this.addCommand({ id: "export-jsonld-all", name: "Export all bundles as JSON-LD", callback: () => void exportScope("", "all bundles") });
+    this.addCommand({
+      id: "roundtrip-check",
+      name: "Check the round trip of every concept (Invariant 4)",
+      callback: async () => {
+        const drift = await this.manager.roundtripReport();
+        new ConfirmModal(this.app, "MIF round-trip check", drift.length
+          ? [`${drift.length} concept${drift.length === 1 ? "" : "s"} do not survive markdown → JSON-LD → markdown unchanged:`, ...drift.map((d) => `${d.path}: ${d.drift.split("\n")[0]}`)]
+          : ["Every concept round-trips losslessly."], "OK", async () => {}).open();
+      },
+    });
+    const withCli = (run: () => Promise<void>) => {
+      const why = this.cli.unavailable();
+      if (why) new Notice(`MIF: ${why}`);
+      else void run();
+    };
+    this.addCommand({
+      id: "cli-ingest-note",
+      name: "Ingest this note into the vector store (mif-cli)",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.get(file.path)?.isConcept && !this.cli.unavailable();
+        if (ok && !checking) withCli(async () => ingestNotice(file!, await this.cli.ingest(file!)));
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "cli-ingest-bundle",
+      name: "Ingest this bundle into the vector store (mif-cli)",
+      checkCallback: (checking) => {
+        // The active note's bundle; otherwise (no note, or a .base / canvas open) the first bundle.
+        const file = this.app.workspace.getActiveFile();
+        const root = (file ? this.manager.rootFor(file.path) : null) ?? this.manager.bundleRoots()[0];
+        const ok = root !== undefined && !this.cli.unavailable();
+        if (ok && !checking) withCli(async () => {
+          const notice = new Notice("MIF: ingesting…", 0);
+          const r = await this.cli.ingestBundle(root!, (done, total) => notice.setMessage(`MIF: ingesting ${done} / ${total}…`));
+          notice.hide();
+          new Notice(`MIF: ${r.stored} concepts ingested into ${root ? `${root}/` : ""}.mif/vectors.db${r.failed.length ? `; ${r.failed.length} refused (${r.failed.slice(0, 3).map((f) => `${f.path}: ${f.problem.title}`).join("; ")}${r.failed.length > 3 ? "; …" : ""})` : ""}.`, 12_000);
+        });
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "cli-search",
+      name: "Semantic search (mif-cli)",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const root = (file ? this.manager.rootFor(file.path) : null) ?? this.manager.bundleRoots()[0] ?? "";
+        const ok = !this.cli.unavailable();
+        if (ok && !checking) new SearchModal(this.app, this.cli, root).open();
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "cli-similar",
+      name: "Find concepts similar to this note (mif-cli)",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.get(file.path)?.isConcept && !this.cli.unavailable();
+        if (ok && !checking) withCli(async () => {
+          const hits = await this.cli.similar(file!);
+          new SearchModal(this.app, this.cli, this.manager.rootFor(file!.path) ?? "", { title: `Similar to ${file!.basename}`, hits }).open();
+        });
+        return ok;
+      },
+    });
 
     // Citations section and compression.
     const activeConcept = () => {
@@ -564,6 +679,41 @@ class MifSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+
+    new Setting(containerEl).setName("Export and interoperability").setHeading();
+    new Setting(containerEl)
+      .setName("JSON-LD export folder")
+      .setDesc("Exports go to <folder>/<bundle name>/<path>.jsonld (spec §3.2). They are derived output: if this vault is a git repository, ignore this folder rather than committing it with the bundle.")
+      .addText((t) =>
+        t.setPlaceholder("dist/jsonld").setValue(s.exportFolder).onChange(async (v) => {
+          s.exportFolder = v.trim().replace(/^\/+|\/+$/g, "") || "dist/jsonld";
+          await this.plugin.saveSettings();
+        }),
+      );
+    const cliSetting = new Setting(containerEl)
+      .setName("mif-cli path (desktop)")
+      .setDesc("Optional. Absolute path to mif-rs's mif-cli, for ingest, semantic search, and find-similar. Empty turns this off. On first ingest mif-cli downloads its embedding model (all-MiniLM-L6-v2) from Hugging Face.")
+      .addText((t) =>
+        t.setPlaceholder("/path/to/mif-cli").setValue(s.mifCliPath).onChange(async (v) => {
+          s.mifCliPath = v.trim();
+          await this.plugin.saveSettings();
+        }),
+      )
+      .addButton((b) =>
+        b.setButtonText("Test").onClick(async () => {
+          const why = this.plugin.cli.unavailable();
+          if (why) {
+            new Notice(`MIF: ${why}`);
+            return;
+          }
+          try {
+            new Notice(`MIF: found ${await this.plugin.cli.version()}.`);
+          } catch (err) {
+            new Notice(`MIF: mif-cli did not run — ${(err as Error).message}`, 10_000);
+          }
+        }),
+      );
+    if (!Platform.isDesktopApp) cliSetting.setDisabled(true);
 
     new Setting(containerEl)
       .setName("Developer commands")

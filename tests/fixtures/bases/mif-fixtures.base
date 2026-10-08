@@ -1,0 +1,11 @@
+filters:
+  or:
+    - file.inFolder("_fixtures/citations")
+    - file.inFolder("_fixtures/temporal")
+views:
+  - type: mif-table
+    name: MIF table
+    order:
+      - file.name
+      - type
+      - title

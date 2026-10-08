@@ -10,3 +10,5 @@ spikes/mif-wasm/target/
 spikes/mif-wasm/pkg-*/
 spikes/mif-wasm/Cargo.lock
 src/engine/generated/
+test-vault/.mif/
+test-vault/dist/
