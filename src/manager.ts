@@ -47,6 +47,9 @@ import {
   parseEntityFile,
   renderEntityFile,
   semanticDiagnostics,
+  freshness,
+  temporalDiagnostics,
+  type Freshness,
   type Corpus,
   type EntityRecord,
   type OntologyDef,
@@ -319,6 +322,36 @@ export class MifManager extends Events {
     this.trigger("changed", null);
   }
 
+  thresholds() {
+    const s = this.settings();
+    return { fresh: s.freshThreshold, ageing: s.ageingThreshold };
+  }
+
+  /** Live freshness of a concept (spec §9), or undefined for non-concepts. */
+  freshnessOf(path: string, now = new Date()): Freshness | undefined {
+    const fm = this.files.get(path)?.analysis.frontmatter;
+    return fm && this.files.get(path)?.analysis.isConcept ? freshness(fm, now, this.thresholds()) : undefined;
+  }
+
+  private lastTracked = new Map<string, number>();
+
+  /** Opt-in access tracking: bump accessCount / lastAccessed, at most hourly per note. */
+  async trackAccess(file: TFile): Promise<void> {
+    if (!this.settings().accessTracking) return;
+    const a = this.files.get(file.path);
+    if (!a?.analysis.isConcept || !a.analysis.frontmatter?.id) return;
+    const last = this.lastTracked.get(file.path) ?? 0;
+    if (Date.now() - last < 3_600_000) return;
+    this.lastTracked.set(file.path, Date.now());
+    const temporal = (a.analysis.frontmatter.temporal && typeof a.analysis.frontmatter.temporal === "object" ? a.analysis.frontmatter.temporal : {}) as Record<string, unknown>;
+    const count = typeof temporal.accessCount === "number" ? temporal.accessCount : 0;
+    await this.write(file, (text) => {
+      const once = applyEdit(text, ["temporal", "accessCount"], count + 1);
+      return applyEdit(once, ["temporal", "lastAccessed"], isoSeconds(new Date()));
+    });
+    await this.analyzeFile(file);
+  }
+
   semantic(path: string): SemanticReport | undefined {
     return this.files.get(path)?.semantic;
   }
@@ -387,6 +420,7 @@ export class MifManager extends Events {
         ...state.analysis.diagnostics,
         ...(this.bundleDiags.get(path) ?? []),
         ...(state.semantic?.diagnostics ?? []),
+        ...(state.analysis.isConcept && state.analysis.frontmatter ? temporalDiagnostics(state.analysis.frontmatter, new Date(), this.thresholds()) : []),
       ],
       path,
       root: state.root,

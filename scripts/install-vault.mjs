@@ -27,6 +27,7 @@ const STAGE = {
   rel: join(root, "tests", "fixtures", "rel"),
   legacy: join(root, "tests", "fixtures", "mif", "legacy-0.1-bundle"),
   memories: join(root, "tests", "fixtures", "memories"),
+  temporal: join(root, "tests", "fixtures", "temporal"),
 };
 rmSync(join(vault, "_fixtures"), { recursive: true, force: true });
 for (const [name, src] of Object.entries(STAGE)) {

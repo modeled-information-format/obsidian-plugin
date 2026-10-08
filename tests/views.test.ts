@@ -69,8 +69,9 @@ describe("panels render without errors", () => {
     const { OntologyView } = await import("../src/semanticViews");
     const { RelatedView } = await import("../src/relations");
     const { DiagnosticsView, ReportView } = await import("../src/views");
+    const { FreshnessView } = await import("../src/freshnessView");
     const { v, host } = await setup({ "soil.md": soil }, "soil.md");
-    for (const View of [OntologyView, RelatedView, DiagnosticsView, ReportView]) {
+    for (const View of [OntologyView, RelatedView, DiagnosticsView, ReportView, FreshnessView]) {
       const view = new (View as never as new (l: unknown, h: unknown) => { open(): Promise<void>; contentEl: HTMLElement })({ app: v.app }, host);
       await (view as unknown as { open(): Promise<void> }).open();
       expect(view.contentEl.textContent!.length, View.name).toBeGreaterThan(0);
@@ -84,9 +85,10 @@ describe("panels do not shadow Obsidian's View internals", () => {
     const { OntologyView, EntitiesView } = await import("../src/semanticViews");
     const { RelatedView } = await import("../src/relations");
     const { DiagnosticsView, ReportView } = await import("../src/views");
+    const { FreshnessView } = await import("../src/freshnessView");
     const { v, host } = await setup({ "soil.md": soil }, "soil.md");
     const allowed = new Set(["contentEl", "app", "leaf"]); // set by the base class itself
-    for (const View of [PropertiesView, OntologyView, EntitiesView, RelatedView, DiagnosticsView, ReportView]) {
+    for (const View of [PropertiesView, OntologyView, EntitiesView, RelatedView, DiagnosticsView, ReportView, FreshnessView]) {
       const view = new (View as never as new (l: unknown, h: unknown) => object)({ app: v.app }, host);
       const clashes = Object.keys(view).filter((k) => (VIEW_INTERNALS as readonly string[]).includes(k) && !allowed.has(k));
       expect(clashes, View.name).toEqual([]);

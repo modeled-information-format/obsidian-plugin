@@ -284,6 +284,24 @@ export function bundleDiagnostics(index: BundleIndex): Map<string, Diagnostic[]>
       }
     }
 
+    // Superseded / conflicting concepts (spec §8.2 Supersedes, ConflictsWith).
+    for (const edge of index.incoming.get(c.path) ?? []) {
+      const source = index.concepts.get(edge.from);
+      const name = (source && typeof source.frontmatter.title === "string" ? source.frontmatter.title : edge.from);
+      if (edge.type === "supersedes") {
+        add(c.path, { severity: "warning", code: "superseded", message: `Superseded by ${name} (${edge.from}).`, path: [], line: 0, fixes: [] });
+      } else if (edge.type === "conflicts-with") {
+        add(c.path, { severity: "info", code: "conflict", message: `${name} (${edge.from}) declares a conflict with this concept.`, path: [], line: 0, fixes: [] });
+      }
+    }
+    for (const edge of index.outgoing.get(c.path) ?? []) {
+      if (edge.type === "conflicts-with" && edge.resolved) {
+        const t = index.concepts.get(edge.resolved);
+        const name = t && typeof t.frontmatter.title === "string" ? t.frontmatter.title : edge.resolved;
+        add(c.path, { severity: "info", code: "conflict", message: `Conflicts with ${name} (${edge.resolved}).`, path: ["relationships", edge.index], line: relationshipLine(c, edge.index), fixes: [] });
+      }
+    }
+
     // (4) broken body links (any markdown link that resolves to a missing .md).
     // Unlike okf_validate, percent-encoding is decoded first (`%20` → space),
     // matching how Obsidian resolves the same link (Spike C).

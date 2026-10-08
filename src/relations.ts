@@ -5,6 +5,7 @@ import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, t
 
 import { incomingLabel, relativeTarget, titleOf, type BundleConcept, type Edge, type RelType } from "./engine";
 import type { MifManager } from "./manager";
+import { renderTimeline } from "./freshnessView";
 import { openAtLine } from "./views";
 
 export const RELATED_VIEW = "mif-related";
@@ -60,6 +61,15 @@ export class RelatedView extends ItemView {
     }
     const add = header.createEl("button", { text: "Add", cls: "mod-cta" });
     add.onclick = () => this.host.editRelationship(file);
+
+    // Bi-temporal timeline and supersede / conflict notices.
+    const fresh = this.host.manager.freshnessOf(file.path);
+    if (fresh) renderTimeline(el, fresh);
+    for (const d of this.host.manager.get(file.path)?.diagnostics ?? []) {
+      if (d.code === "superseded" || d.code === "conflict") {
+        el.createDiv({ cls: `mif-banner mif-banner-${d.code}`, text: d.message });
+      }
+    }
 
     const open = (path: string | undefined) => {
       if (!path) return;

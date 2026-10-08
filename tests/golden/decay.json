@@ -1,0 +1,517 @@
+{
+  "curves": [
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 1,
+      "strength": 0.9057236642639067
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 3.5,
+      "strength": 0.7071067811865476
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 7,
+      "strength": 0.5
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 14,
+      "strength": 0.25
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 30,
+      "strength": 0.05127095975047737
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 7,
+      "days": 60,
+      "strength": 0.002628711313735071
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 1,
+      "strength": 0.9516951530106196
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 3.5,
+      "strength": 0.8408964152537145
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 7,
+      "strength": 0.7071067811865476
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 14,
+      "strength": 0.5
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 30,
+      "strength": 0.22643091606597668
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 14,
+      "days": 60,
+      "strength": 0.05127095975047737
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 1,
+      "strength": 0.9771599684342459
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 3.5,
+      "strength": 0.9223161935859392
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 7,
+      "strength": 0.8506671609508557
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 14,
+      "strength": 0.7236346187201891
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 30,
+      "strength": 0.5
+    },
+    {
+      "model": "exponential",
+      "halfLifeDays": 30,
+      "days": 60,
+      "strength": 0.25
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 1,
+      "strength": 0.8571428571428572
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 3.5,
+      "strength": 0.5
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 7,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 14,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 7,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 1,
+      "strength": 0.9285714285714286
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 3.5,
+      "strength": 0.75
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 7,
+      "strength": 0.5
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 14,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 14,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 1,
+      "strength": 0.9666666666666667
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 3.5,
+      "strength": 0.8833333333333333
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 7,
+      "strength": 0.7666666666666666
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 14,
+      "strength": 0.5333333333333333
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "linear",
+      "halfLifeDays": 30,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 7,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 14,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 7,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 7,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 14,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 14,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 7,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 14,
+      "strength": 1.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 30,
+      "strength": 0.0
+    },
+    {
+      "model": "step",
+      "halfLifeDays": 30,
+      "days": 60,
+      "strength": 0.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 7,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 14,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 30,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 7,
+      "days": 60,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 7,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 14,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 30,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 14,
+      "days": 60,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 0,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 1,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 3.5,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 7,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 14,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 30,
+      "strength": 1.0
+    },
+    {
+      "model": "none",
+      "halfLifeDays": 30,
+      "days": 60,
+      "strength": 1.0
+    }
+  ],
+  "durationDays": {
+    "P7D": 7,
+    "P30D": 30,
+    "P1Y": 365,
+    "P6M": 180,
+    "P1Y6M15D": 560,
+    "P90D": 90,
+    "": null
+  }
+}

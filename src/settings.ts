@@ -12,6 +12,14 @@ export interface MifSettings {
   downloadOntologies: boolean;
   /** Ontology used for namespace hints when a concept declares none. */
   defaultOntology: string;
+  /** Decay strength at or above which a concept is "fresh". */
+  freshThreshold: number;
+  /** Decay strength at or above which a concept is "ageing" (else "stale"). */
+  ageingThreshold: number;
+  /** Write accessCount / lastAccessed when a concept is opened (writes on read). */
+  accessTracking: boolean;
+  /** Freshness dots in the file explorer (uses an undocumented Obsidian API). */
+  explorerBadges: boolean;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -21,6 +29,10 @@ export const DEFAULT_SETTINGS: MifSettings = {
   showDevCommands: false,
   downloadOntologies: true,
   defaultOntology: "mif-base",
+  freshThreshold: 0.75,
+  ageingThreshold: 0.5,
+  accessTracking: false,
+  explorerBadges: true,
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

@@ -41,6 +41,8 @@
 .mif-level-none { color: var(--text-muted); }
 
 .mif-status .mif-level { background: none; padding: 0; min-width: 0; }
+/* Status bar items are flex rows, which trim spaces at span edges: space with gap. */
+.mif-status { gap: 0.35em; }
 
 .mif-error-text { color: var(--mif-invalid); }
 .mif-warning-text { color: var(--mif-human); }
@@ -108,3 +110,19 @@
 .mif-array-item { margin-bottom: var(--size-4-2); }
 .mif-array-head { display: flex; justify-content: space-between; align-items: center; }
 .mif-now { font-size: var(--font-ui-smaller); }
+
+/* Freshness — state colours map to brand tokens */
+.mif-fresh { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }
+.mif-fresh-fresh { color: var(--mif-valid); }
+.mif-fresh-ageing { color: var(--mif-human); }
+.mif-fresh-stale, .mif-fresh-expired { color: var(--mif-invalid); }
+.mif-fresh-not-yet-valid, .mif-fresh-timeless { color: var(--text-muted); }
+.mif-timeline { font-size: var(--font-ui-small); margin: var(--size-4-1) 0 var(--size-4-2); }
+.mif-banner { margin: var(--size-4-1) 0; padding: var(--size-4-1) var(--size-4-2); border-radius: var(--radius-s); font-size: var(--font-ui-small); }
+.mif-banner-superseded { background: var(--mif-human-soft); color: var(--mif-human); }
+.mif-banner-conflict { background: var(--mif-invalid-soft); color: var(--mif-invalid); }
+.nav-file-title[class*="mif-explorer-"]::after { content: ""; width: 6px; height: 6px; border-radius: 50%; margin-left: auto; flex: none; align-self: center; }
+.nav-file-title.mif-explorer-fresh::after { background: var(--mif-valid); }
+.nav-file-title.mif-explorer-ageing::after { background: var(--mif-human); }
+.nav-file-title.mif-explorer-stale::after, .nav-file-title.mif-explorer-expired::after { background: var(--mif-invalid); }
+.nav-file-title.mif-explorer-not-yet-valid::after { background: var(--text-faint); }

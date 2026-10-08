@@ -11,6 +11,7 @@ import { runLinkSpike } from "./spikes/links";
 import { BUILD_ID } from "./build";
 import { OntologyStore } from "./ontologyStore";
 import { MigrationModal, RELATED_VIEW, RelatedView, RelationshipModal, type RelationshipDraft } from "./relations";
+import { decorateExplorer, FRESHNESS_VIEW, FreshnessView, freshnessLabel } from "./freshnessView";
 import { PROPERTIES_VIEW, PropertiesView } from "./propertiesView";
 import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, OntologyView } from "./semanticViews";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
@@ -45,6 +46,7 @@ export default class MifPlugin extends Plugin {
     view(ONTOLOGY_VIEW, (leaf) => new OntologyView(leaf, this));
     view(ENTITIES_VIEW, (leaf) => new EntitiesView(leaf, this));
     view(PROPERTIES_VIEW, (leaf) => new PropertiesView(leaf, this));
+    view(FRESHNESS_VIEW, (leaf) => new FreshnessView(leaf, this));
 
     this.settings = loadSettings(await this.loadData());
     this.addSettingTab(new MifSettingTab(this.app, this));
@@ -70,8 +72,21 @@ export default class MifPlugin extends Plugin {
 
   private registerVaultEvents(): void {
     const { vault, workspace } = this.app;
-    this.registerEvent(this.manager.on("changed", () => this.refreshStatus()));
-    this.registerEvent(workspace.on("file-open", () => this.refreshStatus()));
+    this.registerEvent(this.manager.on("changed", () => {
+      this.refreshStatus();
+      this.scheduleExplorer();
+    }));
+    this.registerEvent(workspace.on("file-open", (file) => {
+      this.refreshStatus();
+      if (file) void this.manager.trackAccess(file);
+    }));
+    this.registerEvent(workspace.on("layout-change", () => this.scheduleExplorer()));
+    // Freshness moves with the clock: refresh badges every ten minutes.
+    this.registerInterval(window.setInterval(() => {
+      this.refreshStatus();
+      this.scheduleExplorer();
+    }, 600_000));
+    this.scheduleExplorer();
     this.registerEvent(
       workspace.on("editor-change", (_editor, info) => {
         if (info.file) this.manager.markDirty(info.file.path);
@@ -110,6 +125,16 @@ export default class MifPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  private explorerTimer = 0;
+
+  private scheduleExplorer(): void {
+    window.clearTimeout(this.explorerTimer);
+    this.explorerTimer = window.setTimeout(() => {
+      const n = decorateExplorer(this.app, this.manager, this.settings.explorerBadges);
+      this.manager.debug("explorer-badges", { decorated: n, enabled: this.settings.explorerBadges });
+    }, 300);
+  }
+
   private refreshStatus(): void {
     const el = this.statusEl;
     if (!el) return;
@@ -125,8 +150,13 @@ export default class MifPlugin extends Plugin {
     const warnings = a.diagnostics.filter((d) => d.severity === "warning").length;
     const label = !a.isConcept ? "MIF –" : a.level === 0 ? "MIF ✗" : `MIF L${a.level}`;
     el.createSpan({ cls: `mif-level mif-level-${a.isConcept ? a.level : "none"}`, text: label });
-    if (errors) el.createSpan({ cls: "mif-error-text", text: ` ${errors}✗` });
-    if (warnings) el.createSpan({ cls: "mif-warning-text", text: ` ${warnings}⚠` });
+    if (errors) el.createSpan({ cls: "mif-error-text", text: `${errors}✗` });
+    if (warnings) el.createSpan({ cls: "mif-warning-text", text: `${warnings}⚠` });
+    const fresh = a.isConcept ? this.manager.freshnessOf(file.path) : undefined;
+    if (fresh && fresh.state !== "timeless") {
+      el.createSpan({ cls: "mif-muted", text: "·" });
+      el.createSpan({ cls: `mif-fresh mif-fresh-${fresh.state}`, text: freshnessLabel(fresh) });
+    }
     el.setAttr("aria-label", a.isConcept ? "Open MIF diagnostics" : "Not a MIF concept — open diagnostics to convert");
     el.setAttr("data-tooltip-position", "top");
   }
@@ -222,6 +252,7 @@ export default class MifPlugin extends Plugin {
     });
     this.addCommand({ id: "open-ontology", name: "Open ontology panel", callback: () => void this.revealView(ONTOLOGY_VIEW) });
     this.addCommand({ id: "open-properties", name: "Open properties panel", callback: () => void this.revealView(PROPERTIES_VIEW) });
+    this.addCommand({ id: "open-freshness", name: "Open freshness panel", callback: () => void this.revealView(FRESHNESS_VIEW) });
     this.addCommand({ id: "open-entities", name: "Open entities panel", callback: () => void this.revealView(ENTITIES_VIEW) });
     this.addCommand({
       id: "add-entity-reference",
@@ -417,6 +448,50 @@ class MifSettingTab extends PluginSettingTab {
           s.defaultOntology = value.trim();
           await this.plugin.saveSettings();
           this.plugin.manager.recomputeSemantics();
+        }),
+      );
+
+    new Setting(containerEl).setName("Freshness").setHeading();
+    new Setting(containerEl)
+      .setName("Thresholds")
+      .setDesc("Decay strength for “fresh” and “ageing”; below the second is “stale”. The spec defines none.")
+      .addText((t) =>
+        t.setValue(String(s.freshThreshold)).onChange(async (v) => {
+          const n = Number(v);
+          if (n > 0 && n <= 1) {
+            s.freshThreshold = n;
+            await this.plugin.saveSettings();
+            this.plugin.manager.trigger("changed", null);
+          }
+        }),
+      )
+      .addText((t) =>
+        t.setValue(String(s.ageingThreshold)).onChange(async (v) => {
+          const n = Number(v);
+          if (n >= 0 && n < s.freshThreshold) {
+            s.ageingThreshold = n;
+            await this.plugin.saveSettings();
+            this.plugin.manager.trigger("changed", null);
+          }
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Freshness dots in the file explorer")
+      .setDesc("Colours concepts by freshness. Uses an undocumented Obsidian API and turns itself off quietly if that changes.")
+      .addToggle((t) =>
+        t.setValue(s.explorerBadges).onChange(async (v) => {
+          s.explorerBadges = v;
+          await this.plugin.saveSettings();
+          this.plugin.manager.trigger("changed", null);
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Track access")
+      .setDesc("When you open a concept, update temporal.accessCount and lastAccessed (at most hourly per note). Off by default because it writes on read.")
+      .addToggle((t) =>
+        t.setValue(s.accessTracking).onChange(async (v) => {
+          s.accessTracking = v;
+          await this.plugin.saveSettings();
         }),
       );
 

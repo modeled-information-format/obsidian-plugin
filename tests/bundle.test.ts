@@ -70,7 +70,8 @@ describe("bundle checks match okf_validate", () => {
       const actual: Record<string, Record<string, number>> = {};
       for (const [file, ds] of bundleDiagnostics(loadBundle(dir))) {
         for (const d of ds) {
-          if (d.code === "broken-target") continue; // plugin-only check (urn targets)
+          // Plugin-only checks with no okf_validate counterpart.
+          if (["broken-target", "superseded", "conflict"].includes(d.code)) continue;
           actual[file] ??= {};
           actual[file]![d.code] = (actual[file]![d.code] ?? 0) + 1;
         }
@@ -118,6 +119,14 @@ describe("bundle index", () => {
       "Add body-only relationships to frontmatter",
       "Regenerate the body mirror from frontmatter (drops 2 body-only lines)",
     ]);
+  });
+
+  it("marks superseded and conflicting concepts", () => {
+    const ds = bundleDiagnostics(index);
+    // b supersedes a; d conflicts with b.
+    expect(ds.get("a.md")!.find((d) => d.code === "superseded")!.message).toMatch(/Superseded by Concept B \(b\.md\)/);
+    expect(ds.get("b.md")!.some((d) => d.code === "conflict" && /Concept D/.test(d.message))).toBe(true);
+    expect(ds.get("d.md")!.some((d) => d.code === "conflict" && /Conflicts with Concept B/.test(d.message))).toBe(true);
   });
 
   it("puts diagnostics on the right lines", () => {

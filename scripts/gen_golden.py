@@ -177,6 +177,23 @@ def ontology_goldens() -> dict:
     return out
 
 
+def decay_goldens() -> dict:
+    """mnemonic skills/custodian/lib/decay.py: the only existing decay code.
+    Its single-step curve (current_strength = 1) and duration parsing."""
+    mn = Path(os.environ.get("MNEMONIC_REPO", ROOT.parent / "mnemonic")).resolve()
+    sys.path.insert(0, str(mn / "skills" / "custodian"))
+    from lib import decay as d  # noqa: E402
+
+    curves = []
+    for model in ("exponential", "linear", "step", "none"):
+        for half in (7, 14, 30):
+            for days in (0, 1, 3.5, 7, 14, 30, 60):
+                curves.append({"model": model, "halfLifeDays": half, "days": days,
+                               "strength": d.calculate_strength(days, half, 1.0, model)})
+    durations = {s: d.parse_duration_days(s) for s in ("P7D", "P30D", "P1Y", "P6M", "P1Y6M15D", "P90D", "")}
+    return {"curves": curves, "durationDays": durations}
+
+
 def main() -> int:
     rust = OUT / "ontology-chains.json"
     keep = rust.read_text() if rust.exists() else None
@@ -221,6 +238,7 @@ def main() -> int:
     dump(OUT / "scalars.json", scalar_goldens())
     dump(OUT / "kebab.json", {k: okf._kebab(k) for k in KEBAB_CASES})
     dump(OUT / "ontologies.json", ontology_goldens())
+    dump(OUT / "decay.json", decay_goldens())
     dump(OUT / "uuid5.json", {
         "namespace": str(mig.MIF_NAMESPACE),
         "slugs": {s: str(__import__("uuid").uuid5(mig.MIF_NAMESPACE, s)) for s in UUID5_SLUGS},

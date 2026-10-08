@@ -23,6 +23,13 @@ const GOLDEN = join(ROOT, "tests", "golden");
 const BUNDLES: Record<string, string> = {
   "test-vault": join(ROOT, "test-vault"),
   edge: join(ROOT, "tests", "fixtures", "edge"),
+  // Goldens for these bundles were missing here, which
+  // failed collection of this whole file without failing any test.
+  rel: join(ROOT, "tests", "fixtures", "rel"),
+  legacy: join(ROOT, "tests", "fixtures", "mif", "legacy-0.1-bundle"),
+  ...Object.fromEntries(
+    readdirSync(join(ROOT, "tests/fixtures/mif/relationship_types")).map((n) => [`reltypes-${n}`, join(ROOT, "tests/fixtures/mif/relationship_types", n)]),
+  ),
 };
 
 /** Concepts where the reference round trip is lossy but ours must not be. */

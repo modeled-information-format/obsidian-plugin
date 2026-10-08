@@ -187,3 +187,22 @@ describe("Properties panel edits", () => {
     expect(v.texts.get("a.md")).toContain("provenance:\n  confidence: 0.8");
   });
 });
+
+describe("access tracking", () => {
+  it("is off by default, and when on bumps the count at most hourly", async () => {
+    const v = memoryApp(relFixtures());
+    const settings = { ...DEFAULT_SETTINGS };
+    const manager = new MifManager(v.app as never, () => settings);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const before = v.texts.get("a.md");
+    await manager.trackAccess(v.files.get("a.md") as never);
+    expect(v.texts.get("a.md")).toBe(before);
+    settings.accessTracking = true;
+    await manager.trackAccess(v.files.get("a.md") as never);
+    await manager.trackAccess(v.files.get("a.md") as never);
+    const temporal = (manager.get("a.md")!.frontmatter!.temporal as { accessCount: number; lastAccessed: string });
+    expect(temporal.accessCount).toBe(1);
+    expect(temporal.lastAccessed).toMatch(/Z$/);
+  });
+});

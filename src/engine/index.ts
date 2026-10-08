@@ -65,3 +65,4 @@ export {
 export { entityReference, entitySlug, entityUrn, parseEntityFile, referencedEntities, renderEntityFile, ENTITY_URN, type EntityRecord } from "./entities";
 export { semanticDiagnostics, usefulSuggestions, type SemanticContext, type SemanticReport } from "./semantics";
 export { applyEdit, checkInput, FORM_KEYS, SECTIONS, topLevelModel, type Checked, type FieldKind, type FieldModel } from "./form";
+export { DEFAULT_THRESHOLDS, durationMs, freshness, temporalDiagnostics, urgency, type Freshness, type FreshnessState, type Thresholds } from "./temporal";
