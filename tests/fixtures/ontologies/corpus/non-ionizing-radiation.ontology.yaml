@@ -1,0 +1,249 @@
+---
+# Non-Ionizing Radiation Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for non-ionizing electromagnetic-field (EMF) exposure:
+# power-frequency fields from electrical devices, RF/microwave fields from
+# wireless communications, the named field-exposure quantities that measure
+# them (including specific absorption rate), regulatory/guideline exposure
+# limits, IARC carcinogenicity-hazard classifications, and clinical/
+# epidemiological findings linking exposure to a health outcome. Extends BOTH
+# physical-science-base (for the field-quantity physics, one hop, mirroring
+# plasma-physics/cosmology/heliophysics) and clinical-health-base (for the
+# health-outcome/clinical-observation shape, one hop, mirroring cardiology/
+# health/fitness) -- the domain genuinely spans both, so it composes both
+# Tier-1 bases directly (the same multi-parent-extends pattern
+# regenerative-agriculture-research and observability already use).
+#
+# Authored alongside heliophysics to close a second coverage gap: no existing
+# ontology covers non-ionizing EMF exposure dosimetry from electrical devices
+# or wireless communications (physical-science-base/plasma-physics/cosmology
+# don't model exposure/dosimetry; health/clinical-health-base/fitness don't
+# model field-strength physics).
+#
+# Grounded in: ICNIRP (2010) Guidelines for Limiting Exposure to Time-Varying
+# Electric and Magnetic Fields (1 Hz - 100 kHz); ICNIRP (2020) Guidelines for
+# Limiting Exposure to Electromagnetic Fields (100 kHz to 300 GHz), which
+# supersedes the 100 kHz-300 GHz part of ICNIRP (1998) and the 100 kHz-10 MHz
+# part of ICNIRP (2010); IEEE C95.1-2019 (0 Hz to 300 GHz safety levels); FCC
+# 47 CFR 1.1310 maximum permissible exposure limits; and the IARC Monographs on
+# the Identification of Carcinogenic Hazards to Humans -- Volume 102 (2013,
+# evaluated 2011: radiofrequency EMF, Group 2B "possibly carcinogenic to
+# humans") and Volume 80 (2002: extremely low-frequency (ELF) EMF, Group 2B).
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: non-ionizing-radiation
+  version: "0.1.0"
+  description: "Non-ionizing radiation domain ontology: power-frequency and RF/microwave EMF exposure sources and quantities, regulatory exposure limits, IARC carcinogenicity classifications, and exposure/health-outcome findings"
+  extends:
+    - physical-science-base
+    - clinical-health-base
+
+namespaces:
+  semantic:
+    children:
+      emf-sources:
+        description: "Electrical and wireless EMF exposure-source apparatus"
+        type_hint: semantic
+      emf-quantities:
+        description: "Named power-frequency and RF field-exposure physical quantities"
+        type_hint: semantic
+      emf-limits:
+        description: "Regulatory/guideline EMF exposure limits and carcinogenicity classifications"
+        type_hint: semantic
+  episodic:
+    children:
+      emf-health-findings:
+        description: "Clinical/epidemiological findings on EMF exposure and health outcomes"
+        type_hint: episodic
+
+entity_types:
+  - name: electrical-device
+    description: "A power-frequency electromagnetic-field source (appliance, transmission line, transformer, substation)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: "Matches research.ontology.yaml's apparatus field name directly" }
+        device_category: { type: string, enum: ["appliance", "transmission-line", "transformer", "substation", "other"] }
+        nominal_frequency_hz: { type: number }
+    source_vocab: "ICNIRP 2010 Low-Frequency Guidelines"
+    source_class: "ICNIRP (2010) Guidelines for Limiting Exposure to Time-Varying Electric and Magnetic Fields (1 Hz - 100 kHz) -- exposure-source scope"
+    prior_art: "extend research.ontology.yaml `apparatus` (\"A device, platform, or instrument used to produce research data\") -- an electrical device is a specialized power-frequency EMF exposure source, reached transitively since both physical-science-base and clinical-health-base extend research"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: wireless-transmitter
+    description: "An RF/microwave electromagnetic-field source (mobile handset, base station, WiFi router, Bluetooth device, radar)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [name]
+      properties:
+        name: { type: string }
+        device_category: { type: string, enum: ["mobile-handset", "base-station", "wifi-router", "bluetooth", "radar", "other"] }
+        operating_frequency_hz: { type: number }
+    source_vocab: "ICNIRP 2020 RF Guidelines"
+    source_class: "ICNIRP (2020) Guidelines for Limiting Exposure to Electromagnetic Fields (100 kHz to 300 GHz) -- exposure-source scope"
+    prior_art: "extend research.ontology.yaml `apparatus` -- a wireless transmitter is a specialized RF/microwave EMF exposure source, mirroring electrical-device's extension of the same base type"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: power-frequency-field-strength
+    description: "A measured power-frequency (1 Hz-100 kHz) electric or magnetic field-strength value"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        field_type: { type: string, enum: ["electric", "magnetic"] }
+    source_vocab: "ICNIRP 2010"
+    source_class: "ICNIRP (2010) Guidelines for Limiting Exposure to Time-Varying Electric and Magnetic Fields (1 Hz - 100 kHz)"
+    prior_art: "extend physical-science-base `physical-quantity` -- a power-frequency field-strength reading is a specialized named-quantity measurement, mirroring plasma-physics's `plasma-parameter` and heliophysics's `geomagnetic-index` extensions of the same base type"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: rf-field-exposure
+    description: "A measured RF/microwave (100 kHz-300 GHz) field-strength or power-density exposure value"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        metric_type: { type: string, enum: ["electric-field", "power-density", "absorbed-power-density"] }
+    source_vocab: "ICNIRP 2020; IEEE C95.1-2019"
+    source_class: "ICNIRP (2020) Guidelines for Limiting Exposure to Electromagnetic Fields (100 kHz to 300 GHz); IEEE C95.1-2019 (0 Hz-300 GHz), which share a common 6 GHz transition frequency for the internal-exposure metric"
+    prior_art: "extend physical-science-base `physical-quantity`"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: specific-absorption-rate
+    description: "Specific absorption rate (SAR): RF energy absorbed per unit body mass, the basic-restriction metric below the ICNIRP(2020)/IEEE C95.1-2019 6 GHz transition frequency"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        averaging_mass_g: { type: number }
+    source_vocab: "ICNIRP 2020; IEEE C95.1-2019; FCC 47 CFR 1.1310"
+    source_class: "SAR as the basic-restriction/maximum-permissible-exposure metric below the common ICNIRP(2020)/IEEE C95.1-2019 6 GHz transition frequency"
+    prior_art: "extend physical-science-base `physical-quantity`"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: emf-exposure-limit
+    description: "A named regulatory or guideline exposure limit/reference level for electric, magnetic, or electromagnetic field exposure"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [standard_body, limit_type]
+      properties:
+        standard_body: { type: string, enum: ["ICNIRP", "IEEE", "FCC", "ARPANSA", "other"] }
+        limit_type: { type: string, enum: ["occupational", "general-public"] }
+        frequency_range: { type: string }
+        value: { type: number }
+        unit: { type: string }
+    source_vocab: "ICNIRP 2010/2020; IEEE C95.1-2019; FCC 47 CFR 1.1310"
+    source_class: "ICNIRP/IEEE reference levels and basic restrictions; FCC 47 CFR 1.1310 maximum permissible exposure (MPE) limits"
+    prior_art: "mint -- these limits are drawn from named regulatory/guideline bodies (ICNIRP, IEEE, FCC), not PACS-coded, so cannot be a defensible subtype of physical-science-base's `classification-scheme-entry`; mirrors heliophysics's `space-weather-alert-level` precedent of minting across a grounding-vocabulary mismatch"
+    disposition: mint
+
+  - name: iarc-carcinogen-classification
+    description: "An IARC Monograph carcinogenicity-hazard classification (Group 1/2A/2B/3/4) for an exposure agent"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [agent, group]
+      properties:
+        agent: { type: string }
+        group: { type: string, enum: ["1", "2A", "2B", "3", "4"] }
+        monograph_volume: { type: string }
+        evaluation_year: { type: integer }
+    source_vocab: "IARC Monographs on the Identification of Carcinogenic Hazards to Humans"
+    source_class: "IARC Monograph Vol. 102 (published 2013, evaluated 2011): radiofrequency EMF, Group 2B; IARC Monograph Vol. 80 (2002): extremely low-frequency (ELF) EMF, Group 2B"
+    prior_art: "mint -- the IARC Group 1-4 hazard scale is not PACS-coded and not a WHO ICD-11 diagnostic classification, so it cannot be a defensible subtype of either physical-science-base's `classification-scheme-entry` or clinical-health-base's `diagnostic-classification-entry`"
+    disposition: mint
+
+  - name: emf-exposure-health-finding
+    description: "A clinical or epidemiological finding examining the association between an EMF-exposure quantity and a health outcome"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, observation_id, code]
+      properties:
+        code: { type: string, description: "Matches clinical-health-base's clinical-observation field name directly" }
+        value: { type: string }
+        observation_id: { type: string }
+        exposure_source: { type: string, description: "e.g. 'power-frequency', 'RF/wireless'" }
+        outcome: { type: string }
+        association_strength: { type: string }
+    source_vocab: "IARC Monographs; ICNIRP health-risk assessments"
+    source_class: "epidemiological/clinical findings linking EMF-exposure quantities (power-frequency or RF) to a health outcome, per the IARC carcinogenicity evaluations and ICNIRP health-risk reviews"
+    prior_art: "extend clinical-health-base `clinical-observation` (\"A measurement-or-assertion primitive about a clinical-record-subject\") -- an EMF-exposure health finding is a specialized clinical assertion, mirroring cardiology's `cardiovascular-clinical-finding` extension of the same base type"
+    disposition: extend
+    subtype_of: [clinical-observation]
+
+relationships:
+  exposes:
+    description: "An EMF source produces an exposure quantity a subject may be exposed to"
+    from:
+      - electrical-device
+      - wireless-transmitter
+    to:
+      - power-frequency-field-strength
+      - rf-field-exposure
+      - specific-absorption-rate
+    symmetric: false
+  bounded_by:
+    description: "A measured exposure quantity is compared against a named regulatory exposure limit"
+    from:
+      - power-frequency-field-strength
+      - rf-field-exposure
+      - specific-absorption-rate
+    to:
+      - emf-exposure-limit
+    symmetric: false
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(power line|transmission line|transformer|substation|appliance)\\b.*\\b(EMF|electromagnetic field|magnetic field)\\b"
+      suggest_entity: electrical-device
+      suggest_namespace: _semantic/emf-sources
+    - content_pattern: "\\b(cell tower|base station|WiFi router|Bluetooth|mobile phone|handset|radar)\\b"
+      suggest_entity: wireless-transmitter
+      suggest_namespace: _semantic/emf-sources
+    - content_pattern: "\\b(power-frequency field|50 ?Hz|60 ?Hz|ELF field|extremely low frequency)\\b"
+      suggest_entity: power-frequency-field-strength
+      suggest_namespace: _semantic/emf-quantities
+    - content_pattern: "\\b(RF exposure|radiofrequency field|power density|electric field strength)\\b"
+      suggest_entity: rf-field-exposure
+      suggest_namespace: _semantic/emf-quantities
+    - content_pattern: "\\b(specific absorption rate|\\bSAR\\b)\\b"
+      suggest_entity: specific-absorption-rate
+      suggest_namespace: _semantic/emf-quantities
+    - content_pattern: "\\b(ICNIRP|IEEE C95\\.1|FCC.*MPE|maximum permissible exposure|reference level)\\b"
+      suggest_entity: emf-exposure-limit
+      suggest_namespace: _semantic/emf-limits
+    - content_pattern: "\\b(IARC|Group 2B|possibly carcinogenic)\\b"
+      suggest_entity: iarc-carcinogen-classification
+      suggest_namespace: _semantic/emf-limits
+    - content_pattern: "\\b(EMF exposure and|association between.*(EMF|electromagnetic field).*health)\\b"
+      suggest_entity: emf-exposure-health-finding
+      suggest_namespace: _episodic/emf-health-findings

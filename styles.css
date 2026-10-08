@@ -84,3 +84,9 @@
 .mif-row-actions { margin-left: auto; display: flex; gap: var(--size-4-2); font-size: var(--font-ui-smaller); }
 .mif-row-actions a { color: var(--text-muted); }
 .mif-migration-list { max-height: 40vh; overflow: auto; font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }
+
+.mif-chain { margin: 0 0 var(--size-4-2); padding-left: var(--size-4-4); font-size: var(--font-ui-small); }
+.mif-fields { width: 100%; border-collapse: collapse; font-size: var(--font-ui-smaller); margin-bottom: var(--size-4-2); }
+.mif-fields th, .mif-fields td { padding: 2px var(--size-4-1); border-bottom: 1px solid var(--background-modifier-border); text-align: left; }
+.mif-fields td:first-child { font-family: var(--font-monospace); color: var(--mif-machine); }
+.mif-build { margin-top: var(--size-4-4); font-size: var(--font-ui-smaller); color: var(--text-faint); font-family: var(--font-monospace); }

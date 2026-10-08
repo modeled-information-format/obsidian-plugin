@@ -1,0 +1,278 @@
+---
+# Heliophysics Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for the space-weather domain: geomagnetic storms, solar
+# flares, coronal mass ejections, solar-wind/magnetosphere coupling, the named
+# geomagnetic/flare indices that measure them, geomagnetically induced currents
+# (grid impact), auroral-display observations, NOAA's severity-scale alert
+# levels, and the monitoring platforms that produce this data. Extends
+# physical-science-base directly (one hop), mirroring plasma-physics and
+# cosmology, the two existing physical-science-base leaf packs.
+#
+# Closes a coverage gap in the physical-science-base family: neither
+# plasma-physics (lab/fusion plasma, PACS 52.xx) nor cosmology
+# (astrophysics-scale, PACS 98.xx) covers heliophysics/space-weather
+# phenomena.
+#
+# Grounded in: PACS 91.25.-r (Geomagnetism and paleomagnetism; geoelectricity),
+# PACS 96.60.-j (Solar physics, incl. 96.60.Q- solar activity and 96.60.Vg
+# particle emission/solar wind), PACS 96.50.-e (Interplanetary physics); the Kp
+# planetary geomagnetic index (GFZ Potsdam) and the Dst disturbance storm-time
+# index (WDC Geomagnetism, Kyoto, since IGY 1957); NOAA GOES X-ray flux flare
+# classification (A/B/C/M/X); NERC TPL-007-4 and IEEE C57.163-2016 for
+# geomagnetically induced currents in power grids; NOAA SWPC's G/S/R space
+# weather severity scales; and the NOAA SWPC OVATION aurora forecast model plus
+# the Aurorasaurus citizen-science aurora-sighting reporting platform.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: heliophysics
+  version: "0.1.0"
+  description: "Heliophysics domain ontology: space-weather phenomena (geomagnetic storms, solar flares, coronal mass ejections), their named indices and grid impacts, auroral observations, NOAA severity-scale alerts, and monitoring platforms"
+  extends:
+    - physical-science-base
+
+namespaces:
+  semantic:
+    children:
+      heliophysics-phenomena:
+        description: "Heliophysical/solar-terrestrial phenomenon classification (PACS 91.25, 96.50, 96.60)"
+        type_hint: semantic
+      heliophysics-quantities:
+        description: "Named heliophysics/space-weather physical quantities"
+        type_hint: semantic
+      heliophysics-observations:
+        description: "Observed or forecast heliophysics data (e.g. aurora sightings)"
+        type_hint: semantic
+      heliophysics-alerts:
+        description: "NOAA space-weather severity-scale alert levels"
+        type_hint: semantic
+      heliophysics-devices:
+        description: "Space-weather monitoring platforms and instruments"
+        type_hint: semantic
+
+entity_types:
+  - name: geomagnetic-storm
+    description: "Geomagnetism and paleomagnetism; geoelectricity — classification of geomagnetic field disturbances (storms, substorms) driven by solar-wind coupling"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+        storm_phase: { type: string, description: "e.g. initial, main, recovery phase of the storm" }
+    source_vocab: "PACS"
+    source_class: "91.25.-r Geomagnetism and paleomagnetism; geoelectricity"
+    prior_art: "extend physical-science-base `classification-scheme-entry` -- geomagnetism is a plain PACS-coded classification entry, mirroring plasma-physics's PACS 52.xx classification-scheme-entry mints"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: solar-flare-activity
+    description: "Solar activity — flares and active-region phenomena on the solar disk"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "96.60.Q- Solar activity (subsection of 96.60.-j Solar physics)"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: coronal-mass-ejection
+    description: "Coronal mass ejections and solar-wind particle-emission events"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "96.60.Vg Particle emission, solar wind (subsection of 96.60.-j Solar physics)"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: solar-terrestrial-coupling
+    description: "Interplanetary physics — solar-wind propagation and solar-wind/magnetosphere/ionosphere coupling"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "96.50.-e Interplanetary physics"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: geomagnetic-index
+    description: "A named geomagnetic activity index value (e.g. Kp, ap, Ap, Dst) measuring global or storm-time geomagnetic disturbance"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string, description: "Matches physical-science-base's physical-quantity field name directly (e.g. 'Kp index', 'Dst index')" }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        index_family: { type: string, enum: ["Kp", "ap", "Ap", "Dst", "Cp", "C9"] }
+    source_vocab: "GFZ Potsdam (Kp/ap/Ap/Cp/C9); WDC Geomagnetism Kyoto (Dst)"
+    source_class: "Kp planetary geomagnetic index (GFZ Potsdam, 3-hourly); Dst disturbance storm-time index (WDC Kyoto, since IGY 1957)"
+    prior_art: "extend physical-science-base `physical-quantity` -- a geomagnetic index is a specialized named-quantity measurement, mirroring plasma-physics's `plasma-parameter` extension of the same base type"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: solar-flare-flux
+    description: "GOES X-ray flux measurement mapped to the A/B/C/M/X solar-flare class"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        flare_class: { type: string, enum: ["A", "B", "C", "M", "X"] }
+    source_vocab: "NOAA GOES X-ray Sensor (XRS/EXIS)"
+    source_class: "GOES X-ray flux -> A/B/C/M/X flare classification, per NOAA SWPC R-scale (radio blackout) definitions"
+    prior_art: "extend physical-science-base `physical-quantity`"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: geomagnetically-induced-current
+    description: "A geomagnetically induced current (GIC) measured in power-grid transformers or pipelines during a geomagnetic disturbance"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        asset_type: { type: string, description: "The grid asset the current was measured in, e.g. transformer neutral, pipeline" }
+    source_vocab: "NERC TPL-007-4; IEEE C57.163-2016"
+    source_class: "NERC TPL-007-4 Benchmark/Supplemental GMD Event GIC study; IEEE Guide for Establishment of GIC Monitoring Programs"
+    prior_art: "extend physical-science-base `physical-quantity`"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: aurora-observation
+    description: "A reported or forecast auroral-display sighting"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string, description: "e.g. 'aurora visibility'" }
+        value: { type: string }
+        unit: { type: string }
+        visibility_forecast_model: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        reported_at: { type: string, format: date-time }
+    source_vocab: "NOAA SWPC OVATION Aurora Forecast Model; Aurorasaurus citizen-science reporting platform"
+    source_class: "OVATION (Oval Variation, Assessment, Tracking, Intensity, and Online Nowcasting) empirical aurora model (JHU/APL, used operationally by NOAA SWPC); Aurorasaurus crowd-sourced aurora-sighting reports"
+    prior_art: "extend research.ontology.yaml `observation` (\"A measured or observed datum produced by a procedure\") -- an aurora sighting or forecast is a specialized observed datum, reached transitively since physical-science-base extends research"
+    disposition: extend
+    subtype_of: [observation]
+
+  - name: space-weather-alert-level
+    description: "A NOAA Space Weather Prediction Center severity-scale level (G geomagnetic storm, S solar radiation storm, R radio blackout), analogous to hurricane/earthquake severity scales"
+    base: semantic
+    traits: [cited, dated, scored, categorized]
+    schema:
+      required: [scale, level]
+      properties:
+        scale: { type: string, enum: ["G", "S", "R"] }
+        level: { type: integer, minimum: 1, maximum: 5 }
+        event_name: { type: string }
+        issued_at: { type: string, format: date-time }
+    source_vocab: "NOAA SWPC"
+    source_class: "NOAA Space Weather Scales: G1-G5 (geomagnetic storms), S1-S5 (solar radiation storms), R1-R5 (radio blackouts)"
+    prior_art: "mint -- NOAA's G/S/R severity scale is not PACS-coded, so it cannot be a defensible subtype of physical-science-base's `classification-scheme-entry` (whose pacs_code field is deliberately scoped to the concrete PACS scheme, per that type's own note deferring genericization until a second scheme needs the shape); mirrors plasma-physics's `plasma-heating-method` precedent of minting rather than forcing a subtype across a grounding-vocabulary mismatch"
+    disposition: mint
+
+  - name: space-weather-observatory
+    description: "A space-weather monitoring platform or instrument (satellite or ground magnetometer)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: "Matches research.ontology.yaml's apparatus field name directly" }
+        platform_type: { type: string, enum: ["satellite", "ground-magnetometer", "network"] }
+        operator: { type: string }
+        orbit_or_location: { type: string }
+    source_vocab: "NOAA/NASA GOES; NASA/NOAA DSCOVR; NASA ACE; INTERMAGNET"
+    source_class: "GOES geostationary X-ray/particle sensors (EXIS); ACE and DSCOVR L1 solar-wind monitors; INTERMAGNET real-time ground magnetometer network"
+    prior_art: "extend research.ontology.yaml `apparatus` (\"A device, platform, or instrument used to produce research data\") -- a space-weather monitoring satellite or ground station is a specialized research apparatus, mirroring plasma-physics's device-type extensions of the same base type"
+    disposition: extend
+    subtype_of: [apparatus]
+
+relationships:
+  triggers:
+    description: "A solar/heliophysical event triggers a downstream geomagnetic or grid effect"
+    from:
+      - coronal-mass-ejection
+      - solar-flare-activity
+    to:
+      - geomagnetic-storm
+      - geomagnetically-induced-current
+    symmetric: false
+  measured_by:
+    description: "A heliophysics quantity or observation is measured by a space-weather observatory"
+    from:
+      - geomagnetic-index
+      - solar-flare-flux
+      - aurora-observation
+    to:
+      - space-weather-observatory
+    symmetric: false
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(geomagnetic storm|magnetic storm|substorm)\\b"
+      suggest_entity: geomagnetic-storm
+      suggest_namespace: _semantic/heliophysics-phenomena
+    - content_pattern: "\\b(solar flare|X-class flare|M-class flare|active region)\\b"
+      suggest_entity: solar-flare-activity
+      suggest_namespace: _semantic/heliophysics-phenomena
+    - content_pattern: "\\b(coronal mass ejection|CME|halo CME)\\b"
+      suggest_entity: coronal-mass-ejection
+      suggest_namespace: _semantic/heliophysics-phenomena
+    - content_pattern: "\\b(solar wind|interplanetary magnetic field|IMF)\\b"
+      suggest_entity: solar-terrestrial-coupling
+      suggest_namespace: _semantic/heliophysics-phenomena
+    - content_pattern: "\\b(Kp index|Dst index|planetary K index|Ap index)\\b"
+      suggest_entity: geomagnetic-index
+      suggest_namespace: _semantic/heliophysics-quantities
+    - content_pattern: "\\b(GOES X-ray flux|flare classification|X-ray flare class)\\b"
+      suggest_entity: solar-flare-flux
+      suggest_namespace: _semantic/heliophysics-quantities
+    - content_pattern: "\\b(geomagnetically induced current|\\bGIC\\b)\\b"
+      suggest_entity: geomagnetically-induced-current
+      suggest_namespace: _semantic/heliophysics-quantities
+    - content_pattern: "\\b(aurora|auroral display|northern lights|southern lights)\\b"
+      suggest_entity: aurora-observation
+      suggest_namespace: _semantic/heliophysics-observations
+    - content_pattern: "\\b(NOAA space weather scale|G[1-5] geomagnetic storm|S[1-5] radiation storm|R[1-5] radio blackout)\\b"
+      suggest_entity: space-weather-alert-level
+      suggest_namespace: _semantic/heliophysics-alerts
+    - content_pattern: "\\b(GOES satellite|DSCOVR|ACE spacecraft|INTERMAGNET|magnetometer network)\\b"
+      suggest_entity: space-weather-observatory
+      suggest_namespace: _semantic/heliophysics-devices

@@ -5,6 +5,18 @@
 An Obsidian plugin for authoring, validating, and syncing
 [MIF](https://mif-spec.dev) bundles. Status: in development.
 
+## Network use
+
+The plugin works offline. One optional feature uses the network: when
+**Settings → MIF → Download ontologies from mif-spec.dev** is on (the
+default), and a concept declares an ontology the vault does not have, the
+plugin downloads it, and the ontologies it extends, from
+`https://mif-spec.dev/ontologies/`. Each file is checked against the sha256
+in the published catalog (`index.json`) before use and is cached in the
+plugin folder. Nothing about your vault is sent. Turn the setting off to
+never contact the network; ontologies in a bundle's `.mif/ontologies/`
+folder always work offline.
+
 ## Layout
 
 | Path | What it is |

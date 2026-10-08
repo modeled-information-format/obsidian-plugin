@@ -1,0 +1,401 @@
+---
+# Cardiology Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for cardiovascular disease classification, structured
+# clinical studies, and functional-status assessment. Extends
+# clinical-health-base directly (one hop), which itself supplies the shared
+# FHIR-shaped and ICD-11-shaped clinical primitives.
+#
+# Grounded in: WHO ICD-11 Chapter 11 (circulatory disease classification),
+# LOINC + ACC/AHA/ASE clinical data standards, SNOMED CT's cardiovascular
+# finding branch, and ACC/AHA cardiovascular endpoint-event definitions. See
+# health-physics-ontology-domains research session, entity-inventory.json
+# (pack=cardiology, 19 rows) and finding-cardiology-coverage-audit-v2.json
+# (survived: 23/23 ICD-11 Chapter-11 items + 4/4 code-elsewhere cross-refs +
+# 49/49 SNOMED CT children of 49601007 + 6/6 LOINC cardiology panel members).
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: cardiology
+  version: "0.1.0"
+  description: "Cardiology domain ontology: circulatory disease classification, structured cardiac studies, and functional-status assessment"
+  extends:
+    - clinical-health-base
+
+namespaces:
+  semantic:
+    children:
+      cardiology-disorders:
+        description: "Circulatory disease classification (ICD-11 Chapter 11)"
+        type_hint: semantic
+      cardiology-functional-status:
+        description: "Cardiac functional-status classification scales"
+        type_hint: semantic
+  episodic:
+    children:
+      cardiology-studies:
+        description: "Structured cardiac diagnostic studies and clinical events"
+        type_hint: episodic
+
+entity_types:
+  - name: hypertensive-disease
+    description: "Hypertensive diseases"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+        parent_chapter: { type: string }
+    source_vocab: "WHO ICD-11"
+    source_class: "BA00-BA04.Z Hypertensive diseases"
+    prior_art: "ICD-11 MMS Chapter 11 (Diseases of the circulatory system) block BA00-BA04.Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: ischemic-heart-disease
+    description: "Ischaemic heart diseases"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BA40-BA6Z Ischaemic heart diseases"
+    prior_art: "ICD-11 MMS Chapter 11 block BA40-BA6Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: coronary-artery-disease
+    description: "Diseases of coronary artery"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BA81-BA8Z Diseases of coronary artery"
+    prior_art: "ICD-11 MMS Chapter 11 block BA81-BA8Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: pulmonary-heart-disease
+    description: "Pulmonary heart disease or diseases of pulmonary circulation"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BB00-BB0Z Pulmonary heart disease or diseases of pulmonary circulation"
+    prior_art: "ICD-11 MMS Chapter 11 block BB00-BB0Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: pericardial-disease
+    description: "Pericarditis"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BB20-BB2Z Pericarditis"
+    prior_art: "ICD-11 MMS Chapter 11 block BB20-BB2Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: endocarditis
+    description: "Acute or subacute endocarditis"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BB40-BB4Z Acute or subacute endocarditis"
+    prior_art: "ICD-11 MMS Chapter 11 block BB40-BB4Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: heart-valve-disease
+    description: "Heart valve diseases"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+        affected_valve: { type: string }
+    source_vocab: "WHO ICD-11"
+    source_class: "BB60-BC0Z Heart valve diseases"
+    prior_art: "ICD-11 MMS Chapter 11 block BB60-BC0Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: cardiomyopathy
+    description: "Diseases of the myocardium or cardiac chambers"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BC40-BC4Z Diseases of the myocardium or cardiac chambers"
+    prior_art: "ICD-11 MMS Chapter 11 block BC40-BC4Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: cardiac-arrhythmia
+    description: "Cardiac arrhythmia"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BC60-BC9Z Cardiac arrhythmia"
+    prior_art: "ICD-11 MMS Chapter 11 block BC60-BC9Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: heart-failure
+    description: "Heart failure"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BD10-BD1Z Heart failure"
+    prior_art: "ICD-11 MMS Chapter 11 block BD10-BD1Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: arterial-disease
+    description: "Diseases of arteries or arterioles"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BD30-BD5Z Diseases of arteries or arterioles"
+    prior_art: "ICD-11 MMS Chapter 11 block BD30-BD5Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: venous-disease
+    description: "Diseases of veins"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BD70-BD7Z Diseases of veins"
+    prior_art: "ICD-11 MMS Chapter 11 block BD70-BD7Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: lymphatic-vascular-disorder
+    description: "Disorders of lymphatic vessels or lymph nodes"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [code_range, title, stem_code]
+      properties:
+        code_range: { type: string }
+        stem_code: { type: string, description: "The specific ICD-11 stem code assigned to one finding (e.g. 'BA01'), distinct from code_range (the type's overall classification block, e.g. 'BA00-BA04.Z')" }
+        title: { type: string }
+        icd11_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "BD90-BD9Z Disorders of lymphatic vessels or lymph nodes"
+    prior_art: "ICD-11 MMS Chapter 11 block BD90-BD9Z"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: echocardiography-study
+    description: "A structured bundle of cardiac echocardiography measurement data"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, modality, code, value]
+      properties:
+        observation_id: { type: string, description: "Renamed from study_id to match clinical-observation's field name directly" }
+        modality: { type: string }
+        member_measurements: { type: array, items: { type: object } }
+        ejection_fraction: { type: number }
+        study_date: { type: string, format: date }
+        code: { type: string, description: "The LOINC code for this echo panel (e.g. '34552-0')" }
+        value: { type: string, description: "Not independently meaningful for a multi-measurement study; required only for clinical-observation's substitutability contract. Real results live in member_measurements/ejection_fraction" }
+    source_vocab: "LOINC + ACC/AHA/ASE"
+    source_class: "34552-0 Cardiac 2D echo panel; 2019 ACC/AHA/ASE TTE Key Data Elements"
+    prior_art: "extend clinical-health-base `clinical-observation` -- an echocardiography-study is a structured bundle of cardiac measurement data (corrected from an earlier direct extend of scientific.ontology.yaml `measurement`)"
+    disposition: extend
+    subtype_of: [clinical-observation]
+
+  - name: ecg-finding
+    description: "A structured electrical measurement bundle from a 12-lead ECG"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [pr_interval_ms, qrs_duration_ms, observation_id, code, value]
+      properties:
+        pr_interval_ms: { type: number }
+        qrs_duration_ms: { type: number }
+        qt_interval_ms: { type: number }
+        qtc_ms: { type: number }
+        impression: { type: string }
+        observation_id: { type: string, description: "Record identifier for this ECG panel (no prior equivalent field existed)" }
+        code: { type: string, description: "The LOINC code for this panel (e.g. '34534-8')" }
+        value: { type: string, description: "Not independently meaningful for a multi-interval panel; required only for clinical-observation's substitutability contract. Real results live in the named interval fields" }
+    source_vocab: "LOINC"
+    source_class: "34534-8 12 lead EKG panel"
+    prior_art: "extend clinical-health-base `clinical-observation` -- an ECG finding is a structured electrical measurement bundle (corrected from an earlier direct extend of scientific.ontology.yaml `measurement`)"
+    disposition: extend
+    subtype_of: [clinical-observation]
+
+  - name: cardiac-catheterization-study
+    description: "The execution of an invasive diagnostic cardiac catheterization protocol"
+    base: episodic
+    traits: [cited, dated, versioned]
+    schema:
+      required: [study_id, access_site, name]
+      properties:
+        study_id: { type: string, description: "This specific study's record identifier, distinct from name (the procedure's own name, constant across studies of this protocol)" }
+        access_site: { type: string }
+        hemodynamic_findings: { type: array, items: { type: object } }
+        pre_cath_diagnosis: { type: string }
+        name: { type: string, description: "The procedure's name (e.g. 'Cardiac catheterization'), matching research-procedure's field name directly (no prior equivalent field existed)" }
+    source_vocab: "LOINC"
+    source_class: "18745-0 Cardiac catheterization study"
+    prior_art: "extend research.ontology.yaml `research-procedure` (\"A method, protocol, or procedure applied in research, and its executions\") -- a catheterization study is the execution of an invasive diagnostic protocol; entity-inventory.json originally cited scientific.ontology.yaml `protocol-application`, which is unreachable once cardiology extends clinical-health-base instead of scientific directly -- research-procedure is the reachable, ADR-0003-intended generic equivalent"
+    disposition: extend
+    subtype_of: [research-procedure]
+
+  - name: cardiovascular-endpoint-event
+    description: "A standardized cardiovascular clinical-trial endpoint event"
+    base: episodic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [event_type, event_date]
+      properties:
+        event_type: { type: string }
+        event_date: { type: string, format: date }
+        death_classification: { type: string }
+        adjudication_source: { type: string }
+    source_vocab: "ACC/AHA Clinical Data Standards"
+    source_class: "2014 ACC/AHA Key Data Elements and Definitions for Cardiovascular Endpoint Events in Clinical Trials"
+    prior_art: "mint -- no existing MIF event-classification type covers standardized cardiovascular clinical-trial endpoints"
+    disposition: mint
+
+  - name: nyha-functional-class
+    description: "New York Heart Association functional capacity classification"
+    base: semantic
+    traits: [cited, dated, scored]
+    schema:
+      required: [nyha_class]
+      properties:
+        nyha_class: { type: string, enum: ["I", "II", "III", "IV"] }
+        assessment_date: { type: string, format: date }
+        objective_assessment: { type: string }
+    source_vocab: "LOINC / ACC-AHA"
+    source_class: "88020-3 Functional capacity NYHA"
+    prior_art: "reuse -- direct clone of the named external NYHA I-IV classification scale"
+    disposition: reuse
+
+  - name: cardiovascular-clinical-finding
+    description: "A point-in-time clinical finding distinct from a structured measurement (SNOMED CT's finding branch, architecturally distinct from ICD-11's disorder branch)"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, observation_id, code]
+      properties:
+        code: { type: string, description: "Renamed from finding_type to match clinical-observation's field name directly: the SNOMED CT finding code (e.g. 'heart rate', 'cyanosis')" }
+        value: { type: string }
+        unit: { type: string }
+        observed_at: { type: string, format: date-time }
+        observation_id: { type: string, description: "Record identifier for this finding (no prior equivalent field existed)" }
+    source_vocab: "SNOMED CT"
+    source_class: "'cardiovascular finding' -- common parent of 'heart rate', 'blood pressure findings', 'rhythm of periphery pulses', and 'cyanosis'"
+    prior_art: "extend clinical-health-base `clinical-observation` -- SNOMED CT's finding branch is architecturally distinct from ICD-11's disorder branch, but structurally is a point-in-time clinical observation (corrected from an earlier ungrounded mint with no parent)"
+    disposition: extend
+    subtype_of: [clinical-observation]
+
+relationships:
+  occurs_within:
+    description: "A clinical activity occurs within a clinical encounter (finding-intermediary-layering-spec.json)"
+    from:
+      - cardiac-catheterization-study
+    to:
+      - clinical-encounter
+    symmetric: false
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(hypertension|ischemic heart disease|coronary artery disease|arrhythmia|heart failure|cardiomyopathy)\\b"
+      suggest_entity: hypertensive-disease
+      suggest_namespace: _semantic/cardiology-disorders
+    - content_pattern: "\\b(echocardiogram|echocardiography|2D echo|ejection fraction)\\b"
+      suggest_entity: echocardiography-study
+      suggest_namespace: _episodic/cardiology-studies
+    - content_pattern: "\\b(ECG|EKG|electrocardiogram|QRS|QT interval|PR interval)\\b"
+      suggest_entity: ecg-finding
+      suggest_namespace: _episodic/cardiology-studies
+    - content_pattern: "\\b(cardiac catheterization|coronary angiography|PCI)\\b"
+      suggest_entity: cardiac-catheterization-study
+      suggest_namespace: _episodic/cardiology-studies
+    - content_pattern: "\\b(NYHA class|New York Heart Association functional class)\\b"
+      suggest_entity: nyha-functional-class
+      suggest_namespace: _semantic/cardiology-functional-status

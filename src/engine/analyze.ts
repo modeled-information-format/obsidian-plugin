@@ -20,8 +20,14 @@ export type Level = 0 | 1 | 2 | 3;
 export interface Fix {
   label: string;
   updates?: Record<string, unknown>;
-  /** lf: CRLF → LF; mirror: regenerate the body mirror; migrate: MIF 0.1 → 1.0. */
-  transform?: "lf" | "mirror" | "migrate";
+  /**
+   * lf: CRLF → LF; mirror: regenerate the body mirror; migrate: MIF 0.1 → 1.0;
+   * download-ontology: fetch the referenced ontology; create-entity: write the
+   * missing .mif/entities file for the diagnostic's entities[] entry.
+   */
+  transform?: "lf" | "mirror" | "migrate" | "download-ontology" | "create-entity";
+  /** Parameters for a transform (e.g. the ontology id, or the entity to create). */
+  data?: Record<string, unknown>;
 }
 
 export interface Diagnostic {

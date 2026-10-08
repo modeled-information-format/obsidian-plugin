@@ -1,0 +1,366 @@
+---
+# Data Engineering Ontology
+#
+# A research-oriented ontology for the data engineering domain: data contracts,
+# data products, governance, data quality, storage architecture, pipelines, and
+# the platforms/tools the field runs on.
+#
+# Shared engineering supertypes (technology, design-pattern, architectural-decision,
+# delivery-metric, engineering-practice, process-discipline) are inherited from the
+# engineering-base layer this pack EXTENDS / the generic core — no longer copied here.
+#
+# Version: 0.2.0
+# Last Updated: 2026-06-24
+#
+# 0.2.0 (ontology-spine-relayering): re-parented onto engineering-base; shed the copied
+# shared supertypes (now inherited), the generic `technology` (mif-generic),
+# `compliance-regulation` (-> regulatory-legal), the security types (-> software-security),
+# and the deprecated `adoption-trend` (-> trend-analysis `trend`). Only data-specific
+# types remain. Clean break — no back-compat aliases (pre-stable).
+
+ontology:
+  id: data-engineering
+  version: "0.4.0"
+  description: "Data engineering domain ontology"
+  extends:
+    - engineering-base
+
+# Custom Namespaces
+namespaces:
+  semantic:
+    children:
+      contracts:
+        description: "Data contracts and product interface agreements"
+        type_hint: semantic
+      governance:
+        description: "Governance policies, controls, and stewardship"
+        type_hint: semantic
+      storage:
+        description: "Storage and scaling architectures"
+        type_hint: semantic
+  procedural:
+    children:
+      pipelines:
+        description: "Pipeline and data-movement patterns"
+        type_hint: procedural
+
+# Entity Types — data-specific (shared engineering supertypes inherited from engineering-base).
+entity_types:
+  - name: data-contract
+    description: "A data contract: an enforceable agreement on schema, semantics, and SLAs between data producers and consumers"
+    aliases:
+      - "data contract specification"
+      - "schema contract"
+      - "data contract policy"
+      - "interface contract"
+      - "data agreement"
+    exemplars:
+      - "A contract-native data-contract specification enforces a required root-level field set validated as a pre-merge continuous-integration gate"
+      - "A streaming-native data contract enumerates a fixed set of schema-compatibility modes and a fixed set of message-direction actions"
+      - "A stewardship-overlay data contract adds an approval-state and ownership fields not present in purely technical enforcement contracts"
+    negative_examples:
+      - "Defines who may notify regulators or customers of a data incident and on what timeline, distinct from a required-reviewer rule scoped to specific file paths blocking merges to a shared table's schema."
+      - "A cross-functional group reviews new contracts before publication, distinct from querying an automated lineage catalog for every downstream table, dashboard, and feature depending on it before a structural change ships."
+      - "A platform team accepted semi-structured data into a lake's raw zone without enforcing schema at write time, deferring structure to the query layer, then enforcing it downstream in curated layers."
+      - "Contract-first development is an engineering practice where data structure and interface contracts are defined before implementation, ensuring producer and consumer teams agree on schema before either writes code."
+      - "The Confluent Schema Registry is a platform service that stores, versions, and serves Avro/Protobuf schemas for Kafka topics, enabling consumers to deserialize messages correctly across schema evolution."
+      - "ING's federated data mesh governance implements data contracts between domain teams where each domain publishes its data products with SLAs and versioned schemas, discoverable through a federated catalog."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: "Contract name or subject"
+        scope:
+          type: string
+          description: "What the contract covers (dataset, interface, domain)"
+        parties:
+          type: string
+          description: "Producer and consumer parties bound by the contract"
+        enforcement:
+          type: string
+          description: "How the contract is enforced (CI gate, registry, runtime check)"
+  - name: data-product
+    description: "A data product: a discoverable, governed, consumable data asset with an owner and interface"
+    aliases:
+      - "data product"
+      - "data mesh product"
+      - "data-as-a-product asset"
+      - "productized dataset"
+    exemplars:
+      - "An internal data-mesh project matured into a commercial cloud-native data marketplace serving institutional customers"
+      - "A data mesh spanning many domains and hundreds of data products documented tens of millions in business benefit"
+      - "A financial-technology company treats data as a product across several consumer-facing brands serving a large customer base"
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: "Data product name"
+        domain:
+          type: string
+          description: "Owning business domain"
+        interface:
+          type: string
+          description: "Consumption interface (view, table, API, share)"
+        sla:
+          type: string
+          description: "Service-level agreement (freshness, availability)"
+  - name: data-governance-policy
+    description: "A governance policy or control: a rule governing access, retention, classification, or stewardship of data"
+    aliases:
+      - "access control policy"
+      - "retention policy"
+      - "data classification"
+      - "masking policy"
+      - "stewardship policy"
+      - "tagging policy"
+    exemplars:
+      - "Row filters and column masks evaluated at query time via governed tags"
+      - "Tiered storage lifecycle rules with regulation-aligned multi-year retention bands"
+      - "A three-tier classification of sensitive records applied at the column level"
+      - "Required at-birth documentation and ownership tags that hard-fail the build when missing"
+    negative_examples:
+      - "Requires data under residency obligations, like cross-border personal data transfer restrictions, be stored only in permitted jurisdiction regions, tracked per dataset rather than as one blanket warehouse-wide rule."
+      - "Saxo Bank implemented a data mesh where each business domain (e.g., trading, risk) manages and publishes its data product with documented ownership, quality standards, and access controls."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - policy_name
+      properties:
+        policy_name:
+          type: string
+          description: "Policy or control name"
+        scope:
+          type: string
+          description: "What the policy governs (catalog, schema, table, tag)"
+        control:
+          type: string
+          description: "Control type (preventive, detective, corrective)"
+        enforcement:
+          type: string
+          description: "Mechanism that enforces the policy"
+  - name: data-quality-rule
+    description: "A data quality rule, check, or assertion applied to data to detect or prevent defects"
+    aliases:
+      - "data quality check"
+      - "validation rule"
+      - "data quality assertion"
+      - "quality gate rule"
+      - "data integrity rule"
+    exemplars:
+      - "A sync-lag failure mode where a record exists in one system but is missing in a downstream system is already encoded as a test scenario"
+      - "A reconciliation service level objective sets maximum freshness lag between two systems and a minimum availability percentage"
+      - "A regression-test matrix for identity data covers several already-implemented failure scenarios plus gaps identified from real incidents"
+    negative_examples:
+      - "Tracks average time between a quality regression occurring and detection, separate from a single weighted score aggregating pass/fail checks where a critical rule's failure moves the score more than a low-severity one."
+      - "Maintains a small hand-curated dataset with verified expected outputs to catch regressions producing plausible but wrong values, distinct from validating as early as the raw-to-staging boundary rather than only at final tables."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - rule_name
+      properties:
+        rule_name:
+          type: string
+          description: "Rule or check name"
+        dimension:
+          type: string
+          description: "Quality dimension (freshness, completeness, validity, uniqueness, drift)"
+        check:
+          type: string
+          description: "How the check is expressed or computed"
+        action:
+          type: string
+          description: "Reaction on violation (drop, mark, quarantine, alert, fail)"
+  - name: storage-architecture
+    description: "A storage or scaling architecture for data (e.g. Postgres sharding, Snowflake multi-tenant isolation, lakehouse table format)"
+    aliases:
+      - "data storage architecture"
+      - "database architecture"
+      - "storage topology"
+      - "data platform architecture"
+      - "storage design"
+    exemplars:
+      - "A tier-based provisioning scheme encodes isolation level, compute sizing, and clone strategy per tenant tier in one declarative source"
+      - "Multiple overlapping identity stores are joined by sync processes with no single declared system of record per attribute"
+      - "A dual-path staging design splits an old and new export path, both required to remain consistent to prevent data-quality errors"
+      - "Self-managed clustered database high availability requires explicit replication and failover configuration a managed cloud service would otherwise automate"
+    negative_examples:
+      - "A Databricks lakehouse team chose Delta Lake over plain Parquet files for ACID writes and time travel under concurrent writers, accepting the operational cost of periodic log compaction and vacuum maintenance."
+      - "A bring-your-own-key (BYOK) encryption policy requires that sensitive data be encrypted with customer-provided keys rather than service-managed keys, with key material never stored on the provider's infrastructure."
+      - "Snowflake's secure data sharing feature provides a data contract between provider and consumer where data stays in the provider's account but is accessible to authorized consumers with agreed-upon data governance terms."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: "Architecture name"
+        pattern:
+          type: string
+          description: "The structural pattern (proxy, extension, shared/isolated, branching)"
+        scaling_model:
+          type: string
+          description: "How it scales (sharding, read replicas, serverless, multi-cluster)"
+        tradeoffs:
+          type: string
+          description: "Key trade-offs and constraints"
+  - name: pipeline-pattern
+    description: "A pipeline or data-movement pattern (e.g. ETL/ELT, streaming, write-audit-publish, reverse-ETL)"
+    aliases:
+      - "data pipeline pattern"
+      - "pipeline architecture"
+      - "ingestion pattern"
+      - "data-flow pattern"
+      - "processing pipeline"
+    exemplars:
+      - "A five-stage ingest-profile-validate-observe-remediate pipeline is the interlock spine every other enforcement pattern maps onto"
+      - "Contract-native enforcement places the quality gate at pre-merge continuous integration using a declarative data contract"
+      - "Streaming-native enforcement stages writes on an audit branch and only publishes them after data-quality checks pass"
+      - "Stewardship-overlay enforcement routes proposed schema or contract changes through a human steward's approval before they take effect"
+    negative_examples:
+      - "Isolates a noisy source's ingestion job onto its own dedicated compute pool so it can't starve others, distinct from an orchestrator dynamically fanning out per-partition parallel tasks based on partitions discovered at runtime."
+      - "The Airflow Scheduler parses DAGs and hands eligible task instances to an executor, distinct from a Debezium Kafka Connect connector reading one source database's transaction log and publishing change events per table."
+      - "Tracks the gap between now and the most recently landed data against a staleness threshold, distinct from mean time to recovery: the average elapsed time between a run failing and next producing correct output."
+      - "A team replaced nightly batch extraction with continuous change-data-capture streaming reading the source transaction log to cut load and staleness, distinct from an ELT approach loading raw data first and transforming later with warehouse SQL."
+      - "A launch-readiness gate blocks a new workflow from production until it has a test suite, named on-call owner, freshness targets, and rollback procedure, distinct from a rotating on-call responder with a defined escalation path."
+      - "Analytics engineering is an engineering practice where data engineers build transformations and models that prepare raw data for consumption by analysts and business intelligence tools, treating data as a product."
+      - "Apache Atlas with Hive lineage tracking records the provenance of data assets as they flow through transformations, allowing analysts to trace back why a metric has a particular value to the source systems that populated it."
+      - "Apache Airflow is a data orchestration platform that schedules and monitors workflows, Kafka is a streaming platform for event ingestion, and Fivetran is a managed ELT platform - each provides infrastructure for moving data, not just a single pattern."
+      - "Segment's Protocols is a tracking plan system where event schemas and required fields are defined centrally, creating a contract between the analytics library and the backend about what data will be sent."
+    base: procedural
+    traits:
+      - cited
+    schema:
+      required:
+        - pattern_name
+      properties:
+        pattern_name:
+          type: string
+          description: "Pattern name"
+        context:
+          type: string
+          description: "When to use this pattern"
+        solution:
+          type: string
+          description: "How the pattern moves or validates data"
+  - name: data-platform
+    description: "A named data platform, tool, catalog, or engine (e.g. Snowflake, Postgres, dbt, Airflow, Kafka, Iceberg, Unity Catalog)"
+    aliases:
+      - "data warehouse"
+      - "data catalog"
+      - "data quality tool"
+      - "lakehouse engine"
+      - "streaming platform"
+      - "data tooling"
+    exemplars:
+      - "An open-source data quality framework with declarative check definitions"
+      - "A cloud data warehouse feature reaching general availability with native test integration"
+      - "A catalog offering branch-like transactional versioning across multiple tables"
+      - "A contract validation tool that emits pipeline annotations and diffs versions for breaking changes"
+    negative_examples:
+      - "A single Docker-packaged connector implements a fixed sync protocol for one source or destination, distinct from a Kafka broker process storing topic partitions, serving produce/fetch requests, and replicating via a controller quorum."
+      - "A large-scale data platform team migrated lake tables from the older table-tracking model to a newer snapshot-based metadata format for atomic commits and safe schema evolution under concurrent writers at petabyte scale."
+      - "Unity Catalog's automatic lineage feature traces data transformations across tables, capturing which source datasets feed into derived datasets and making that lineage queryable for impact analysis."
+      - "Airbnb's Minerva is a centralized metrics layer where metric definitions (like gross booking value) are authored once against governed tables and then automatically materialized for consumption by dashboards and analysis tools."
+      - "Apache Iceberg is a table format (not a platform) that adds ACID semantics and time-travel queries to data lakes, enabling efficient schema evolution and partition evolution without rewriting table data."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - name
+        - category
+      properties:
+        name:
+          type: string
+          description: "Platform or tool name"
+        category:
+          type: string
+          description: "Free-form category (warehouse, catalog, observability, streaming, proxy, table-format, transformation, etc.)"
+        vendor:
+          type: string
+          description: "Maintaining vendor or project"
+        use_case:
+          type: string
+          description: "Primary role in the data stack"
+
+# Traits (Mixins)
+traits:
+  cited:
+    description: "Requires citations/sources"
+    requires:
+      - citations
+
+# Relationships
+relationships:
+  enforces:
+    description: "A governance policy or contract enforces a quality rule"
+    from:
+      - data-governance-policy
+      - data-contract
+    to:
+      - data-quality-rule
+    symmetric: false
+  governs:
+    description: "A policy or platform governs a data product or architecture"
+    from:
+      - data-governance-policy
+      - data-platform
+    to:
+      - data-product
+      - storage-architecture
+    symmetric: false
+  implements:
+    description: "A platform or architecture implements a pattern or decision"
+    from:
+      - data-platform
+      - storage-architecture
+    to:
+      - pipeline-pattern
+      - design-pattern
+      - architectural-decision
+    symmetric: false
+  # Cross-branch: a data product/architecture is governed by an engineering-base
+  # control or policy (the data-governance / security cross-cut the corpus surfaced —
+  # tag-driven ABAC, policy-as-code on data assets). Endpoints in the ancestor layer
+  # resolve via the extends chain.
+  governed_by:
+    description: "A data product or storage architecture is governed by a control or policy"
+    from:
+      - data-product
+      - storage-architecture
+    to:
+      - control
+      - policy
+    symmetric: false
+
+# Discovery Configuration
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(Snowflake|Postgres|PostgreSQL|BigQuery|Redshift)\\b"
+      suggest_entity: data-platform
+      suggest_namespace: _semantic/entities
+    - content_pattern: "\\b(dbt|Airflow|Kafka|Iceberg|Delta\\s+Lake|Unity\\s+Catalog|Polaris)\\b"
+      suggest_entity: data-platform
+      suggest_namespace: _semantic/entities
+    - content_pattern: "\\b(write-audit-publish|WAP|reverse-ETL|ELT|ETL)\\b"
+      suggest_entity: pipeline-pattern
+      suggest_namespace: _procedural/patterns

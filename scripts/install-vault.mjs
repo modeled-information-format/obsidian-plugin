@@ -20,11 +20,13 @@ if (!existsSync(join(pluginDir, "data.json"))) {
 }
 
 // Fixture bundles for manual testing: edge cases (Spike B),
-// relationships (add "_fixtures/rel" as a bundle root), and MIF 0.1.
+// relationships (add "_fixtures/rel" as a bundle root), MIF 0.1, and
+// MIF's ontology-typed example memories (add "_fixtures/memories").
 const STAGE = {
   edge: join(root, "tests", "fixtures", "edge"),
   rel: join(root, "tests", "fixtures", "rel"),
   legacy: join(root, "tests", "fixtures", "mif", "legacy-0.1-bundle"),
+  memories: join(root, "tests", "fixtures", "memories"),
 };
 rmSync(join(vault, "_fixtures"), { recursive: true, force: true });
 for (const [name, src] of Object.entries(STAGE)) {

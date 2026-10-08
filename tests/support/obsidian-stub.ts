@@ -97,3 +97,40 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
   };
   return { app, texts, files, move, staleReplace, onModify: (h: (f: TFile) => void) => modifyHandlers.push(h) };
 }
+
+export const normalizePath = (p: string) => p.replace(/\/+/g, "/").replace(/^\/|\/$/g, "");
+
+/** Fake network for requestUrl: url → body (string). */
+export const network = new Map<string, string>();
+export async function requestUrl(req: { url: string } | string) {
+  const url = typeof req === "string" ? req : req.url;
+  const body = network.get(url);
+  if (body === undefined) throw new Error(`404 ${url}`);
+  const bytes = new TextEncoder().encode(body);
+  return { status: 200, headers: {}, text: body, json: (() => { try { return JSON.parse(body); } catch { return undefined; } })(), arrayBuffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+}
+
+/** An in-memory adapter for dot-folder files (.mif/, plugin dirs). */
+export function memoryAdapter(files: Map<string, string>) {
+  const dirs = () => new Set([...files.keys()].flatMap((f) => f.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"))));
+  return {
+    exists: async (p: string) => files.has(p) || dirs().has(p),
+    read: async (p: string) => {
+      if (!files.has(p)) throw new Error(`ENOENT ${p}`);
+      return files.get(p)!;
+    },
+    write: async (p: string, d: string) => void files.set(p, d),
+    mkdir: async () => {},
+    rmdir: async (p: string) => {
+      for (const k of [...files.keys()]) if (k.startsWith(`${p}/`)) files.delete(k);
+    },
+    list: async (p: string) => {
+      const prefix = `${p}/`;
+      const under = [...files.keys()].filter((k) => k.startsWith(prefix));
+      return {
+        files: under.filter((k) => !k.slice(prefix.length).includes("/")),
+        folders: [...new Set(under.filter((k) => k.slice(prefix.length).includes("/")).map((k) => prefix + k.slice(prefix.length).split("/")[0]))],
+      };
+    },
+  };
+}

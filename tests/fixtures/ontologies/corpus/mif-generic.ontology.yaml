@@ -1,0 +1,69 @@
+# mif-generic — the basic generic ontology, ALWAYS enabled for every topic.
+# Harness-authored from MIF's built-in entity types (the mif.schema entity-reference
+# enum: Concept, Person, Organization, Technology, File), expressed as ontology
+# entity_types so any finding in any topic can be classified to a generic type even
+# with no domain ontology bound. Domain ontologies (packs/ontologies/) add more
+# specific types on top; where a name collides, the finding must name ontology.id.
+ontology:
+  id: mif-generic
+  version: "1.1.0"
+  description: Basic generic ontology (MIF built-in entity types); always enabled for all topics.
+  extends:
+    - mif-base
+entity_types:
+  - name: concept
+    base: semantic
+    description: An abstract idea, theme, method, or topic.
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: Concept name }
+  - name: person
+    base: semantic
+    description: An individual human actor.
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: Person name }
+  - name: organization
+    base: semantic
+    description: A company, institution, agency, or group.
+    negative_examples:
+      - "Global digital platforms are being designated as gatekeepers under new EU regulations, establishing a new class of regulated tech entities subject to stricter competition and transparency rules."
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: Organization name }
+  - name: technology
+    base: semantic
+    description: A tool, system, framework, standard, or product.
+    negative_examples:
+      - "Pair programming is an engineering practice where two developers share one workstation and actively collaborate on the same code, with one driving and one navigating, improving code quality and knowledge sharing."
+      - "A true single-pane-of-glass interface spanning every team's tool choices is rarely achievable at organizational scale, given multiple cloud providers and diverging vendor selections."
+      - "OpenTelemetry's neutral CNCF governance, split across a Governance Committee, Technical Committee, and per-signal SIGs, is credited with achieving cross-vendor adoption where vendor-led OpenTracing and OpenCensus did not."
+      - "The US CFPB's 2024 Personal Financial Data Rights rule is an early regulatory step toward embedded banking, though broader open-finance mandates remain the key trigger for wider adoption."
+      - "The EU Chips Act's EUR 43 billion investment framework targets doubling the EU's global semiconductor market share to 20% by 2030, gated on fab permitting and workforce availability."
+      - "As AI coding assistants automate routine implementation work, junior-developer skill value is shifting toward code review and system design, a debated early-order implication."
+      - "GitHub reported Copilot crossing one million paid users and majority Fortune 500 adoption within two years of GA, with Amazon and Google offerings since entering the market."
+      - "Enterprise IT decision-makers (CIOs, VP Infrastructure) rely on technology platforms like Gartner research, proof-of-concept labs, and security-scanning tools to evaluate vendor claims before committing budget."
+      - "Industrial IoT represents a market segment where manufacturing plants deploy wireless sensor networks, predictive-maintenance platforms, and AI-driven analytics to optimize production."
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: Technology name }
+  - name: file
+    base: semantic
+    description: A document, dataset, or artifact.
+    negative_examples:
+      - "A billing service adopted PostgreSQL over MongoDB specifically for foreign-key referential integrity and multi-statement transactional consistency across payment records."
+      - "A versioned Parquet dataset build, identified by a content digest or version number, lets consumers pin to a known-good build rather than an always-mutating 'latest' pointer."
+      - "Tempo indexes only trace IDs and keeps full trace payloads in low-cost object storage, trading arbitrary tag-based search for lower storage overhead at high volume."
+      - "Event sourcing is a design pattern where all state changes are recorded as an immutable sequence of events, allowing a system to reconstruct its state at any point in time by replaying events."
+      - "Brendan Gregg developed the USE method for resource performance diagnosis and popularized the flame graph, now the de facto format for continuous-profiling tools."
+      - "Regulatory agencies are subjecting data-intensive industries to heightened scrutiny, with expanded enforcement budgets and new compliance frameworks affecting operational costs."
+      - "K-12 learning-management systems offer integrated curriculum files, lesson-plan templates, and assessment resources that schools can customize and deploy across multiple classrooms."
+    schema:
+      required: [name]
+      properties:
+        name: { type: string, description: File name or path }
+relationships: {}

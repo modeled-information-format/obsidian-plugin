@@ -1,0 +1,107 @@
+---
+# Physical Science Base Ontology — shared physics/astrophysics supertypes (Tier 1)
+#
+# A MIF-compliant intermediate layer beneath the physical-science DOMAIN packs
+# (plasma-physics, cosmology). It owns the two shapes both packs independently
+# mined from unrelated PACS sections (52.xx vs 98.xx): a PACS-code-tagged
+# classification-scheme entry, and a named physical quantity with a value and
+# unit.
+#
+# Extends [research] — NOT [mif-base, shared-traits] as this base was
+# originally specified in build-spec Section 1 / finding-intermediary-layering-
+# spec.json. That original claim is unsatisfiable: `physical-quantity` below
+# needs to subtype a generic measured-quantity shape, and no such shape is
+# reachable from [mif-base, shared-traits] alone (scientific.ontology.yaml's
+# `measurement` type is NOT reachable — `scientific` extends `research`, and an
+# extends chain only exposes ancestor types, never a child's own types).
+# research.ontology.yaml already carries mif-base + shared-traits transitively
+# and defines its own generic `observation` type (a measured/observed datum:
+# variable/value/unit/method_ref) — precisely the ADR-0003-intended non-bio-
+# specific target. Extending [research] mirrors scientific.ontology.yaml's own
+# one-hop `extends: [research]` and does not chain through a sibling domain
+# pack (scientific) to get there.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: physical-science-base
+  version: "0.1.0"
+  description: "Shared physics/astrophysics supertypes — the MIF-compliant intermediate layer plasma-physics and cosmology extend"
+  extends:
+    - research
+
+namespaces:
+  semantic:
+    children:
+      physical-science:
+        description: "Physics/astrophysics classification and quantity shapes"
+        type_hint: semantic
+
+entity_types:
+  - name: classification-scheme-entry
+    description: "A named, coded entry in a physics or astrophysics classification scheme — the shape plasma-physics's PACS 52.xx-grounded classification mints and cosmology's PACS 98.xx-grounded classification mints both independently converged on"
+    base: semantic
+    traits:
+      - cited
+      - dated
+      - categorized
+    schema:
+      required:
+        - pacs_code
+        - title
+      properties:
+        pacs_code:
+          type: string
+          description: "The PACS classification code. Named for the concrete scheme, not genericized to scheme_code: every current subtype (plasma-physics and cosmology) grounds exclusively in PACS, and this registry defers speculative generalization until a second scheme actually needs the shape (ADR-0003's own precedent)"
+        title:
+          type: string
+        parent_section:
+          type: string
+          description: "The parent section or heading within the classification scheme"
+    source_vocab: "PACS (American Institute of Physics Classification Scheme)"
+    source_class: "PACS top-level subsection entries"
+    prior_art: "mint -- no existing MIF ontology defines a physics-classification-scheme-entry shape (confirmed, undisputed, by finding-reuse-mapping.json); promoted to physical-science-base because plasma-physics and cosmology independently mined the same PACS-code-tagged pattern from unrelated sections"
+    disposition: mint
+
+  - name: physical-quantity
+    description: "A named physical quantity with a value and unit produced by a measurement or observation — the shape plasma-physics's fundamental plasma-parameter quantities and cosmology's observational-cosmology and background-radiation parameters both independently converged on"
+    base: semantic
+    traits:
+      - cited
+      - dated
+      - measured
+    schema:
+      required:
+        - value
+        - variable
+      properties:
+        variable:
+          type: string
+          description: "The measured variable's name, matching research.ontology.yaml's observation field name directly (no separate parameter_name: same concept, one field)"
+        symbol:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+    source_vocab: "PPPL/NIST plasma-physics nomenclature; IAU/PACS observational-cosmology nomenclature"
+    source_class: "Named fundamental physical quantities (e.g. Debye length, plasma frequency, Hubble constant, cosmological constant)"
+    prior_art: "extend research.ontology.yaml `observation` (\"A measured or observed datum produced by a procedure\", schema shape variable/value/unit/method_ref) -- a physical quantity is a specialized named-quantity measurement, refining the same generic shape scientific.ontology.yaml's measurement conceptually parallels but which is not itself reachable from this ontology's extends chain"
+    disposition: extend
+    subtype_of:
+      - observation
+
+# Discovery disabled: this is a base layer, not directly instantiated by
+# findings; only its leaf-pack specializations are (matching the precedent
+# research.ontology.yaml sets for a newly-minted base layer, per ADR-0003).
+discovery:
+  enabled: false
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(PACS code|classification scheme|physics classification)\\b"
+      suggest_entity: classification-scheme-entry
+      suggest_namespace: _semantic/physical-science
+    - content_pattern: "\\b(physical quantity|named quantity|measured parameter)\\b"
+      suggest_entity: physical-quantity
+      suggest_namespace: _semantic/physical-science

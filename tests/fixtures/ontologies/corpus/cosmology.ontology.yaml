@@ -1,0 +1,299 @@
+---
+# Cosmology Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for astronomical object/data classification (IVOA
+# vocabularies), IAU nomenclature, and cosmological theory/observation.
+# Extends physical-science-base directly (one hop), which supplies the shared
+# PACS-classification and physical-quantity primitives this pack's own types
+# specialize.
+#
+# Grounded in: IVOA (International Virtual Observatory Alliance) vocabularies,
+# IAU/CDS nomenclature, the Unified Astronomy Thesaurus (UAT), and PACS
+# section 98 (Astrophysics and cosmology). See health-physics-ontology-domains
+# research session, entity-inventory.json (pack=cosmology, 14 rows) and
+# finding-cosmology-coverage-audit-v3.json (survived, third attempt: PACS
+# 98.xx=13, IVOA=19, UAT=11, IAU=5, 48 total, independently re-derived from
+# primary sources after two prior versions each silently dropped a different
+# item).
+#
+# One build-time correction applied here (not present in entity-inventory.json
+# -- see health-physics-ontology-domains/ontology-implementation-plan.md steps
+# 1c and 1d):
+#   - observational-cosmology-parameter and cosmic-background-radiation extend
+#     physical-science-base's `physical-quantity` (not scientific.ontology.yaml's
+#     `measurement` directly, which is unreachable from this pack's extends
+#     chain) -- finding-intermediary-layering-spec.json.
+#   - cosmology-theory-model, large-scale-structure, and galaxy-evolution-process
+#     extend this pack's own physical-science-base `classification-scheme-entry`
+#     -- an inference from finding-intermediary-layering-spec.json's prose (no
+#     finding enumerates this row-by-row); all three are base `semantic`,
+#     matching classification-scheme-entry's base, so no base-mismatch
+#     exclusion applies here (contrast plasma-physics's plasma-heating-method).
+#     astrophysical-process-concept is EXCLUDED: its source is UAT, not PACS,
+#     and its uat_concept_id schema field does not match the PACS-code shape.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: cosmology
+  version: "0.1.0"
+  description: "Cosmology domain ontology: astronomical object/data classification (IVOA), IAU nomenclature, and cosmological theory/observation"
+  extends:
+    - physical-science-base
+
+namespaces:
+  semantic:
+    children:
+      cosmology-objects:
+        description: "Astronomical object and data-product classification (IVOA)"
+        type_hint: semantic
+      cosmology-theory:
+        description: "Cosmological theory and process models"
+        type_hint: semantic
+      cosmology-parameters:
+        description: "Observational cosmology parameters"
+        type_hint: semantic
+      cosmology-structure:
+        description: "Large-scale structure and galaxy evolution classification"
+        type_hint: semantic
+  episodic:
+    children:
+      cosmology-observations:
+        description: "Background-radiation and other cosmological observations"
+        type_hint: episodic
+
+entity_types:
+  - name: astronomical-object-type
+    description: "IVOA object-type vocabulary entry"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [ivoa_object_type, object_name]
+      properties:
+        ivoa_object_type: { type: string }
+        object_name: { type: string }
+        coordinates: { type: string }
+    source_vocab: "IVOA"
+    source_class: "object-type vocabulary (151 classes; used in SIMBAD and intended for ObsCore's target_class)"
+    prior_art: "reuse -- direct clone of the named external IVOA object-type vocabulary (151 classes)"
+    disposition: reuse
+
+  - name: astronomical-data-product
+    description: "IVOA product-type vocabulary entry"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [ivoa_product_type]
+      properties:
+        ivoa_product_type: { type: string }
+        dataset_ref: { type: string }
+    source_vocab: "IVOA"
+    source_class: "product-type vocabulary (25 concepts: Spectrum, Image, Cube, Time Series, SED, Visibility, etc.)"
+    prior_art: "reuse -- direct clone of the named external IVOA product-type vocabulary"
+    disposition: reuse
+
+  - name: cataloged-object-designation
+    description: "IAU/CDS celestial-object designation"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [acronym, sequence]
+      properties:
+        acronym: { type: string }
+        sequence: { type: string }
+        specifier: { type: string }
+        catalog_ref: { type: string }
+    source_vocab: "IAU / CDS"
+    source_class: "Dictionary of Nomenclature of Celestial Objects (acronym + sequence + optional specifier convention; ~25,975 acronyms, ~15 added weekly)"
+    prior_art: "reuse -- direct clone of the IAU-referenced CDS designation-naming convention"
+    disposition: reuse
+
+  - name: hubble-lemaitre-parameter
+    description: "The Hubble-Lemaitre expansion-rate relation"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [expansion_rate_value]
+      properties:
+        expansion_rate_value: { type: number }
+        unit: { type: string }
+        measurement_method: { type: string }
+    source_vocab: "IAU"
+    source_class: "IAU XXX General Assembly (Vienna, 2018) Resolution renaming Hubble's law to the Hubble-Lemaitre law"
+    prior_art: "mint -- no existing MIF or reused-vocabulary type captures the specific Hubble-Lemaitre expansion-rate relation as a named IAU-designated quantity"
+    disposition: mint
+
+  - name: astronomical-reference-frame
+    description: "IVOA reference-frame vocabulary entry"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [frame_name]
+      properties:
+        frame_name: { type: string }
+        epoch: { type: string }
+    source_vocab: "IVOA"
+    source_class: "refframe vocabulary (reference frames in common use in astronomy)"
+    prior_art: "reuse -- direct clone of the named external IVOA refframe vocabulary"
+    disposition: reuse
+
+  - name: astronomical-messenger-type
+    description: "IVOA messenger vocabulary entry"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [messenger_type]
+      properties:
+        messenger_type: { type: string }
+    source_vocab: "IVOA"
+    source_class: "messenger vocabulary (particles used for observations in astronomy)"
+    prior_art: "reuse -- direct clone of the named external IVOA messenger vocabulary"
+    disposition: reuse
+
+  - name: astronomical-facility
+    description: "An observatory, space probe, or telescope facility (a site/institution shape, categorically distinct from a device/apparatus shape)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [facility_name]
+      properties:
+        facility_name: { type: string }
+        facility_type: { type: string }
+        location: { type: string }
+    source_vocab: "IVOA"
+    source_class: "obsfacility vocabulary (observatories, space probes, telescopes)"
+    prior_art: "reuse -- direct clone of the named external IVOA obsfacility vocabulary; explicitly confirmed NOT disputed by finding-disposition-cross-check-fusion-device-entities.json -- a site/institution shape is categorically distinct from the apparatus/device shape that finding's correction targets"
+    disposition: reuse
+
+  - name: data-processing-level
+    description: "IVOA data-processing-level vocabulary entry"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [processing_level]
+      properties:
+        processing_level: { type: string }
+        dataset_ref: { type: string }
+    source_vocab: "IVOA"
+    source_class: "processing-level vocabulary (calibration levels / data processing levels)"
+    prior_art: "reuse -- direct clone of the named external IVOA processing-level vocabulary"
+    disposition: reuse
+
+  - name: astrophysical-process-concept
+    description: "A UAT top-level astrophysical-process concept"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [uat_concept_id, concept_name]
+      properties:
+        uat_concept_id: { type: string }
+        concept_name: { type: string }
+        broader_concept: { type: string }
+    source_vocab: "Unified Astronomy Thesaurus (UAT)"
+    source_class: "'Astrophysical processes' -- one of the UAT's confirmed top-level/root concepts (v6.0.0: 2,312 concepts, 11 top concepts, 11 levels deep)"
+    prior_art: "mint -- UAT's own top-level/root-concept branch is not directly reused as-is (it is a thesaurus keyword hierarchy, not a resource schema like FHIR/IVOA); excluded from the classification-scheme-entry correction applied to this pack's PACS-tagged mints since its source is UAT, not PACS, and its uat_concept_id field does not match the PACS-code shape"
+    disposition: mint
+
+  - name: cosmology-theory-model
+    description: "A cosmological theory or field-theory model of the early universe"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string, description: "Renamed from model_name to match classification-scheme-entry's field name directly" }
+        theory_class: { type: string }
+    source_vocab: "PACS"
+    source_class: "98.80.-k Cosmology; 98.80.Cq Particle-theory and field-theory models of the early Universe (cosmic strings, inflationary universe, etc.)"
+    prior_art: "extend physical-science-base `classification-scheme-entry` -- PACS 98.80.-k/98.80.Cq is a plain classification-scheme entry (corrected from an earlier ungrounded mint with no parent)"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: observational-cosmology-parameter
+    description: "An observational cosmology parameter (Hubble constant, distance scale, cosmological constant)"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string, description: "Renamed from parameter_name to match physical-science-base's physical-quantity field name directly" }
+        value: { type: number }
+        uncertainty: { type: number }
+        measurement_epoch: { type: string }
+    source_vocab: "PACS"
+    source_class: "98.80.Es Observational cosmology (Hubble constant, distance scale, cosmological constant, early Universe)"
+    prior_art: "extend physical-science-base `physical-quantity` -- an observational-cosmology parameter is a specialized named-quantity measurement (corrected from an earlier direct extend of scientific.ontology.yaml `measurement`, which is unreachable from this pack's extends chain)"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+  - name: large-scale-structure
+    description: "Large-scale structure of the universe (superclusters, voids, galaxy clusters)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        structure_type: { type: string }
+        scale: { type: string }
+        title: { type: string, description: "The PACS section's own heading text, distinct from structure_type (the specific structure category); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "98.65.Dx Superclusters; large-scale structure of the Universe (voids, pancakes, great wall); 98.65.Cw Galaxy clusters"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: galaxy-evolution-process
+    description: "Origin, formation, and evolution of galaxies"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        process_type: { type: string }
+        galaxy_class: { type: string }
+        title: { type: string, description: "The PACS section's own heading text, distinct from process_type (the specific evolutionary process); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "98.62.Ai Origin, formation, evolution, age, and star formation of galaxies"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: cosmic-background-radiation
+    description: "A cosmic microwave (or other) background-radiation measurement"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [variable, value]
+      properties:
+        variable: { type: string, description: "Renamed from radiation_type to match physical-science-base's physical-quantity field name directly" }
+        value: { type: number, description: "Renamed from temperature_k to match physical-science-base's physical-quantity field name directly" }
+        anisotropy_spectrum: { type: string }
+    source_vocab: "PACS"
+    source_class: "98.70.Vc Background radiations"
+    prior_art: "extend physical-science-base `physical-quantity` -- a background-radiation record is a specialized measurement (corrected from an earlier direct extend of scientific.ontology.yaml `measurement`)"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(dark energy|dark matter|cosmological constant|inflationary universe)\\b"
+      suggest_entity: cosmology-theory-model
+      suggest_namespace: _semantic/cosmology-theory
+    - content_pattern: "\\b(Hubble constant|Hubble-Lemaitre|expansion rate of the universe)\\b"
+      suggest_entity: hubble-lemaitre-parameter
+      suggest_namespace: _semantic/cosmology-parameters
+    - content_pattern: "\\b(cosmic microwave background|CMB|background radiation)\\b"
+      suggest_entity: cosmic-background-radiation
+      suggest_namespace: _episodic/cosmology-observations
+    - content_pattern: "\\b(galaxy cluster|supercluster|large-scale structure|cosmic web)\\b"
+      suggest_entity: large-scale-structure
+      suggest_namespace: _semantic/cosmology-structure
+    - content_pattern: "\\b(quasar|active galactic nucleus|AGN|blazar|Seyfert galaxy)\\b"
+      suggest_entity: astronomical-object-type
+      suggest_namespace: _semantic/cosmology-objects

@@ -8,6 +8,10 @@ export interface MifSettings {
   /** Vault-relative folders never treated as MIF, even inside a bundle. */
   excludedFolders: string[];
   showDevCommands: boolean;
+  /** Download ontologies a bundle needs from mif-spec.dev (cached; verified by sha256). */
+  downloadOntologies: boolean;
+  /** Ontology used for namespace hints when a concept declares none. */
+  defaultOntology: string;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -15,6 +19,8 @@ export const DEFAULT_SETTINGS: MifSettings = {
   bundleRoots: [""],
   excludedFolders: ["_spike", "templates"],
   showDevCommands: false,
+  downloadOntologies: true,
+  defaultOntology: "mif-base",
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

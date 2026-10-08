@@ -1,0 +1,360 @@
+---
+# Plasma Physics Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for plasma phenomena, confinement devices, diagnostic
+# techniques, and fundamental plasma quantities. Extends physical-science-base
+# directly (one hop), which supplies the shared PACS-classification and
+# physical-quantity primitives this pack's own types specialize.
+#
+# Grounded in: PACS section 52 (Physics of plasmas and electric discharges,
+# all 19 top-level subsections 52.20-52.90), PPPL/NIST plasma-physics
+# nomenclature, and IAEA's fusion-device classification. See
+# health-physics-ontology-domains research session, entity-inventory.json
+# (pack=plasma-physics, 17 rows) and finding-plasma-physics-coverage-audit-v2.json
+# (survived: 19/19 PACS 52.xx subsections cross-verified against ufn.ru and the
+# official AIP PACS 2010 index).
+#
+# Two build-time corrections applied here (not present in entity-inventory.json
+# -- see health-physics-ontology-domains/ontology-implementation-plan.md steps
+# 1a and 1d):
+#   - magnetic-confinement-configuration, laser-inertial-confinement-device,
+#     pinch-device, plasma-device extend research.ontology.yaml's `apparatus`
+#     (not mint, not scientific.ontology.yaml's older, forked `research-instrument`) --
+#     finding-disposition-cross-check-fusion-device-entities.json +
+#     finding-trajectory-research-instrument-adjudication.json.
+#   - 9 of the 10 remaining plain PACS-classification mints extend this pack's
+#     own physical-science-base `classification-scheme-entry` -- an inference
+#     from finding-intermediary-layering-spec.json's prose (no finding
+#     enumerates this row-by-row). `plasma-heating-method` is EXCLUDED from
+#     this correction despite being PACS-tagged: it is base `procedural`
+#     while `classification-scheme-entry` is base `semantic`, and forcing a
+#     procedural type under a semantic parent would be a base-type mismatch,
+#     not a defensible subtype relationship -- found during authoring, not
+#     during planning.
+#
+# Trajectory risk (finding-trajectory-pacs-discontinued-physh-successor.json,
+# survived): PACS is a frozen 2010 edition, superseded by APS's PhySH (actively
+# maintained, 10 releases through March 2026). The classification-scheme-entry
+# mints below (keyed to PACS 52.xx) inherit this risk -- source_vocab/
+# source_class grounding is historically accurate and citable, but a future
+# depth pass should evaluate adding PhySH codes as a parallel source_class
+# cross-reference.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: plasma-physics
+  version: "0.1.0"
+  description: "Plasma physics domain ontology: plasma phenomena, confinement devices, diagnostic techniques, and fundamental plasma quantities"
+  extends:
+    - physical-science-base
+
+namespaces:
+  semantic:
+    children:
+      plasma-phenomena:
+        description: "Plasma physical phenomena classification (PACS 52.xx)"
+        type_hint: semantic
+      plasma-devices:
+        description: "Plasma confinement and generation apparatus"
+        type_hint: semantic
+      plasma-parameters:
+        description: "Fundamental plasma physical quantities"
+        type_hint: semantic
+  procedural:
+    children:
+      plasma-diagnostics:
+        description: "Plasma diagnostic and simulation techniques"
+        type_hint: procedural
+
+entity_types:
+  - name: elementary-plasma-process
+    description: "Elementary processes in plasmas"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+        process_type: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.20.-j Elementary processes in plasmas"
+    prior_art: "extend physical-science-base `classification-scheme-entry` -- PACS 52.20.-j is a plain classification-scheme entry (corrected from an earlier ungrounded mint with no parent)"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-property
+    description: "Plasma properties (kinetic equations, transport properties, emission/absorption)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+        property_type: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.25.-b Plasma properties (incl. 52.25.Dg kinetic equations, 52.25.Fi transport properties, 52.25.Os emission/absorption)"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-dynamics-flow
+    description: "Plasma dynamics and flow"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.30.-q Plasma dynamics and flow"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-wave-instability
+    description: "Waves, oscillations, and instabilities in plasmas and intense beams"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+        instability_type: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.35.-g Waves, oscillations, and instabilities in plasmas and intense beams"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: laser-plasma-interaction
+    description: "Laser-plasma interactions"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.38.-r Laser-plasma interactions (incl. 52.38.Kd laser acceleration)"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-interaction-nonlaser
+    description: "Plasma interactions (nonlaser)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.40 Plasma interactions (nonlaser) (incl. 52.40.Db electromagnetic phenomena, 52.40.Mj particle beam interactions)"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-heating-method
+    description: "Plasma production and heating"
+    base: procedural
+    traits: [cited, dated, versioned]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        title: { type: string }
+        heating_mechanism: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.50.-b Plasma production and heating (incl. 52.50.Jm heating by laser beams)"
+    prior_art: "mint -- PACS-tagged but base `procedural`, while physical-science-base's `classification-scheme-entry` is base `semantic`; excluded from the classification-scheme-entry correction applied to its sibling PACS mints because subtyping across a base-type mismatch would not be a valid subtype relationship"
+    disposition: mint
+
+  - name: magnetic-confinement-configuration
+    description: "Magnetic confinement and equilibrium device configuration (tokamaks, stellarators, reversed-field pinches, heliacs)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        configuration_type: { type: string }
+        name: { type: string, description: "Renamed from device_name to match research.ontology.yaml's apparatus field name directly" }
+        status: { type: string }
+    source_vocab: "PACS + IAEA"
+    source_class: "52.55.-s Magnetic confinement and equilibrium (incl. 52.55.Fa tokamaks); IAEA World Survey of Fusion Devices toroidal-device taxonomy"
+    prior_art: "extend research.ontology.yaml `apparatus` (\"A device, platform, or instrument used to produce research data\") -- corrected from an earlier mint by finding-disposition-cross-check-fusion-device-entities.json + finding-trajectory-research-instrument-adjudication.json; NOT scientific.ontology.yaml's `research-instrument`, which is itself mid-migration to become a specialization of apparatus and has already forked once (psycholinguistics.ontology.yaml independently minted an incompatible research-instrument)"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: laser-inertial-confinement-device
+    description: "Laser inertial confinement fusion device"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        name: { type: string, description: "Renamed from device_name to match research.ontology.yaml's apparatus field name directly" }
+        laser_power: { type: number }
+        target_type: { type: string }
+    source_vocab: "PACS + IAEA"
+    source_class: "52.57.-z Laser inertial confinement; IAEA inertial confinement fusion (ICF) classification"
+    prior_art: "extend research.ontology.yaml `apparatus` -- see magnetic-confinement-configuration's prior_art for the full correction rationale"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: pinch-device
+    description: "Pinch devices (incl. Z-pinches)"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        pinch_type: { type: string }
+        name: { type: string, description: "The device's own name (e.g. a specific Z-pinch facility name), distinct from pinch_type (the pinch mechanism category); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "52.58 Pinch devices (incl. 52.58.Lq Z-pinches)"
+    prior_art: "extend research.ontology.yaml `apparatus` -- see magnetic-confinement-configuration's prior_art for the full correction rationale"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: intense-particle-beam-source
+    description: "Intense particle beams and radiation sources"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        beam_type: { type: string }
+        title: { type: string, description: "The PACS section's own heading text, distinct from beam_type (a further sub-classification of the beam kind); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "52.59.-f Intense particle beams and radiation sources"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-simulation-method
+    description: "Plasma simulation methods (incl. perturbative methods)"
+    base: procedural
+    traits: [cited, dated, versioned]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        name: { type: string, description: "Renamed from simulation_method to match research-procedure's field name directly" }
+        code_name: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.65.-y Plasma simulation (incl. 52.65.Vv perturbative methods)"
+    prior_art: "extend research.ontology.yaml `research-procedure` (\"A method, protocol, or procedure applied in research, and its executions\") -- a plasma simulation method is a specialized computational research method; entity-inventory.json originally cited scientific.ontology.yaml `method`, which is unreachable once this pack extends physical-science-base instead of scientific directly"
+    disposition: extend
+    subtype_of: [research-procedure]
+
+  - name: plasma-diagnostic-technique
+    description: "Plasma diagnostic techniques and instrumentation"
+    base: procedural
+    traits: [cited, dated, versioned]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        name: { type: string, description: "Renamed from technique_name to match research-procedure's field name directly" }
+        measured_quantity: { type: string }
+    source_vocab: "PACS"
+    source_class: "52.70.-m Plasma diagnostic techniques and instrumentation"
+    prior_art: "extend research.ontology.yaml `research-procedure` -- a plasma diagnostic technique is a specialized measurement method; see plasma-simulation-method's prior_art for the full reachability correction rationale"
+    disposition: extend
+    subtype_of: [research-procedure]
+
+  - name: plasma-device
+    description: "Plasma devices"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, name]
+      properties:
+        pacs_code: { type: string }
+        name: { type: string, description: "Renamed from device_name to match research.ontology.yaml's apparatus field name directly" }
+    source_vocab: "PACS"
+    source_class: "52.75.-d Plasma devices"
+    prior_art: "extend research.ontology.yaml `apparatus` -- see magnetic-confinement-configuration's prior_art for the full correction rationale"
+    disposition: extend
+    subtype_of: [apparatus]
+
+  - name: plasma-application
+    description: "Plasma applications"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        application_domain: { type: string }
+        title: { type: string, description: "The PACS section's own heading text, distinct from application_domain (the specific application area); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "52.77.-j Plasma applications"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: electric-discharge
+    description: "Electric discharges"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [pacs_code, title]
+      properties:
+        pacs_code: { type: string }
+        discharge_type: { type: string }
+        title: { type: string, description: "The PACS section's own heading text, distinct from discharge_type (the specific discharge mechanism); no prior equivalent field existed" }
+    source_vocab: "PACS"
+    source_class: "52.80.-s Electric discharges"
+    prior_art: "extend physical-science-base `classification-scheme-entry`"
+    disposition: extend
+    subtype_of: [classification-scheme-entry]
+
+  - name: plasma-parameter
+    description: "A fundamental named plasma physical quantity (Debye length, plasma frequency, Larmor radius)"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [value, variable]
+      properties:
+        variable: { type: string, description: "Renamed from parameter_name to match physical-science-base's physical-quantity field name directly" }
+        symbol: { type: string }
+        value: { type: number }
+        unit: { type: string }
+    source_vocab: "PPPL/NIST plasma-physics nomenclature"
+    source_class: "Debye length, plasma frequency, Larmor radius (named fundamental plasma quantities)"
+    prior_art: "extend physical-science-base `physical-quantity` -- a plasma parameter is a specialized named-quantity measurement (corrected from an earlier direct extend of scientific.ontology.yaml `measurement`, which is unreachable from this pack's extends chain)"
+    disposition: extend
+    subtype_of: [physical-quantity]
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(plasma instability|plasma wave|Langmuir wave|Alfven wave)\\b"
+      suggest_entity: plasma-wave-instability
+      suggest_namespace: _semantic/plasma-phenomena
+    - content_pattern: "\\b(tokamak|stellarator|magnetic confinement|reversed-field pinch)\\b"
+      suggest_entity: magnetic-confinement-configuration
+      suggest_namespace: _semantic/plasma-devices
+    - content_pattern: "\\b(inertial confinement fusion|ICF|laser-driven fusion)\\b"
+      suggest_entity: laser-inertial-confinement-device
+      suggest_namespace: _semantic/plasma-devices
+    - content_pattern: "\\b(Debye length|plasma frequency|Larmor radius)\\b"
+      suggest_entity: plasma-parameter
+      suggest_namespace: _semantic/plasma-parameters
+    - content_pattern: "\\b(Langmuir probe|plasma diagnostic|Thomson scattering)\\b"
+      suggest_entity: plasma-diagnostic-technique
+      suggest_namespace: _procedural/plasma-diagnostics

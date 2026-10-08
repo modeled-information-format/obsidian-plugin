@@ -1,0 +1,324 @@
+---
+# Platform Engineering Ontology — internal developer platforms & portals (domain pack)
+#
+# A MIF-compliant engineering DOMAIN pack (Tier 2) that extends engineering-base.
+# It owns the vocabulary of platform engineering: the internal developer portal
+# itself, the plugins that extend it, the software templates and golden paths it
+# paves, and the TYPED integrations that bind it to external systems (identity,
+# source control, cloud, observability, incident, security, CI/CD).
+#
+# Motivation: research on a Backstage-based internal developer portal showed every
+# distinct portal concern — Okta auth, GitHub integration, the scaffolder, the
+# PagerDuty/Snyk/Orca plugins, the AWS resource catalog — collapsing into a single
+# undifferentiated "service catalog / developer portal" type, because no ontology
+# modeled the platform-engineering domain at depth. This pack gives those concerns
+# distinct, queryable types; `portal-integration.integration_category` in particular
+# differentiates the many external bindings a portal exposes.
+#
+# Cataloged present-but-NOT-core (core=false): bound to a topic only when that topic
+# concerns an internal developer platform/portal. A topic resolves these types by
+# binding this pack (whose `extends` chain reaches engineering-base -> mif-base).
+#
+# Version: 0.1.0
+# Last Updated: 2026-06-30
+
+ontology:
+  id: platform-engineering
+  version: "0.1.0"
+  description: "Platform engineering domain ontology — internal developer portals, plugins, software templates, golden paths, and typed integrations"
+  extends:
+    - engineering-base
+
+# Custom namespaces under the cognitive triad inherited from mif-base.
+namespaces:
+  _semantic:
+    description: "Portals, their extensions, and the paths they pave"
+    type_hint: semantic
+    children:
+      portals:
+        description: "Internal developer portals and the plugins that extend them"
+        type_hint: semantic
+      integrations:
+        description: "Typed bindings from a portal to external systems"
+        type_hint: semantic
+      paths:
+        description: "Software templates and golden paths"
+        type_hint: semantic
+
+# Entity Types — the platform-engineering domain vocabulary. Several specialize
+# engineering-base supertypes via `subtype_of` so they satisfy supertype-typed
+# relationship endpoints across the registry.
+entity_types:
+  - name: developer-portal
+    description: "An internal developer portal / platform (IDP): the unified catalog + plugin surface engineers use to discover, create, and operate software"
+    base: semantic
+    subtype_of:
+      - component
+    traits:
+      - versioned
+      - documented
+      - cited
+    schema:
+      required:
+        - name
+        - responsibility
+      properties:
+        name:
+          type: string
+          description: "Name of the portal or deployment"
+        responsibility:
+          type: string
+          description: "The portal's single responsibility (e.g. unified developer experience and service catalog)"
+        build:
+          type: string
+          description: "The portal product/distribution it is built on"
+          enum:
+            - backstage
+            - port
+            - cortex
+            - opslevel
+            - roadie
+            - spotify-portal
+            - custom
+            - other
+        hosting:
+          type: string
+          description: "Operational model"
+          enum:
+            - self-hosted
+            - saas
+            - managed
+        catalog_kinds:
+          type: array
+          description: "Catalog entity kinds the portal models (e.g. Component, System, API, Resource, Domain, Group, User)"
+          items:
+            type: string
+        owner:
+          type: string
+          description: "Team owning the portal"
+  - name: portal-plugin
+    description: "A plugin/extension that adds capability to a developer portal (frontend card, backend module, or processor)"
+    base: semantic
+    subtype_of:
+      - component
+    traits:
+      - documented
+      - cited
+    schema:
+      required:
+        - name
+        - responsibility
+      properties:
+        name:
+          type: string
+          description: "Plugin name or package"
+        responsibility:
+          type: string
+          description: "What the plugin is responsible for (e.g. surface on-call status on entity pages)"
+        plugin_type:
+          type: string
+          description: "Where the plugin runs"
+          enum:
+            - frontend
+            - backend
+            - common
+            - processor
+        capability:
+          type: string
+          description: "What the plugin adds (e.g. surfaces on-call, renders security findings)"
+        integrates_system:
+          type: string
+          description: "External system the plugin surfaces, if any (e.g. PagerDuty, Snyk)"
+        source:
+          type: string
+          description: "Provenance of the plugin"
+          enum:
+            - core
+            - community
+            - commercial
+            - custom
+  - name: software-template
+    description: "A scaffolder/golden-path template that instantiates a ready-to-run software project (skeleton + parameters + steps)"
+    base: semantic
+    traits:
+      - documented
+      - cited
+    schema:
+      required:
+        - template_name
+      properties:
+        template_name:
+          type: string
+          description: "Template name"
+        instantiates:
+          type: string
+          description: "What the template produces (e.g. a Component of kind service)"
+        inputs:
+          type: array
+          description: "Parameters the template collects"
+          items:
+            type: string
+        steps:
+          type: array
+          description: "Scaffolder actions the template runs (e.g. fetch:template, publish:github, catalog:register)"
+          items:
+            type: string
+        owner:
+          type: string
+          description: "Team owning the template"
+  - name: golden-path
+    description: "A paved-road workflow: the opinionated, supported way to build, ship, or operate a class of software, with guardrails"
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - path_name
+      properties:
+        path_name:
+          type: string
+          description: "Name of the golden path"
+        scope:
+          type: string
+          description: "What the path covers (e.g. new microservice from zero to production)"
+        stages:
+          type: array
+          description: "Ordered stages of the paved road"
+          items:
+            type: string
+        guardrails:
+          type: string
+          description: "Policies/checks the path enforces by default"
+  - name: portal-integration
+    description: "A typed binding from a developer portal to an external system; integration_category differentiates the many bindings a portal exposes"
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - integration_name
+        - integration_category
+      properties:
+        integration_name:
+          type: string
+          description: "Name of the integration (e.g. Okta auth provider, GitHub catalog discovery)"
+        integration_category:
+          type: string
+          description: "The class of external system the integration binds"
+          enum:
+            - identity
+            - scm
+            - cloud
+            - observability
+            - incident
+            - security
+            - ci-cd
+            - infrastructure
+            - ticketing
+        external_system:
+          type: string
+          description: "The external product bound (e.g. Okta, GitHub Enterprise, AWS, Chronosphere, PagerDuty, Snyk, Orca)"
+        auth_mechanism:
+          type: string
+          description: "How the integration authenticates (e.g. OIDC, GitHub App, IAM role, API token)"
+        surface:
+          type: string
+          description: "Where the integration manifests in the portal"
+          enum:
+            - authentication
+            - catalog-discovery
+            - entity-page
+            - scaffolder-action
+            - processor
+        plugin_ref:
+          type: string
+          description: "The portal-plugin that implements the integration, if any"
+
+# Traits (Mixins) the domain types use. Declared locally so the pack is
+# self-contained (mirrors the inherited engineering-base definitions).
+traits:
+  versioned:
+    description: "Adds version tracking fields"
+    fields:
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+.*$"
+      changelog:
+        type: array
+        items:
+          type: object
+  documented:
+    description: "Adds documentation reference"
+    fields:
+      documentation_url:
+        type: string
+        format: uri
+      readme_path:
+        type: string
+  cited:
+    description: "Requires citations/sources"
+    requires:
+      - citations
+
+# Relationships among the domain types (and to engineering-base/generic supertypes,
+# resolved across the registry and the extends chain at concordance time).
+relationships:
+  integrates:
+    description: "A developer portal exposes a typed integration to an external system"
+    from:
+      - developer-portal
+    to:
+      - portal-integration
+    symmetric: false
+  extends_portal:
+    description: "A plugin extends a developer portal"
+    from:
+      - portal-plugin
+    to:
+      - developer-portal
+    symmetric: false
+  provides:
+    description: "A developer portal provides golden paths and software templates"
+    from:
+      - developer-portal
+    to:
+      - golden-path
+      - software-template
+    symmetric: false
+  scaffolds:
+    description: "A software template scaffolds a component"
+    from:
+      - software-template
+    to:
+      - component
+    symmetric: false
+  bound_to:
+    description: "A portal integration binds the portal to an external technology"
+    from:
+      - portal-integration
+    to:
+      - technology
+    symmetric: false
+
+# Discovery — patterns that let a platform-engineering topic auto-classify untyped
+# findings to these domain types (more specific than the generic 'developer portal'
+# pattern observability uses for its courtesy service-ownership-registry type).
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(internal developer (portal|platform)|developer portal|Backstage|\\bIDP\\b)\\b"
+      suggest_entity: developer-portal
+      suggest_namespace: _semantic/portals
+    - content_pattern: "\\b(Backstage plugin|portal plugin|frontend plugin|backend plugin|backend module)\\b"
+      suggest_entity: portal-plugin
+      suggest_namespace: _semantic/portals
+    - content_pattern: "\\b(software template|scaffolder template|golden-path template|cookiecutter|project skeleton|catalog-info\\.yaml template)\\b"
+      suggest_entity: software-template
+      suggest_namespace: _semantic/paths
+    - content_pattern: "\\b(golden path|paved road|paved path)\\b"
+      suggest_entity: golden-path
+      suggest_namespace: _semantic/paths
+    - content_pattern: "\\b(Okta|OIDC|SAML|SSO|GitHub|PagerDuty|Snyk|Orca|Chronosphere|Grafana|AWS)\\b[^.]{0,40}\\b(integration|provider|plugin|auth|catalog discovery|entity provider)\\b"
+      suggest_entity: portal-integration
+      suggest_namespace: _semantic/integrations

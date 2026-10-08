@@ -1,0 +1,244 @@
+{
+  "corpus": {
+    "agriculture": [
+      "mif-base",
+      "shared-traits",
+      "agriculture"
+    ],
+    "biology-research-lab": [
+      "mif-base",
+      "shared-traits",
+      "biology-research-lab"
+    ],
+    "cardiology": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "clinical-health-base",
+      "cardiology"
+    ],
+    "clinical-health-base": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "clinical-health-base"
+    ],
+    "cosmology": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "physical-science-base",
+      "cosmology"
+    ],
+    "data-engineering": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "data-engineering"
+    ],
+    "engineering-base": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base"
+    ],
+    "fitness": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "clinical-health-base",
+      "fitness"
+    ],
+    "health": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "clinical-health-base",
+      "health"
+    ],
+    "heliophysics": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "physical-science-base",
+      "heliophysics"
+    ],
+    "market-research": [
+      "mif-base",
+      "shared-traits",
+      "market-research"
+    ],
+    "mif-base": [
+      "mif-base"
+    ],
+    "mif-docs": [
+      "mif-base",
+      "mif-docs"
+    ],
+    "mif-generic": [
+      "mif-base",
+      "mif-generic"
+    ],
+    "non-ionizing-radiation": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "physical-science-base",
+      "clinical-health-base",
+      "non-ionizing-radiation"
+    ],
+    "observability": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "mif-generic",
+      "observability"
+    ],
+    "physical-science-base": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "physical-science-base"
+    ],
+    "plasma-physics": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "physical-science-base",
+      "plasma-physics"
+    ],
+    "platform-engineering": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "platform-engineering"
+    ],
+    "psycholinguistics": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "mif-generic",
+      "psycholinguistics"
+    ],
+    "regenerative-agriculture-research": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "agriculture",
+      "engineering-base",
+      "mif-generic",
+      "regenerative-agriculture-research"
+    ],
+    "regenerative-agriculture": [
+      "mif-base",
+      "shared-traits",
+      "agriculture",
+      "regenerative-agriculture"
+    ],
+    "regulatory-legal": [
+      "mif-base",
+      "shared-traits",
+      "regulatory-legal"
+    ],
+    "research": [
+      "mif-base",
+      "shared-traits",
+      "research"
+    ],
+    "scientific": [
+      "mif-base",
+      "shared-traits",
+      "research",
+      "scientific"
+    ],
+    "shared-traits": [
+      "mif-base",
+      "shared-traits"
+    ],
+    "software-engineering": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "software-engineering"
+    ],
+    "software-security": [
+      "mif-base",
+      "shared-traits",
+      "engineering-base",
+      "software-security"
+    ],
+    "trend-analysis": [
+      "mif-base",
+      "shared-traits",
+      "trend-analysis"
+    ]
+  },
+  "synthetic": {
+    "diamond": {
+      "texts": [
+        "ontology:\n  id: a\n  version: \"1.0.0\"\n",
+        "ontology:\n  id: b\n  version: \"1.0.0\"\n  extends: [a]\n",
+        "ontology:\n  id: c\n  version: \"1.0.0\"\n  extends: [a]\n",
+        "ontology:\n  id: d\n  version: \"1.0.0\"\n  extends: [b, c]\n"
+      ],
+      "id": "d",
+      "result": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ]
+    },
+    "cycle": {
+      "texts": [
+        "ontology:\n  id: x\n  version: \"1.0.0\"\n  extends: [y]\n",
+        "ontology:\n  id: y\n  version: \"1.0.0\"\n  extends: [x]\n"
+      ],
+      "id": "x",
+      "result": {
+        "error": "ontology 'x' is part of an extends cycle"
+      }
+    },
+    "self": {
+      "texts": [
+        "ontology:\n  id: s\n  version: \"1.0.0\"\n  extends: [s]\n"
+      ],
+      "id": "s",
+      "result": {
+        "error": "ontology 's' is part of an extends cycle"
+      }
+    },
+    "missingParent": {
+      "texts": [
+        "ontology:\n  id: child\n  version: \"1.0.0\"\n  extends: [ghost]\n"
+      ],
+      "id": "child",
+      "result": {
+        "error": "ontology 'ghost' not found in the supplied corpus"
+      }
+    },
+    "missingRoot": {
+      "texts": [
+        "ontology:\n  id: a\n  version: \"1.0.0\"\n"
+      ],
+      "id": "nope",
+      "result": {
+        "error": "ontology 'nope' not found in the supplied corpus"
+      }
+    },
+    "order": {
+      "texts": [
+        "ontology:\n  id: p1\n  version: \"1.0.0\"\n",
+        "ontology:\n  id: p2\n  version: \"1.0.0\"\n",
+        "ontology:\n  id: p3\n  version: \"1.0.0\"\n  extends: [p2]\n",
+        "ontology:\n  id: kid\n  version: \"1.0.0\"\n  extends: [p3, p1]\n"
+      ],
+      "id": "kid",
+      "result": [
+        "p2",
+        "p3",
+        "p1",
+        "kid"
+      ]
+    }
+  }
+}

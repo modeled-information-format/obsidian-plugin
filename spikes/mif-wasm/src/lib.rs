@@ -51,3 +51,19 @@ pub fn ontology_id(yaml: &str) -> Result<String, JsError> {
     let meta = mif_ontology::parse_definition(yaml, "inline").map_err(|e| JsError::new(&e.to_string()))?;
     Ok(meta.id)
 }
+
+/// Golden helper: resolve an `extends` chain with mif-ontology over a corpus
+/// given as a JSON array of ontology YAML texts. Returns the chain's ids
+/// (base first) as JSON, or the error message.
+#[cfg(feature = "ontology")]
+#[wasm_bindgen(js_name = resolveChain)]
+pub fn resolve_chain(corpus_yaml: &str, id: &str) -> Result<String, JsError> {
+    let texts: Vec<String> = serde_json::from_str(corpus_yaml).map_err(|e| JsError::new(&e.to_string()))?;
+    let mut corpus = std::collections::HashMap::new();
+    for (i, text) in texts.iter().enumerate() {
+        let meta = mif_ontology::parse_definition(text, &format!("corpus[{i}]")).map_err(|e| JsError::new(&e.to_string()))?;
+        corpus.insert(meta.id.clone(), meta);
+    }
+    let chain = mif_ontology::resolve_chain(id, &corpus).map_err(|e| JsError::new(&e.to_string()))?;
+    json(&serde_json::json!(chain.iter().map(|m| m.id.clone()).collect::<Vec<_>>()))
+}

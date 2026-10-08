@@ -1,0 +1,417 @@
+---
+# Engineering Base Ontology — shared engineering supertypes (Tier 1)
+#
+# A MIF-compliant intermediate layer between the domain-neutral generic core
+# (mif-base / mif-generic) and the engineering DOMAIN packs (software-engineering,
+# data-engineering, software-security). It owns the entity types that recur across
+# every engineering domain — architecture, components, patterns, decisions, delivery
+# metrics, practices, and disciplines — so the domains inherit them instead of each
+# re-declaring its own copy.
+#
+# Cataloged present-but-NOT-core (core=false): it is never bound to a topic directly
+# and never auto-applied to non-engineering domains (biology, agriculture, legal). A
+# topic resolves these types only by binding a descendant pack whose `extends` chain
+# reaches here (resolve-ontology.sh / validate-concordance.sh walk the chain).
+#
+# Upstream: this layer is structured to MIF conformance so it can be submitted to MIF
+# on its own track as a domain extension — WITHOUT dragging engineering vocabulary
+# into the universal generic core.
+#
+# Version: 0.1.0
+# Last Updated: 2026-06-24
+
+ontology:
+  id: engineering-base
+  version: "0.2.0"
+  description: "Shared engineering supertypes — the MIF-compliant intermediate layer the engineering domains extend"
+  extends:
+    - mif-base
+    - shared-traits
+
+# Custom namespaces under the cognitive triad inherited from mif-base.
+namespaces:
+  semantic:
+    children:
+      architecture:
+        description: "System architecture and component designs"
+        type_hint: semantic
+      patterns:
+        description: "Design and architectural patterns"
+        type_hint: semantic
+
+# Entity Types — the supertypes shared across the engineering domains.
+entity_types:
+  - name: component
+    description: "A software/system component, module, or service"
+    negative_examples:
+      - "A decision adopted Istio with Envoy sidecars for uniform mTLS across services, rejecting a shared client library since it still requires every team's voluntary adoption. Separately, a decision replaced synchronous inventory/payment/shipping calls with an event-driven OrderPlaced-to-Kafka architecture, decoupling order-service availability from any single downstream service."
+      - "The circuit breaker pattern wraps calls to failure-prone dependencies in a state machine that stops forwarding requests (open state) once a failure rate threshold is crossed, preventing cascading resource exhaustion in the caller."
+    base: semantic
+    traits:
+      - versioned
+      - documented
+    schema:
+      required:
+        - name
+        - responsibility
+      properties:
+        name:
+          type: string
+          description: "Component name"
+        responsibility:
+          type: string
+          description: "Single responsibility description"
+        dependencies:
+          type: array
+          description: "List of component dependencies"
+          items:
+            type: string
+        interfaces:
+          type: array
+          description: "Public interfaces/APIs"
+          items:
+            type: string
+        owner:
+          type: string
+          description: "Team or person owning this component"
+  - name: architectural-decision
+    description: "An architectural decision with full context"
+    base: semantic
+    traits:
+      - dated
+      - cited
+    schema:
+      required:
+        - decision
+        - rationale
+      properties:
+        decision:
+          type: string
+          description: "The decision made"
+        rationale:
+          type: string
+          description: "Why this decision was made"
+        alternatives:
+          type: array
+          description: "Alternatives considered"
+          items:
+            type: object
+        consequences:
+          type: object
+          description: "Known consequences and trade-offs"
+        status:
+          type: string
+          description: "Decision status"
+          enum:
+            - proposed
+            - accepted
+            - deprecated
+            - superseded
+  - name: design-pattern
+    description: "A design pattern or architectural pattern"
+    negative_examples:
+      - "Medallion architecture, popularized by Databricks, organizes a lakehouse into Bronze, Silver, and Gold layers so a pipeline bug can be fixed and rerun from Bronze without re-extracting from source."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - pattern_name
+        - context
+        - solution
+      properties:
+        pattern_name:
+          type: string
+        context:
+          type: string
+          description: "When to use this pattern"
+        solution:
+          type: string
+          description: "How the pattern solves the problem"
+        consequences:
+          type: object
+          description: "Trade-offs and implications"
+        related_patterns:
+          type: array
+          items:
+            type: string
+  - name: delivery-metric
+    description: A delivery, reliability, or operations metric (e.g. DORA four/five keys, SLO/SLI, MTTR, throughput)
+    negative_examples:
+      - "A decision replaced static per-metric alert thresholds with SLO error-budget burn-rate alerting per the Google SRE Workbook, requiring every service to first define an SLO and SLI."
+      - "A retry-with-exponential-backoff-and-jitter pattern resends failed requests with progressively longer delays plus randomized jitter, reducing thundering herd effects when many clients retry simultaneously after an outage."
+      - "A capacity planning review discipline is a recurring meeting where teams forecast resource needs (compute, storage, personnel) for the next quarter based on growth trends and project commitments."
+      - "The freely published Google SRE Workbook's chapter defining multi-window, multi-burn-rate SLO alerting is the reference implementation most teams cite and link directly when adopting burn-rate paging."
+      - "DORA began as an independent research program co-founded by Nicole Forsgren, Jez Humble, and Gene Kim before Google acquired it in 2018, using an empirical, survey-correlated methodology."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - metric_name
+      properties:
+        metric_name:
+          type: string
+        definition:
+          type: string
+          description: What the metric measures
+        benchmark:
+          type: string
+          description: Target or elite-tier value
+        source:
+          type: string
+          description: Originating framework or study
+  - name: engineering-practice
+    description: An organizational, cultural, or operating practice (e.g. blameless postmortems, you-build-it-you-run-it, data mesh, federated governance)
+    negative_examples:
+      - "This discipline requires an architecturally-significant change be written up as an ADR with rationale and alternatives before implementation begins. Separately, the Incident Command System assigns named roles, an Incident Commander, Communications Lead, and Subject Matter Experts, for major incidents."
+      - "An organization decentralized data ownership to domain teams once a central team became a bottleneck, accepting shared self-serve infrastructure costs. Separately, a platform team migrated self-managed Kubernetes to Amazon EKS so AWS takes over control-plane patching."
+      - "Charity Majors, Honeycomb's co-founder, argues the 'three pillars' observability framing is a legacy-tooling symptom. Separately, John Allspaw is credited with popularizing the blameless postmortem during his tenure as an Etsy engineering leader."
+      - "Google is credited with originating Site Reliability Engineering in the early 2000s under Ben Treynor Sloss, later publishing its practice in two widely-cited SRE books."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - practice_name
+      properties:
+        practice_name:
+          type: string
+        description:
+          type: string
+          description: What the practice is
+        evidence:
+          type: string
+          description: Empirical support or outcome
+        origin:
+          type: string
+          description: Originating model, study, or author
+  - name: process-discipline
+    description: A governance or production-readiness discipline (e.g. PRR, ORR, change enablement, acceptance criteria, stewardship cadence)
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - discipline_name
+      properties:
+        discipline_name:
+          type: string
+        purpose:
+          type: string
+          description: What the discipline governs
+        criteria:
+          type: string
+          description: Acceptance or gating criteria
+        stage:
+          type: string
+          description: Lifecycle stage where it applies
+
+  # Cross-cutting universals. These recur across the engineering domains (security,
+  # data, software) — a control, an artifact and its provenance, a policy. The domain
+  # packs specialize them via `subtype_of` (e.g. software-security `security-control`
+  # is `subtype_of: [control]`); subsumption is ENFORCED — validate-concordance.sh
+  # builds the transitive supertype closure so a subtype satisfies a supertype-typed
+  # relationship endpoint, and gate_m22 proves it.
+  - name: control
+    description: "A control or safeguard governing a component, artifact, or asset (security, data-governance, or compliance control)"
+    negative_examples:
+      - "etcd is Kubernetes' Raft-consensus datastore, its only direct client being kube-apiserver. Separately, Vault brokers credentials through short-lived leases and starts sealed after any restart, requiring an unseal step before serving secrets."
+      - "A policy restricts production container builds to a centrally-approved base-image set, requiring a review process for exceptions. Separately, a policy designates the incident commander as sole channel for external incident communication, routing anything beyond routine updates through legal review."
+      - "A Change Advisory Board reviews high-risk production changes above a defined threshold before authorization. Separately, a discipline requires new services to pass a security design review, examining auth model and data classification, before launch."
+      - "An organization centralized secret storage on Vault over per-service stores, rejecting a per-cloud-provider secrets manager given its multi-cloud footprint, accepting Vault as a critical-path dependency."
+      - "A documented plan to address identified security risks and compliance gaps through risk assessment, prioritization of remediation activities, and tracking of implementation progress against regulatory deadlines."
+      - "AC-2, one of the most frequently assessed FedRAMP controls, addresses account lifecycle failures like never-deactivated departed-employee accounts, implemented via identity-governance tooling tied to an HR system of record."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - control_name
+      properties:
+        control_name:
+          type: string
+        control_type:
+          type: string
+          description: "preventive / detective / corrective"
+        framework_ref:
+          type: string
+          description: "Originating framework or catalog (e.g. NIST 800-53 AC-2, SOC 2 CC6.1)"
+        statement:
+          type: string
+          description: "What the control requires"
+  - name: artifact
+    description: "A produced, content-addressable artifact (software package/build, dataset, model, report)"
+    negative_examples:
+      - "A decision adopted gRPC with Protocol Buffers for internal service calls, rejecting REST/OpenAPI and GraphQL federation. Separately, a decision consolidated dozens of repositories into a single monorepo with a unified, change-scoped build graph."
+      - "A guide migrates a production Elasticsearch 6.x cluster to OpenSearch via reindex-from-remote. Separately, a guide migrates a monolith using the strangler fig pattern, requiring each extraction to pass a parity check before the proxy routes its traffic to the new service."
+      - "dbt's run_results.json ties a downstream data-quality issue back to the exact git commit and run responsible. Separately, a CycloneDX SBOM is linked to its exact source commit and attached to the specific artifact digest it describes via the OCI referrers API."
+      - "Fluent Bit is a lightweight C-based log and metrics shipper minimizing per-host footprint, in contrast to Fluentd's heavier but broader Ruby plugin ecosystem."
+      - "Trunk-based development is an engineering practice where all developers commit to a single main branch frequently (multiple times per day) rather than maintaining long-lived feature branches, reducing merge conflicts and enabling continuous integration."
+      - "A 2017 GitLab incident where a primary database was accidentally deleted through a misconfigured backup deletion script, causing hours of data loss and recovery work, resulting in improved runbook procedures."
+      - "The RED method specifies three request-level metrics-Rate (requests per second), Errors (failure rate), and Duration (response time distribution)-for microservice monitoring."
+      - "Raw kernel trace events exported in JSON format enable analysis of system call latency, memory allocation patterns, and I/O performance characteristics."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        artifact_type:
+          type: string
+          description: "build / package / image / dataset / model / report"
+        digest:
+          type: string
+          description: "Content hash (e.g. sha256:...)"
+        uri:
+          type: string
+          description: "Locator for the artifact"
+  - name: policy
+    description: "A policy: a rule governing access, retention, classification, or change, enforced across the lifecycle"
+    negative_examples:
+      - "A retention audit cadence discipline schedules quarterly review confirming purge jobs actually delete data past its retention window. Separately, alert rule review periodically audits production alerting rules against a checklist to counter unpruned alert-set bloat."
+      - "A corrective control requires an automated, scheduled job to delete records exceeding their classified data category's retention limit, validated by confirming the purge job's run history and periodic table sampling."
+      - "Error budget policy is an engineering practice where teams track the difference between their SLO and actual uptime, using the remaining budget to decide whether to prioritize new features or stability work."
+      - "IA-5's password enhancements were reshaped by NIST SP 800-63B's 2017 shift away from mandatory rotation toward length-based requirements and breached-password screening."
+      - "ISO 27001's access-control clause requires documented user registration, deregistration, and periodic access-rights review, mirroring NIST 800-53's AC-2 under a different control catalog structure."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - policy_name
+      properties:
+        policy_name:
+          type: string
+        scope:
+          type: string
+          description: "What the policy governs"
+        enforcement:
+          type: string
+          description: "Mechanism that enforces it (policy-as-code, gate, ABAC tag)"
+  - name: provenance
+    description: "A provenance or attestation record binding an artifact to how it was produced (SLSA/in-toto, OpenLineage)"
+    negative_examples:
+      - "A Great Expectations checkpoint emits a validation-result record showing which expectations passed or failed for a run. Separately, OpenLineage's dataset facets snapshot a dataset's schema and row-count at a given run for drift comparison."
+      - "A detective control periodically verifies that an SLI's underlying metric is still receiving data and producing valid values, catching silent instrumentation breakage that would otherwise show as a false perfect SLO."
+      - "An oncall handoff discipline defines how on-call operators transfer responsibility at shift changes, including status briefing on active incidents, escalation contact procedures, and access credential handoff protocols."
+      - "A runbook for addressing TLS certificate expiration incidents includes steps to check certificate expiration dates, renew certificates before expiry, update certificate references in load balancers and services, and verify HTTPS connectivity post-renewal."
+      - "SLSA defines cumulative build-assurance levels motivated by real incidents like SolarWinds, where a compromised build environment defeated code-signing as a standalone integrity guarantee."
+      - "Heartbleed arose because OpenSSL's heartbeat handler trusted a client-supplied length field unvalidated against actual payload size, exposing adjacent heap memory with no server-log trace for over two years."
+    base: semantic
+    traits:
+      - cited
+    schema:
+      required:
+        - subject
+      properties:
+        subject:
+          type: string
+          description: "The artifact or entity the provenance describes"
+        builder:
+          type: string
+          description: "The system/identity that produced it"
+        predicate_type:
+          type: string
+          description: "Attestation predicate (e.g. SLSA provenance, in-toto, OpenLineage run)"
+        materials:
+          type: array
+          description: "Inputs/materials consumed"
+          items:
+            type: string
+# Traits (Mixins) used by the supertypes. Defined here so the layer is self-contained
+# (shared-traits carries a different, domain-neutral set).
+traits:
+  versioned:
+    description: "Adds version tracking fields"
+    fields:
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+.*$"
+      changelog:
+        type: array
+        items:
+          type: object
+  documented:
+    description: "Adds documentation reference"
+    fields:
+      documentation_url:
+        type: string
+        format: uri
+      readme_path:
+        type: string
+  dated:
+    description: "Adds decision/event date"
+    fields:
+      decision_date:
+        type: string
+        format: date
+      review_date:
+        type: string
+        format: date
+  cited:
+    description: "Requires citations/sources"
+    requires:
+      - citations
+
+# Relationships among the shared supertypes. Domain packs may add their own edges
+# referencing these types (gate_m20 resolves endpoints across the whole registry).
+relationships:
+  depends_on:
+    description: "Component dependency relationship"
+    from:
+      - component
+    to:
+      - component
+      - technology
+    symmetric: false
+  implements:
+    description: "Component implements a pattern or decision"
+    from:
+      - component
+    to:
+      - design-pattern
+      - architectural-decision
+    symmetric: false
+  # Cross-cutting universal edges. Domain types participate by referencing these in
+  # their OWN packs (e.g. data-engineering `governed_by` -> control/policy), resolved
+  # across the registry (gate_m20) and the extends chain at concordance time.
+  governs:
+    description: "A control or policy governs a component or artifact"
+    from:
+      - control
+      - policy
+    to:
+      - component
+      - artifact
+    symmetric: false
+  attests:
+    description: "A provenance record attests an artifact"
+    from:
+      - provenance
+    to:
+      - artifact
+    symmetric: false
+  derived_from:
+    description: "Artifact lineage — an artifact is derived from another"
+    from:
+      - artifact
+    to:
+      - artifact
+    symmetric: false
+
+# Discovery — reuses the layer's OWN types so an engineering topic (whose extends chain
+# reaches here) can auto-classify untyped findings to these supertypes.
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(Factory|Singleton|Observer|Repository|Strategy|Decorator)\\s+Pattern\\b"
+      suggest_entity: design-pattern
+      suggest_namespace: _semantic/patterns
+    - content_pattern: "\\b(CQRS|Event\\s+Sourcing|Saga)\\b"
+      suggest_entity: design-pattern
+      suggest_namespace: _semantic/patterns

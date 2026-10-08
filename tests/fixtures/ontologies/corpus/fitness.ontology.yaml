@@ -1,0 +1,275 @@
+---
+# Fitness Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for exercise physiology, physical-activity taxonomy,
+# and wearable-device fitness data. Extends clinical-health-base directly (one
+# hop), which supplies the shared FHIR-Observation-shaped clinical primitive
+# this pack's wearable-data types specialize.
+#
+# Grounded in: ACSM (American College of Sports Medicine) health-related
+# fitness components, the Compendium of Physical Activities' MET-coded
+# taxonomy, and Open mHealth (OMH) device-data schemas. See
+# health-physics-ontology-domains research session, entity-inventory.json
+# (pack=fitness, 12 rows) and finding-fitness-coverage-audit.json (survived:
+# ACSM 5 components, the Compendium's 22 major headings / 1,114 activities,
+# and OMH's schema set all fully bucketed with no residual). Trajectory risk
+# (finding-trajectory-fitness-acsm-active-omh-dormant.json, survived): Open
+# mHealth is in legacy maintenance (last release 2017), explicitly superseded
+# by IEEE 1752.1 per its own README -- the 4 OMH reuse types below inherit
+# this dependency risk.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: fitness
+  version: "0.1.0"
+  description: "Fitness domain ontology: exercise physiology, physical-activity taxonomy, and wearable-device fitness data"
+  extends:
+    - clinical-health-base
+
+namespaces:
+  semantic:
+    children:
+      fitness-components:
+        description: "ACSM health-related fitness components"
+        type_hint: semantic
+  episodic:
+    children:
+      fitness-activity-log:
+        description: "MET-coded physical activity and wearable-device readings"
+        type_hint: episodic
+  procedural:
+    children:
+      fitness-prescription:
+        description: "Structured exercise-prescription protocols"
+        type_hint: procedural
+
+entity_types:
+  - name: cardiorespiratory-fitness
+    description: "Cardiorespiratory endurance assessment"
+    base: semantic
+    traits: [cited, dated, scored]
+    schema:
+      required: [assessment_method]
+      properties:
+        assessment_method: { type: string }
+        vo2_max: { type: number }
+        assessment_date: { type: string, format: date }
+    source_vocab: "ACSM"
+    source_class: "Health-related component: cardiorespiratory endurance"
+    prior_art: "mint -- no MIF equivalent for a fitness-component assessment exists"
+    disposition: mint
+
+  - name: muscular-strength
+    description: "Muscular strength assessment"
+    base: semantic
+    traits: [cited, dated, scored]
+    schema:
+      required: [assessment_method]
+      properties:
+        assessment_method: { type: string }
+        one_rep_max: { type: number }
+        muscle_group: { type: string }
+        assessment_date: { type: string, format: date }
+    source_vocab: "ACSM"
+    source_class: "Health-related component: muscular strength"
+    prior_art: "mint"
+    disposition: mint
+
+  - name: muscular-endurance
+    description: "Muscular endurance assessment"
+    base: semantic
+    traits: [cited, dated, scored]
+    schema:
+      required: [assessment_method]
+      properties:
+        assessment_method: { type: string }
+        repetitions: { type: integer }
+        duration: { type: number }
+        assessment_date: { type: string, format: date }
+    source_vocab: "ACSM"
+    source_class: "Health-related component: muscular endurance"
+    prior_art: "mint"
+    disposition: mint
+
+  - name: flexibility-fitness
+    description: "Flexibility assessment"
+    base: semantic
+    traits: [cited, dated, scored]
+    schema:
+      required: [assessment_method]
+      properties:
+        assessment_method: { type: string }
+        range_of_motion_deg: { type: number }
+        joint: { type: string }
+        assessment_date: { type: string, format: date }
+    source_vocab: "ACSM"
+    source_class: "Health-related component: flexibility"
+    prior_art: "mint"
+    disposition: mint
+
+  - name: body-composition
+    description: "Body composition assessment (a distinct fitness-domain construct even though it shares a name-space with health's clinical body-structure classification)"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [body_fat_pct]
+      properties:
+        body_fat_pct: { type: number }
+        lean_mass: { type: number }
+        assessment_method: { type: string }
+        assessment_date: { type: string, format: date }
+    source_vocab: "ACSM"
+    source_class: "Health-related component: body composition"
+    prior_art: "mint -- note this is a distinct fitness-domain construct even though it shares a name-space with health's clinical body-structure classification"
+    disposition: mint
+
+  - name: exercise-prescription
+    description: "A structured exercise-prescription protocol using the FITT-VP principle"
+    base: procedural
+    traits: [cited, dated, versioned]
+    schema:
+      required: [frequency_per_week, intensity]
+      properties:
+        frequency_per_week: { type: number }
+        intensity: { type: string }
+        duration_min: { type: number }
+        activity_type: { type: string }
+        progression_plan: { type: string }
+    source_vocab: "ACSM Position Stand"
+    source_class: "FITT-VP principle (frequency, intensity, time/duration, type/mode, volume, progression)"
+    prior_art: "mint -- no MIF equivalent for a structured exercise-prescription protocol exists (distinct from scientific.ontology.yaml's generic protocol-application, which lacks the FITT-VP-specific field shape)"
+    disposition: mint
+
+  - name: physical-activity
+    description: "A MET-coded physical-activity taxonomy entry"
+    base: episodic
+    traits: [cited, dated, categorized, measured]
+    schema:
+      required: [compendium_code, activity_name]
+      properties:
+        compendium_code: { type: string }
+        major_heading: { type: string }
+        activity_name: { type: string }
+        met_value: { type: number }
+    source_vocab: "Compendium of Physical Activities"
+    source_class: "2024 Adult Compendium -- 22 Major Headings, 5-digit MET-coded activity entries (1,114 total PAs)"
+    prior_art: "mint -- no MIF equivalent for a MET-coded physical-activity taxonomy entry exists"
+    disposition: mint
+
+  - name: met-value
+    description: "A metabolic-equivalent-of-task energy-expenditure measurement"
+    base: semantic
+    traits: [cited, dated, measured]
+    schema:
+      required: [variable, value]
+      properties:
+        value: { type: number, description: "Renamed from met_value to match research.ontology.yaml's observation field name directly" }
+        measurement_type: { type: string }
+        source_study_count: { type: integer }
+        variable: { type: string, description: "The measured variable's name (i.e. 'MET value'); no prior equivalent field existed on met-value" }
+    source_vocab: "Compendium of Physical Activities"
+    source_class: "MET (metabolic equivalent of task) value field"
+    prior_art: "extend research.ontology.yaml `observation` (\"A measured or observed datum produced by a procedure\") -- a MET value is a specialized energy-expenditure measurement datum; entity-inventory.json originally cited scientific.ontology.yaml `measurement`, which is unreachable once fitness extends clinical-health-base instead of scientific directly -- research's observation is the reachable, ADR-0003-intended generic equivalent"
+    disposition: extend
+    subtype_of: [observation]
+
+  - name: omh-step-count
+    description: "A wearable-device step-count reading"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, code, value]
+      properties:
+        value: { type: integer, description: "Renamed from step_count to match clinical-observation's field name directly" }
+        effective_time_frame: { type: string }
+        observation_id: { type: string, description: "Record identifier for this reading (no prior equivalent field existed)" }
+        code: { type: string, description: "The Open mHealth schema identifier: omh:step-count" }
+    source_vocab: "Open mHealth"
+    source_class: "omh:step-count schema"
+    prior_art: "reuse -- direct clone of the named omh:step-count schema; subtypes clinical-health-base's clinical-observation per finding-intermediary-layering-spec.json (Open mHealth's schema design deliberately mirrors FHIR Observation's unit-value-time shape)"
+    disposition: reuse
+    subtype_of: [clinical-observation]
+
+  - name: omh-heart-rate
+    description: "A wearable-device heart-rate reading"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, code, value]
+      properties:
+        value: { type: number, description: "Renamed from heart_rate_bpm to match clinical-observation's field name directly" }
+        temporal_relationship_to_physical_activity: { type: string }
+        effective_time_frame: { type: string }
+        observation_id: { type: string, description: "Record identifier for this reading (no prior equivalent field existed)" }
+        code: { type: string, description: "The Open mHealth schema identifier: omh:heart-rate" }
+    source_vocab: "Open mHealth"
+    source_class: "omh:heart-rate schema"
+    prior_art: "reuse -- direct clone of the named omh:heart-rate schema; subtypes clinical-health-base's clinical-observation"
+    disposition: reuse
+    subtype_of: [clinical-observation]
+
+  - name: omh-calories-burned
+    description: "A wearable-device calories-burned reading"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, code, value]
+      properties:
+        value: { type: number, description: "Renamed from kcal_value to match clinical-observation's field name directly" }
+        effective_time_interval: { type: string }
+        observation_id: { type: string, description: "Record identifier for this reading (no prior equivalent field existed)" }
+        code: { type: string, description: "The Open mHealth schema identifier: omh:calories_burned:2.0" }
+    source_vocab: "Open mHealth"
+    source_class: "omh:calories_burned:2.0 schema"
+    prior_art: "reuse -- direct clone of the named omh:calories_burned:2.0 schema; subtypes clinical-health-base's clinical-observation"
+    disposition: reuse
+    subtype_of: [clinical-observation]
+
+  - name: omh-body-weight
+    description: "A wearable-device body-weight reading"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, code, value]
+      properties:
+        value: { type: number, description: "Renamed from weight_value to match clinical-observation's field name directly" }
+        unit: { type: string }
+        observation_id: { type: string, description: "Record identifier for this reading (no prior equivalent field existed)" }
+        code: { type: string, description: "The Open mHealth schema identifier: omh:body-weight" }
+        effective_time_frame: { type: string }
+    source_vocab: "Open mHealth"
+    source_class: "omh:body-weight schema"
+    prior_art: "reuse -- direct clone of the named omh:body-weight schema; subtypes clinical-health-base's clinical-observation"
+    disposition: reuse
+    subtype_of: [clinical-observation]
+
+relationships:
+  occurs_within:
+    description: "A clinical activity occurs within a clinical encounter (finding-intermediary-layering-spec.json)"
+    from:
+      - exercise-prescription
+    to:
+      - clinical-encounter
+    symmetric: false
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(cardiorespiratory endurance|VO2 max|aerobic fitness)\\b"
+      suggest_entity: cardiorespiratory-fitness
+      suggest_namespace: _semantic/fitness-components
+    - content_pattern: "\\b(FITT|FITT-VP|exercise prescription|frequency intensity time type)\\b"
+      suggest_entity: exercise-prescription
+      suggest_namespace: _procedural/fitness-prescription
+    - content_pattern: "\\b(MET value|metabolic equivalent|Compendium of Physical Activities)\\b"
+      suggest_entity: physical-activity
+      suggest_namespace: _episodic/fitness-activity-log
+    - content_pattern: "\\b(step count|steps walked|pedometer)\\b"
+      suggest_entity: omh-step-count
+      suggest_namespace: _episodic/fitness-activity-log
+    - content_pattern: "\\b(heart rate monitor|resting heart rate|exercise heart rate)\\b"
+      suggest_entity: omh-heart-rate
+      suggest_namespace: _episodic/fitness-activity-log

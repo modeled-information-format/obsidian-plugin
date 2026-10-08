@@ -9,6 +9,15 @@ export interface NewConceptInput {
   title: string;
   namespace: string;
   folder: string;
+  ontology?: string;
+  entityType?: string;
+}
+
+/** What the dialog can suggest from loaded ontologies. */
+export interface OntologyHints {
+  ontologies: string[];
+  namespaces(ontology: string | undefined, type: BaseType): string[];
+  entityTypes(ontology: string, type: BaseType): string[];
 }
 
 const TYPE_HELP: Record<BaseType, string> = {
@@ -19,8 +28,15 @@ const TYPE_HELP: Record<BaseType, string> = {
 
 export class NewConceptModal extends Modal {
   private input: NewConceptInput;
+  /** Recomputes namespace and entity-type suggestions (type or ontology changed). */
+  private refreshHints?: () => void;
 
-  constructor(app: App, private readonly root: string, private readonly onSubmit: (input: NewConceptInput) => Promise<void>) {
+  constructor(
+    app: App,
+    private readonly root: string,
+    private readonly onSubmit: (input: NewConceptInput) => Promise<void>,
+    private readonly hints?: OntologyHints,
+  ) {
     super(app);
     this.input = { type: "semantic", title: "", namespace: "", folder: this.defaultFolder("semantic") };
   }
@@ -37,6 +53,7 @@ export class NewConceptModal extends Modal {
       d.setValue(this.input.type).onChange((v) => {
         const wasDefault = this.input.folder === this.defaultFolder(this.input.type);
         this.input.type = v as BaseType;
+        this.refreshHints?.();
         if (wasDefault) {
           this.input.folder = this.defaultFolder(this.input.type);
           folderText?.setValue(this.input.folder);
@@ -50,10 +67,49 @@ export class NewConceptModal extends Modal {
         if (e.key === "Enter") void this.submit();
       });
     });
+    // Suggestions come from a <datalist> refreshed when type or ontology changes.
+    const nsList = this.contentEl.createEl("datalist", { attr: { id: "mif-ns-suggestions" } });
+    let typeSelect: { selectEl: HTMLSelectElement } | undefined;
+    const refresh = () => {
+      nsList.empty();
+      for (const n of this.hints?.namespaces(this.input.ontology, this.input.type) ?? []) nsList.createEl("option", { value: n });
+      if (typeSelect) {
+        const sel = typeSelect.selectEl;
+        sel.empty();
+        sel.createEl("option", { value: "", text: "None" });
+        for (const t of this.input.ontology ? (this.hints?.entityTypes(this.input.ontology, this.input.type) ?? []) : []) sel.createEl("option", { value: t, text: t });
+        this.input.entityType = undefined;
+      }
+    };
+    if (this.hints?.ontologies.length) {
+      new Setting(this.contentEl)
+        .setName("Ontology")
+        .setDesc("Optional. Declares the ontology this concept follows.")
+        .addDropdown((d) => {
+          d.addOption("", "None");
+          for (const o of this.hints!.ontologies) d.addOption(o, o);
+          d.onChange((v) => {
+            this.input.ontology = v || undefined;
+            refresh();
+          });
+        });
+      new Setting(this.contentEl)
+        .setName("Entity type")
+        .setDesc("Optional. Types this concept as one of the ontology's entity types.")
+        .addDropdown((d) => {
+          typeSelect = d;
+          d.onChange((v) => (this.input.entityType = v || undefined));
+        });
+    }
     new Setting(this.contentEl)
       .setName("Namespace")
       .setDesc("Optional. Setting one also adds modified and temporal, giving a Level 2 concept.")
-      .addText((t) => t.setPlaceholder("_semantic/policies").onChange((v) => (this.input.namespace = v.trim())));
+      .addText((t) => {
+        t.setPlaceholder("_semantic/policies").onChange((v) => (this.input.namespace = v.trim()));
+        t.inputEl.setAttr("list", "mif-ns-suggestions");
+      });
+    this.refreshHints = refresh;
+    refresh();
     new Setting(this.contentEl).setName("Folder").addText((t) => {
       folderText = t;
       t.setValue(this.input.folder).onChange((v) => (this.input.folder = v.trim().replace(/^\/+|\/+$/g, "")));

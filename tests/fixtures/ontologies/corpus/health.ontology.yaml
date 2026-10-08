@@ -1,0 +1,283 @@
+---
+# Health Ontology (Tier 2 leaf pack)
+#
+# A MIF domain ontology for general clinical-record data (HL7 FHIR core
+# resources) and functioning classification (WHO ICF). Extends
+# clinical-health-base directly (one hop), which supplies the shared
+# FHIR-shaped and ICD-11-shaped clinical primitives this pack's own types
+# specialize.
+#
+# Grounded in: HL7 FHIR R5 core resources, WHO ICD-11 (general classification
+# shape), WHO ICF (functioning/disability/health classification). See
+# health-physics-ontology-domains research session, entity-inventory.json
+# (pack=health, 13 rows) and finding-health-coverage-audit.json (survived:
+# 2 ICD-11 classes + 4 ICF components + 7 FHIR resources mapped; ICF's
+# "Personal Factors" component explicitly excluded since the standard itself
+# declines to classify or code it).
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: health
+  version: "0.1.0"
+  description: "Health domain ontology: general clinical-record data (HL7 FHIR core resources) and functioning classification (WHO ICF)"
+  extends:
+    - clinical-health-base
+
+namespaces:
+  semantic:
+    children:
+      health-classification:
+        description: "ICD-11 diagnosis classification"
+        type_hint: semantic
+      health-functioning:
+        description: "ICF functioning, disability, and health classification"
+        type_hint: semantic
+  episodic:
+    children:
+      health-clinical-record:
+        description: "FHIR-shaped clinical record data"
+        type_hint: episodic
+
+entity_types:
+  - name: patient
+    description: "The subject of a health record"
+    base: semantic
+    traits: [cited, dated, versioned]
+    schema:
+      required: [patient_id]
+      properties:
+        patient_id: { type: string }
+        name: { type: string }
+        birth_date: { type: string, format: date }
+        gender: { type: string }
+        identifiers: { type: array, items: { type: string } }
+    source_vocab: "HL7 FHIR"
+    source_class: "Patient resource (R5, Normative since v4.0.0)"
+    prior_art: "reuse -- direct clone of FHIR's normative Patient resource; also subtypes clinical-health-base's clinical-record-subject"
+    disposition: reuse
+    subtype_of: [clinical-record-subject]
+
+  - name: condition
+    description: "A clinical condition, problem, diagnosis, or other event"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [condition_id, code]
+      properties:
+        condition_id: { type: string }
+        code: { type: string }
+        clinical_status: { type: string }
+        onset_date: { type: string, format: date }
+        subject_ref: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "Condition resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's Condition resource"
+    disposition: reuse
+
+  - name: fhir-observation
+    description: "A measured or asserted clinical datum. Named fhir-observation, not observation: research.ontology.yaml (an ancestor of this ontology via clinical-health-base) already defines its own, incompatible observation entity type, and the JSON-LD projection uses global ids (mif:entityType/<name>) that would collide"
+    base: episodic
+    traits: [cited, dated, measured]
+    schema:
+      required: [observation_id, code, value]
+      properties:
+        observation_id: { type: string }
+        code: { type: string }
+        value: { type: string }
+        unit: { type: string }
+        effective_time: { type: string, format: date-time }
+        subject_ref: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "Observation resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's Observation resource; also subtypes clinical-health-base's clinical-observation (the same shape cardiology's echocardiography-study/ecg-finding and fitness's four Open mHealth types extend from)"
+    disposition: reuse
+    subtype_of: [clinical-observation]
+
+  - name: encounter
+    description: "An interaction between a patient and healthcare provider(s)"
+    base: episodic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [encounter_id, status]
+      properties:
+        encounter_id: { type: string }
+        status: { type: string }
+        class: { type: string }
+        period: { type: string }
+        subject_ref: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "Encounter resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's Encounter resource; also subtypes clinical-health-base's clinical-encounter"
+    disposition: reuse
+    subtype_of: [clinical-encounter]
+
+  - name: procedure
+    description: "An action performed on or for a patient"
+    base: episodic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [procedure_id, code]
+      properties:
+        procedure_id: { type: string }
+        code: { type: string }
+        status: { type: string }
+        performed_date: { type: string, format: date }
+        subject_ref: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "Procedure resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's Procedure resource"
+    disposition: reuse
+
+  - name: allergy-intolerance
+    description: "An allergy or intolerance record"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [allergy_id, substance]
+      properties:
+        allergy_id: { type: string }
+        substance: { type: string }
+        criticality: { type: string }
+        reaction: { type: string }
+        subject_ref: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "AllergyIntolerance resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's AllergyIntolerance resource"
+    disposition: reuse
+
+  - name: diagnostic-report
+    description: "A report of diagnostic results"
+    base: episodic
+    traits: [cited, dated, documented]
+    schema:
+      required: [report_id, status]
+      properties:
+        report_id: { type: string }
+        status: { type: string }
+        code: { type: string }
+        result_refs: { type: array, items: { type: string } }
+        conclusion: { type: string }
+    source_vocab: "HL7 FHIR"
+    source_class: "DiagnosticReport resource (R5)"
+    prior_art: "reuse -- direct clone of FHIR's DiagnosticReport resource; the same resource family cardiology's echocardiography-study and cardiac-catheterization-study instantiate as specialty reports"
+    disposition: reuse
+
+  - name: clinical-diagnosis
+    description: "The general ICD-11 stem-code / Foundation category diagnosis shape"
+    base: semantic
+    traits: [cited, dated, versioned, categorized]
+    schema:
+      required: [stem_code, title]
+      properties:
+        stem_code: { type: string }
+        title: { type: string }
+        chapter: { type: string }
+        foundation_uri: { type: string, format: uri }
+    source_vocab: "WHO ICD-11"
+    source_class: "ICD-11-MMS stem code / Foundation category"
+    prior_art: "mint -- the general ICD-11 stem-code shape, of which cardiology's 13 circulatory-chapter types are chapter-specific instances; promoted alongside clinical-health-base's diagnostic-classification-entry, which this type subtypes"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: diagnosis-extension-qualifier
+    description: "An ICD-11 extension or cluster code qualifying a diagnosis stem code"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [extension_code, stem_code, title]
+      properties:
+        extension_code: { type: string }
+        stem_code: { type: string, description: "Renamed from qualifies_stem to match diagnostic-classification-entry's field name directly: the stem code this qualifier attaches to" }
+        dimension_type: { type: string }
+        title: { type: string, description: "A human-readable label for this specific qualifier (e.g. 'Severe'), distinct from dimension_type (which axis it qualifies: severity, temporality, etiology, etc.)" }
+    source_vocab: "WHO ICD-11"
+    source_class: "ICD-11-MMS extension codes (severity, temporality, etiology, anatomy, histopathology, causality)"
+    prior_art: "mint -- no MIF equivalent for a diagnosis-qualifying extension/cluster code exists; subtypes clinical-health-base's diagnostic-classification-entry per finding-intermediary-layering-spec.json"
+    disposition: mint
+    subtype_of: [diagnostic-classification-entry]
+
+  - name: body-function
+    description: "A physiological body function classification"
+    base: semantic
+    traits: [cited, dated, categorized, scored]
+    schema:
+      required: [chapter_code, title]
+      properties:
+        chapter_code: { type: string }
+        title: { type: string }
+        impairment_qualifier: { type: string }
+    source_vocab: "WHO ICF"
+    source_class: "b1-b8 Body Functions chapters"
+    prior_art: "mint -- no MIF equivalent for ICF's physiological-function classification exists"
+    disposition: mint
+
+  - name: body-structure
+    description: "An anatomical body structure classification"
+    base: semantic
+    traits: [cited, dated, categorized, scored]
+    schema:
+      required: [chapter_code, title]
+      properties:
+        chapter_code: { type: string }
+        title: { type: string }
+        impairment_qualifier: { type: string }
+    source_vocab: "WHO ICF"
+    source_class: "s1-s8 Body Structures chapters"
+    prior_art: "mint -- no MIF equivalent for ICF's anatomical-structure classification exists"
+    disposition: mint
+
+  - name: activity-participation-domain
+    description: "A functioning/participation classification domain"
+    base: semantic
+    traits: [cited, dated, categorized, scored]
+    schema:
+      required: [domain_code, title]
+      properties:
+        domain_code: { type: string }
+        title: { type: string }
+        performance_qualifier: { type: string }
+        capacity_qualifier: { type: string }
+    source_vocab: "WHO ICF"
+    source_class: "d1-d9 Activities and Participation domains"
+    prior_art: "mint -- no MIF equivalent for ICF's functioning/participation classification exists"
+    disposition: mint
+
+  - name: environmental-factor
+    description: "An environmental-context classification factor"
+    base: semantic
+    traits: [cited, dated, categorized]
+    schema:
+      required: [chapter_code, title]
+      properties:
+        chapter_code: { type: string }
+        title: { type: string }
+        barrier_or_facilitator_qualifier: { type: string }
+    source_vocab: "WHO ICF"
+    source_class: "e1-e5 Environmental Factors chapters"
+    prior_art: "mint -- no MIF equivalent for ICF's environmental-context classification exists"
+    disposition: mint
+
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(ICD-11|diagnosis code|diagnostic classification)\\b"
+      suggest_entity: clinical-diagnosis
+      suggest_namespace: _semantic/health-classification
+    - content_pattern: "\\b(body function|ICF b[1-8]|impairment of function)\\b"
+      suggest_entity: body-function
+      suggest_namespace: _semantic/health-functioning
+    - content_pattern: "\\b(activities of daily living|ICF d[1-9]|participation restriction)\\b"
+      suggest_entity: activity-participation-domain
+      suggest_namespace: _semantic/health-functioning
+    - content_pattern: "\\b(FHIR Patient|patient record|demographics)\\b"
+      suggest_entity: patient
+      suggest_namespace: _episodic/health-clinical-record
+    - content_pattern: "\\b(FHIR Observation|vital sign|lab result|clinical measurement)\\b"
+      suggest_entity: fhir-observation
+      suggest_namespace: _episodic/health-clinical-record
+    - content_pattern: "\\b(clinical encounter|inpatient admission|outpatient visit)\\b"
+      suggest_entity: encounter
+      suggest_namespace: _episodic/health-clinical-record

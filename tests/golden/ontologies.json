@@ -1,0 +1,1755 @@
+{
+  "namespaces": {
+    "agriculture": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/farm": {
+        "type_hint": "semantic",
+        "description": "Farm operations, land, and resources",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/records": {
+        "type_hint": "episodic",
+        "description": "Farm episodic records — harvest and climate events",
+        "replaces": null
+      }
+    },
+    "biology-research-lab": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/personnel": {
+        "type_hint": "semantic",
+        "description": "PIs, researchers, staff, students",
+        "replaces": null
+      },
+      "semantic/collaborations": {
+        "type_hint": "semantic",
+        "description": "External collaborators, consortia",
+        "replaces": null
+      },
+      "semantic/grants": {
+        "type_hint": "semantic",
+        "description": "Grants, awards, funding sources",
+        "replaces": null
+      },
+      "semantic/budgets": {
+        "type_hint": "semantic",
+        "description": "Budget allocations, expenditures",
+        "replaces": null
+      },
+      "semantic/projects": {
+        "type_hint": "semantic",
+        "description": "Research projects and aims",
+        "replaces": null
+      },
+      "semantic/protocols": {
+        "type_hint": "semantic",
+        "description": "Experimental protocols, methods",
+        "replaces": null
+      },
+      "semantic/samples": {
+        "type_hint": "semantic",
+        "description": "Biological samples, specimens",
+        "replaces": null
+      },
+      "semantic/equipment": {
+        "type_hint": "semantic",
+        "description": "Lab equipment, instruments",
+        "replaces": null
+      },
+      "semantic/reagents": {
+        "type_hint": "semantic",
+        "description": "Reagents, consumables, inventory",
+        "replaces": null
+      },
+      "semantic/datasets": {
+        "type_hint": "semantic",
+        "description": "Research data, repositories",
+        "replaces": null
+      },
+      "semantic/publications": {
+        "type_hint": "semantic",
+        "description": "Papers, preprints, patents",
+        "replaces": null
+      },
+      "semantic/compliance": {
+        "type_hint": "semantic",
+        "description": "IRB, IACUC, IBC protocols",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/experiments": {
+        "type_hint": "episodic",
+        "description": "Experiment runs, data collection",
+        "replaces": null
+      },
+      "episodic/grant-events": {
+        "type_hint": "episodic",
+        "description": "Submissions, reviews, renewals",
+        "replaces": null
+      },
+      "episodic/pub-events": {
+        "type_hint": "episodic",
+        "description": "Submissions, peer reviews",
+        "replaces": null
+      },
+      "episodic/training": {
+        "type_hint": "episodic",
+        "description": "Training completions, certifications",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/lab-protocols": {
+        "type_hint": "procedural",
+        "description": "SOPs, experimental procedures",
+        "replaces": null
+      },
+      "procedural/grant-procedures": {
+        "type_hint": "procedural",
+        "description": "Proposal preparation, reporting",
+        "replaces": null
+      },
+      "procedural/safety": {
+        "type_hint": "procedural",
+        "description": "Safety procedures, EHS protocols",
+        "replaces": null
+      }
+    },
+    "cardiology": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/cardiology-disorders": {
+        "type_hint": "semantic",
+        "description": "Circulatory disease classification (ICD-11 Chapter 11)",
+        "replaces": null
+      },
+      "semantic/cardiology-functional-status": {
+        "type_hint": "semantic",
+        "description": "Cardiac functional-status classification scales",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/cardiology-studies": {
+        "type_hint": "episodic",
+        "description": "Structured cardiac diagnostic studies and clinical events",
+        "replaces": null
+      }
+    },
+    "clinical-health-base": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/clinical-records": {
+        "type_hint": "semantic",
+        "description": "Clinical record subjects and diagnostic classification shapes",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/clinical-events": {
+        "type_hint": "episodic",
+        "description": "Clinical encounters and observations",
+        "replaces": null
+      }
+    },
+    "cosmology": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/cosmology-objects": {
+        "type_hint": "semantic",
+        "description": "Astronomical object and data-product classification (IVOA)",
+        "replaces": null
+      },
+      "semantic/cosmology-theory": {
+        "type_hint": "semantic",
+        "description": "Cosmological theory and process models",
+        "replaces": null
+      },
+      "semantic/cosmology-parameters": {
+        "type_hint": "semantic",
+        "description": "Observational cosmology parameters",
+        "replaces": null
+      },
+      "semantic/cosmology-structure": {
+        "type_hint": "semantic",
+        "description": "Large-scale structure and galaxy evolution classification",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/cosmology-observations": {
+        "type_hint": "episodic",
+        "description": "Background-radiation and other cosmological observations",
+        "replaces": null
+      }
+    },
+    "data-engineering": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/contracts": {
+        "type_hint": "semantic",
+        "description": "Data contracts and product interface agreements",
+        "replaces": null
+      },
+      "semantic/governance": {
+        "type_hint": "semantic",
+        "description": "Governance policies, controls, and stewardship",
+        "replaces": null
+      },
+      "semantic/storage": {
+        "type_hint": "semantic",
+        "description": "Storage and scaling architectures",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/pipelines": {
+        "type_hint": "procedural",
+        "description": "Pipeline and data-movement patterns",
+        "replaces": null
+      }
+    },
+    "engineering-base": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/architecture": {
+        "type_hint": "semantic",
+        "description": "System architecture and component designs",
+        "replaces": null
+      },
+      "semantic/patterns": {
+        "type_hint": "semantic",
+        "description": "Design and architectural patterns",
+        "replaces": null
+      }
+    },
+    "fitness": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/fitness-components": {
+        "type_hint": "semantic",
+        "description": "ACSM health-related fitness components",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/fitness-activity-log": {
+        "type_hint": "episodic",
+        "description": "MET-coded physical activity and wearable-device readings",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/fitness-prescription": {
+        "type_hint": "procedural",
+        "description": "Structured exercise-prescription protocols",
+        "replaces": null
+      }
+    },
+    "health": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/health-classification": {
+        "type_hint": "semantic",
+        "description": "ICD-11 diagnosis classification",
+        "replaces": null
+      },
+      "semantic/health-functioning": {
+        "type_hint": "semantic",
+        "description": "ICF functioning, disability, and health classification",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/health-clinical-record": {
+        "type_hint": "episodic",
+        "description": "FHIR-shaped clinical record data",
+        "replaces": null
+      }
+    },
+    "heliophysics": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/heliophysics-phenomena": {
+        "type_hint": "semantic",
+        "description": "Heliophysical/solar-terrestrial phenomenon classification (PACS 91.25, 96.50, 96.60)",
+        "replaces": null
+      },
+      "semantic/heliophysics-quantities": {
+        "type_hint": "semantic",
+        "description": "Named heliophysics/space-weather physical quantities",
+        "replaces": null
+      },
+      "semantic/heliophysics-observations": {
+        "type_hint": "semantic",
+        "description": "Observed or forecast heliophysics data (e.g. aurora sightings)",
+        "replaces": null
+      },
+      "semantic/heliophysics-alerts": {
+        "type_hint": "semantic",
+        "description": "NOAA space-weather severity-scale alert levels",
+        "replaces": null
+      },
+      "semantic/heliophysics-devices": {
+        "type_hint": "semantic",
+        "description": "Space-weather monitoring platforms and instruments",
+        "replaces": null
+      }
+    },
+    "market-research": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/market": {
+        "type_hint": "semantic",
+        "description": "Segments, competitors, brands, personas, sizing, forces, demand, data sources",
+        "replaces": null
+      },
+      "semantic/reports": {
+        "type_hint": "semantic",
+        "description": "Market-intelligence reports and analyses",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/research": {
+        "type_hint": "procedural",
+        "description": "Survey instruments and research plan specifications",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/research": {
+        "type_hint": "episodic",
+        "description": "Win-loss analyses and research episodes",
+        "replaces": null
+      }
+    },
+    "mif-base": {
+      "_semantic": {
+        "type_hint": "semantic",
+        "description": "Facts, concepts, relationships - declarative knowledge",
+        "replaces": null
+      },
+      "_semantic/decisions": {
+        "type_hint": "semantic",
+        "description": "Architectural choices with rationale",
+        "replaces": null
+      },
+      "_semantic/knowledge": {
+        "type_hint": "semantic",
+        "description": "APIs, context, learnings, security - factual knowledge",
+        "replaces": null
+      },
+      "_semantic/entities": {
+        "type_hint": "semantic",
+        "description": "Entity definitions - technologies, components, systems",
+        "replaces": null
+      },
+      "_semantic/preferences": {
+        "type_hint": "semantic",
+        "description": "User preferences, settings, configuration choices",
+        "replaces": null
+      },
+      "_episodic": {
+        "type_hint": "episodic",
+        "description": "Events, experiences, timelines - time-bound records",
+        "replaces": null
+      },
+      "_episodic/incidents": {
+        "type_hint": "episodic",
+        "description": "Production issues, outages, postmortems",
+        "replaces": null
+      },
+      "_episodic/sessions": {
+        "type_hint": "episodic",
+        "description": "Debug sessions, work sessions, meeting notes",
+        "replaces": null
+      },
+      "_episodic/blockers": {
+        "type_hint": "episodic",
+        "description": "Impediments, issues preventing progress",
+        "replaces": null
+      },
+      "_procedural": {
+        "type_hint": "procedural",
+        "description": "Step-by-step processes - how-to knowledge",
+        "replaces": null
+      },
+      "_procedural/runbooks": {
+        "type_hint": "procedural",
+        "description": "Operational procedures, SOPs, playbooks",
+        "replaces": null
+      },
+      "_procedural/patterns": {
+        "type_hint": "procedural",
+        "description": "Code conventions, best practices, testing strategies",
+        "replaces": null
+      },
+      "_procedural/migrations": {
+        "type_hint": "procedural",
+        "description": "Migration steps, upgrade procedures, data transformations",
+        "replaces": null
+      }
+    },
+    "mif-docs": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/decisions": {
+        "type_hint": "semantic",
+        "description": "Architectural decision records",
+        "replaces": null
+      },
+      "semantic/architecture": {
+        "type_hint": "semantic",
+        "description": "Architecture narratives, diagrams, and specs",
+        "replaces": null
+      },
+      "semantic/specs": {
+        "type_hint": "semantic",
+        "description": "Requirements, feature specs, proposals",
+        "replaces": null
+      },
+      "semantic/reference": {
+        "type_hint": "semantic",
+        "description": "Information-oriented reference material",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/operations": {
+        "type_hint": "procedural",
+        "description": "Runbooks, playbooks, task plans",
+        "replaces": null
+      },
+      "procedural/learning": {
+        "type_hint": "procedural",
+        "description": "Tutorials and how-to guides",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/history": {
+        "type_hint": "episodic",
+        "description": "Changelogs and time-ordered records",
+        "replaces": null
+      }
+    },
+    "mif-generic": {},
+    "non-ionizing-radiation": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/emf-sources": {
+        "type_hint": "semantic",
+        "description": "Electrical and wireless EMF exposure-source apparatus",
+        "replaces": null
+      },
+      "semantic/emf-quantities": {
+        "type_hint": "semantic",
+        "description": "Named power-frequency and RF field-exposure physical quantities",
+        "replaces": null
+      },
+      "semantic/emf-limits": {
+        "type_hint": "semantic",
+        "description": "Regulatory/guideline EMF exposure limits and carcinogenicity classifications",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/emf-health-findings": {
+        "type_hint": "episodic",
+        "description": "Clinical/epidemiological findings on EMF exposure and health outcomes",
+        "replaces": null
+      }
+    },
+    "observability": {
+      "_semantic": {
+        "type_hint": "semantic",
+        "description": "Facts, concepts, comparisons",
+        "replaces": null
+      },
+      "_semantic/services": {
+        "type_hint": "semantic",
+        "description": "Observability services and the signals/registries they provide",
+        "replaces": null
+      },
+      "_semantic/analysis": {
+        "type_hint": "semantic",
+        "description": "Capability comparisons and market positioning",
+        "replaces": null
+      },
+      "_episodic": {
+        "type_hint": "episodic",
+        "description": "Time-stamped product and roadmap signals",
+        "replaces": null
+      },
+      "_episodic/roadmap": {
+        "type_hint": "episodic",
+        "description": "GA dates, launches, deprecations, predictions",
+        "replaces": null
+      },
+      "_procedural": {
+        "type_hint": "procedural",
+        "description": "Migration approaches and patterns",
+        "replaces": null
+      },
+      "_procedural/migrations": {
+        "type_hint": "procedural",
+        "description": "Datadog-to-AWS-native migration patterns and case studies",
+        "replaces": null
+      }
+    },
+    "physical-science-base": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/physical-science": {
+        "type_hint": "semantic",
+        "description": "Physics/astrophysics classification and quantity shapes",
+        "replaces": null
+      }
+    },
+    "plasma-physics": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/plasma-phenomena": {
+        "type_hint": "semantic",
+        "description": "Plasma physical phenomena classification (PACS 52.xx)",
+        "replaces": null
+      },
+      "semantic/plasma-devices": {
+        "type_hint": "semantic",
+        "description": "Plasma confinement and generation apparatus",
+        "replaces": null
+      },
+      "semantic/plasma-parameters": {
+        "type_hint": "semantic",
+        "description": "Fundamental plasma physical quantities",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/plasma-diagnostics": {
+        "type_hint": "procedural",
+        "description": "Plasma diagnostic and simulation techniques",
+        "replaces": null
+      }
+    },
+    "platform-engineering": {
+      "_semantic": {
+        "type_hint": "semantic",
+        "description": "Portals, their extensions, and the paths they pave",
+        "replaces": null
+      },
+      "_semantic/portals": {
+        "type_hint": "semantic",
+        "description": "Internal developer portals and the plugins that extend them",
+        "replaces": null
+      },
+      "_semantic/integrations": {
+        "type_hint": "semantic",
+        "description": "Typed bindings from a portal to external systems",
+        "replaces": null
+      },
+      "_semantic/paths": {
+        "type_hint": "semantic",
+        "description": "Software templates and golden paths",
+        "replaces": null
+      }
+    },
+    "psycholinguistics": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/constructs": {
+        "type_hint": "semantic",
+        "description": "Psycholinguistic and psychological constructs",
+        "replaces": null
+      },
+      "semantic/features": {
+        "type_hint": "semantic",
+        "description": "Stylometric and linguistic features extracted from text",
+        "replaces": null
+      },
+      "semantic/indices": {
+        "type_hint": "semantic",
+        "description": "Psychometric indices and derived scores",
+        "replaces": null
+      },
+      "semantic/instruments": {
+        "type_hint": "semantic",
+        "description": "Research instruments, tools, and platforms",
+        "replaces": null
+      },
+      "semantic/frameworks": {
+        "type_hint": "semantic",
+        "description": "Linguistic and psycholinguistic frameworks",
+        "replaces": null
+      },
+      "semantic/protocols": {
+        "type_hint": "semantic",
+        "description": "Elicitation and interview protocols",
+        "replaces": null
+      }
+    },
+    "regenerative-agriculture-research": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/husbandry": {
+        "type_hint": "semantic",
+        "description": "Animal husbandry and livestock care knowledge",
+        "replaces": null
+      },
+      "semantic/agronomy": {
+        "type_hint": "semantic",
+        "description": "Grazing, soil, crop, and pasture practices",
+        "replaces": null
+      },
+      "semantic/infrastructure": {
+        "type_hint": "semantic",
+        "description": "Farm infrastructure: fencing, irrigation, IoT, networks",
+        "replaces": null
+      },
+      "semantic/funding": {
+        "type_hint": "semantic",
+        "description": "Grants, cost-share, and funding programs",
+        "replaces": null
+      }
+    },
+    "regenerative-agriculture": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/land": {
+        "type_hint": "semantic",
+        "description": "Land parcels, fields, soil profiles",
+        "replaces": null
+      },
+      "semantic/livestock": {
+        "type_hint": "semantic",
+        "description": "Animals, herds, breeding records",
+        "replaces": null
+      },
+      "semantic/crops": {
+        "type_hint": "semantic",
+        "description": "Crops, varieties, rotations",
+        "replaces": null
+      },
+      "semantic/equipment": {
+        "type_hint": "semantic",
+        "description": "Machinery, tools, infrastructure",
+        "replaces": null
+      },
+      "semantic/inputs": {
+        "type_hint": "semantic",
+        "description": "Seeds, amendments, biological inputs",
+        "replaces": null
+      },
+      "semantic/supply-chain": {
+        "type_hint": "semantic",
+        "description": "Buyers, processors, distributors",
+        "replaces": null
+      },
+      "semantic/markets": {
+        "type_hint": "semantic",
+        "description": "Market channels, pricing, contracts",
+        "replaces": null
+      },
+      "semantic/certifications": {
+        "type_hint": "semantic",
+        "description": "Organic, ROC, and other certifications",
+        "replaces": null
+      },
+      "semantic/carbon": {
+        "type_hint": "semantic",
+        "description": "Carbon credits, soil carbon measurements",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/seasons": {
+        "type_hint": "episodic",
+        "description": "Growing seasons, planting/harvest cycles",
+        "replaces": null
+      },
+      "episodic/weather": {
+        "type_hint": "episodic",
+        "description": "Weather events, climate impacts",
+        "replaces": null
+      },
+      "episodic/inspections": {
+        "type_hint": "episodic",
+        "description": "Audits, inspections, certifications",
+        "replaces": null
+      },
+      "episodic/transactions": {
+        "type_hint": "episodic",
+        "description": "Sales, purchases, market events",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/soil-health": {
+        "type_hint": "procedural",
+        "description": "Soil management protocols",
+        "replaces": null
+      },
+      "procedural/animal-welfare": {
+        "type_hint": "procedural",
+        "description": "Livestock care procedures",
+        "replaces": null
+      },
+      "procedural/harvest": {
+        "type_hint": "procedural",
+        "description": "Harvest and post-harvest handling",
+        "replaces": null
+      },
+      "procedural/compliance": {
+        "type_hint": "procedural",
+        "description": "Certification audit preparation",
+        "replaces": null
+      }
+    },
+    "regulatory-legal": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/obligations": {
+        "type_hint": "semantic",
+        "description": "Legal obligations, norms, and deontic duties",
+        "replaces": null
+      },
+      "semantic/rights": {
+        "type_hint": "semantic",
+        "description": "Legal rights and conferred legal capacities",
+        "replaces": null
+      },
+      "semantic/jurisdictions": {
+        "type_hint": "semantic",
+        "description": "Jurisdictions and their legal systems",
+        "replaces": null
+      },
+      "semantic/authorities": {
+        "type_hint": "semantic",
+        "description": "Regulators, supervisors, courts, and standards bodies",
+        "replaces": null
+      },
+      "semantic/roles": {
+        "type_hint": "semantic",
+        "description": "Legal roles played within a legal relationship",
+        "replaces": null
+      },
+      "semantic/persons": {
+        "type_hint": "semantic",
+        "description": "Natural and juridical legal persons",
+        "replaces": null
+      },
+      "semantic/contracts": {
+        "type_hint": "semantic",
+        "description": "Contracts and legally enforceable agreements",
+        "replaces": null
+      },
+      "semantic/licenses": {
+        "type_hint": "semantic",
+        "description": "Licenses, permits, and authorizations",
+        "replaces": null
+      },
+      "semantic/legal-acts": {
+        "type_hint": "semantic",
+        "description": "Legislative acts, treaties, and legal resources",
+        "replaces": null
+      },
+      "semantic/control-mappings": {
+        "type_hint": "semantic",
+        "description": "Obligation-to-control crosswalks and mappings",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/court-decisions": {
+        "type_hint": "episodic",
+        "description": "Court decisions and case law",
+        "replaces": null
+      },
+      "episodic/sanctions": {
+        "type_hint": "episodic",
+        "description": "Regulatory sanctions and enforcement actions",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/procedures": {
+        "type_hint": "procedural",
+        "description": "Legal and administrative procedures",
+        "replaces": null
+      },
+      "procedural/reports": {
+        "type_hint": "procedural",
+        "description": "Compliance assessments and regulatory reports",
+        "replaces": null
+      }
+    },
+    "research": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/research": {
+        "type_hint": "semantic",
+        "description": "Research artifacts, propositions, outputs, instruments, findings",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/inquiries": {
+        "type_hint": "episodic",
+        "description": "Research inquiries as episodic records",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/procedures": {
+        "type_hint": "procedural",
+        "description": "Research procedures and protocols",
+        "replaces": null
+      }
+    },
+    "scientific": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/science": {
+        "type_hint": "semantic",
+        "description": "Hypotheses, methods, measurements, samples",
+        "replaces": null
+      },
+      "semantic/instruments": {
+        "type_hint": "semantic",
+        "description": "Research instruments and devices",
+        "replaces": null
+      },
+      "semantic/catalogs": {
+        "type_hint": "semantic",
+        "description": "Datasets, catalogs, distributions, services",
+        "replaces": null
+      },
+      "semantic/publications": {
+        "type_hint": "semantic",
+        "description": "Research publications and scholarly outputs",
+        "replaces": null
+      },
+      "semantic/funding": {
+        "type_hint": "semantic",
+        "description": "Grants and research funding",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/studies": {
+        "type_hint": "episodic",
+        "description": "Studies, investigations, cohorts",
+        "replaces": null
+      },
+      "episodic/provenance": {
+        "type_hint": "episodic",
+        "description": "Data provenance and derivation events",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/protocols": {
+        "type_hint": "procedural",
+        "description": "Methods and protocol applications",
+        "replaces": null
+      }
+    },
+    "shared-traits": {},
+    "software-engineering": {
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/deployments": {
+        "type_hint": "procedural",
+        "description": "Deployment procedures, release processes",
+        "replaces": null
+      }
+    },
+    "software-security": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/threats": {
+        "type_hint": "semantic",
+        "description": "Attack tactics, malware, and threat techniques",
+        "replaces": null
+      },
+      "semantic/vulnerabilities": {
+        "type_hint": "semantic",
+        "description": "CVE vulnerability instances",
+        "replaces": null
+      },
+      "semantic/weaknesses": {
+        "type_hint": "semantic",
+        "description": "CWE weakness classes",
+        "replaces": null
+      },
+      "semantic/controls": {
+        "type_hint": "semantic",
+        "description": "Security controls and safeguards",
+        "replaces": null
+      },
+      "semantic/actors": {
+        "type_hint": "semantic",
+        "description": "Threat actors and intrusion sets",
+        "replaces": null
+      },
+      "semantic/indicators": {
+        "type_hint": "semantic",
+        "description": "Indicators of compromise",
+        "replaces": null
+      },
+      "semantic/supply-chain": {
+        "type_hint": "semantic",
+        "description": "Supply-chain (C-SCRM) risks",
+        "replaces": null
+      },
+      "episodic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "episodic/campaigns": {
+        "type_hint": "episodic",
+        "description": "Attack campaigns and threat-intelligence reports",
+        "replaces": null
+      },
+      "episodic/assessments": {
+        "type_hint": "episodic",
+        "description": "Security assessments and audits",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/policies": {
+        "type_hint": "procedural",
+        "description": "Security policies and plans of action",
+        "replaces": null
+      }
+    },
+    "trend-analysis": {
+      "semantic": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "semantic/foresight": {
+        "type_hint": "semantic",
+        "description": "Signals, drivers, trends, megatrends, uncertainties, and derived foresight artifacts",
+        "replaces": null
+      },
+      "semantic/foresight/curves": {
+        "type_hint": "semantic",
+        "description": "Adoption / maturity curves (S-curve, hype cycle)",
+        "replaces": null
+      },
+      "semantic/foresight/forecasts": {
+        "type_hint": "semantic",
+        "description": "Forecasts and projected future outcomes",
+        "replaces": null
+      },
+      "semantic/foresight/scenarios": {
+        "type_hint": "semantic",
+        "description": "Plausible future narratives and scenario sets",
+        "replaces": null
+      },
+      "semantic/foresight/horizons": {
+        "type_hint": "semantic",
+        "description": "Three-Horizons temporal planning zones",
+        "replaces": null
+      },
+      "semantic/foresight/implications": {
+        "type_hint": "semantic",
+        "description": "Cascading consequences mapped from change (futures wheel)",
+        "replaces": null
+      },
+      "semantic/foresight/visions": {
+        "type_hint": "semantic",
+        "description": "Normative preferred future states (backcasting)",
+        "replaces": null
+      },
+      "procedural": {
+        "type_hint": null,
+        "description": null,
+        "replaces": null
+      },
+      "procedural/roadmaps": {
+        "type_hint": "procedural",
+        "description": "Time-sequenced strategic and technology roadmaps",
+        "replaces": null
+      }
+    }
+  },
+  "namespaceChecks": {},
+  "visibleTypes": {
+    "agriculture": [
+      "agricultural-equipment",
+      "agricultural-holding",
+      "agricultural-input",
+      "climate-event",
+      "cultivar",
+      "harvest-event",
+      "land-parcel",
+      "managed-animal",
+      "soil-unit"
+    ],
+    "biology-research-lab": [
+      "collaborator",
+      "dataset",
+      "equipment",
+      "experiment",
+      "grant",
+      "grant-report",
+      "grant-submission",
+      "iacuc-protocol",
+      "ibc-protocol",
+      "irb-protocol",
+      "lab-member",
+      "manuscript-submission",
+      "principal-investigator",
+      "project",
+      "protocol",
+      "publication",
+      "reagent",
+      "sample",
+      "training-record"
+    ],
+    "cardiology": [
+      "apparatus",
+      "arterial-disease",
+      "cardiac-arrhythmia",
+      "cardiac-catheterization-study",
+      "cardiomyopathy",
+      "cardiovascular-clinical-finding",
+      "cardiovascular-endpoint-event",
+      "clinical-encounter",
+      "clinical-observation",
+      "clinical-record-subject",
+      "coronary-artery-disease",
+      "diagnostic-classification-entry",
+      "ecg-finding",
+      "echocardiography-study",
+      "endocarditis",
+      "funding-instrument",
+      "heart-failure",
+      "heart-valve-disease",
+      "hypertensive-disease",
+      "inquiry",
+      "ischemic-heart-disease",
+      "lymphatic-vascular-disorder",
+      "nyha-functional-class",
+      "observation",
+      "pericardial-disease",
+      "proposition",
+      "pulmonary-heart-disease",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output",
+      "venous-disease"
+    ],
+    "clinical-health-base": [
+      "apparatus",
+      "clinical-encounter",
+      "clinical-observation",
+      "clinical-record-subject",
+      "diagnostic-classification-entry",
+      "funding-instrument",
+      "inquiry",
+      "observation",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "cosmology": [
+      "apparatus",
+      "astronomical-data-product",
+      "astronomical-facility",
+      "astronomical-messenger-type",
+      "astronomical-object-type",
+      "astronomical-reference-frame",
+      "astrophysical-process-concept",
+      "cataloged-object-designation",
+      "classification-scheme-entry",
+      "cosmic-background-radiation",
+      "cosmology-theory-model",
+      "data-processing-level",
+      "funding-instrument",
+      "galaxy-evolution-process",
+      "hubble-lemaitre-parameter",
+      "inquiry",
+      "large-scale-structure",
+      "observation",
+      "observational-cosmology-parameter",
+      "physical-quantity",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "data-engineering": [
+      "architectural-decision",
+      "artifact",
+      "component",
+      "control",
+      "data-contract",
+      "data-governance-policy",
+      "data-platform",
+      "data-product",
+      "data-quality-rule",
+      "delivery-metric",
+      "design-pattern",
+      "engineering-practice",
+      "pipeline-pattern",
+      "policy",
+      "process-discipline",
+      "provenance",
+      "storage-architecture"
+    ],
+    "engineering-base": [
+      "architectural-decision",
+      "artifact",
+      "component",
+      "control",
+      "delivery-metric",
+      "design-pattern",
+      "engineering-practice",
+      "policy",
+      "process-discipline",
+      "provenance"
+    ],
+    "fitness": [
+      "apparatus",
+      "body-composition",
+      "cardiorespiratory-fitness",
+      "clinical-encounter",
+      "clinical-observation",
+      "clinical-record-subject",
+      "diagnostic-classification-entry",
+      "exercise-prescription",
+      "flexibility-fitness",
+      "funding-instrument",
+      "inquiry",
+      "met-value",
+      "muscular-endurance",
+      "muscular-strength",
+      "observation",
+      "omh-body-weight",
+      "omh-calories-burned",
+      "omh-heart-rate",
+      "omh-step-count",
+      "physical-activity",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "health": [
+      "activity-participation-domain",
+      "allergy-intolerance",
+      "apparatus",
+      "body-function",
+      "body-structure",
+      "clinical-diagnosis",
+      "clinical-encounter",
+      "clinical-observation",
+      "clinical-record-subject",
+      "condition",
+      "diagnosis-extension-qualifier",
+      "diagnostic-classification-entry",
+      "diagnostic-report",
+      "encounter",
+      "environmental-factor",
+      "fhir-observation",
+      "funding-instrument",
+      "inquiry",
+      "observation",
+      "patient",
+      "procedure",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "heliophysics": [
+      "apparatus",
+      "aurora-observation",
+      "classification-scheme-entry",
+      "coronal-mass-ejection",
+      "funding-instrument",
+      "geomagnetic-index",
+      "geomagnetic-storm",
+      "geomagnetically-induced-current",
+      "inquiry",
+      "observation",
+      "physical-quantity",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output",
+      "solar-flare-activity",
+      "solar-flare-flux",
+      "solar-terrestrial-coupling",
+      "space-weather-alert-level",
+      "space-weather-observatory"
+    ],
+    "market-research": [
+      "brand",
+      "buyer-persona",
+      "competitive-force",
+      "competitor",
+      "market-data-source",
+      "market-demand",
+      "market-intelligence-report",
+      "respondent-segment",
+      "segment",
+      "service-offering",
+      "sizing-estimate",
+      "survey-instrument",
+      "value-proposition",
+      "win-loss-analysis"
+    ],
+    "mif-base": [],
+    "mif-docs": [
+      "architecture-document",
+      "architecture-view",
+      "changelog",
+      "decision-record",
+      "design-document",
+      "design-spec",
+      "enhancement-proposal",
+      "explanation",
+      "feature-specification",
+      "how-to-guide",
+      "playbook",
+      "product-requirements",
+      "reference-document",
+      "requirements-set",
+      "runbook",
+      "task-plan",
+      "tutorial"
+    ],
+    "mif-generic": [
+      "concept",
+      "file",
+      "organization",
+      "person",
+      "technology"
+    ],
+    "non-ionizing-radiation": [
+      "apparatus",
+      "classification-scheme-entry",
+      "clinical-encounter",
+      "clinical-observation",
+      "clinical-record-subject",
+      "diagnostic-classification-entry",
+      "electrical-device",
+      "emf-exposure-health-finding",
+      "emf-exposure-limit",
+      "funding-instrument",
+      "iarc-carcinogen-classification",
+      "inquiry",
+      "observation",
+      "physical-quantity",
+      "power-frequency-field-strength",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "rf-field-exposure",
+      "scholarly-output",
+      "specific-absorption-rate",
+      "wireless-transmitter"
+    ],
+    "observability": [
+      "architectural-decision",
+      "artifact",
+      "capability-comparison",
+      "component",
+      "concept",
+      "control",
+      "delivery-metric",
+      "design-pattern",
+      "engineering-practice",
+      "file",
+      "market-position",
+      "migration-pattern",
+      "observability-assessment",
+      "observability-resource",
+      "observability-service",
+      "organization",
+      "person",
+      "policy",
+      "process-discipline",
+      "provenance",
+      "roadmap-signal",
+      "service-ownership-registry",
+      "technology",
+      "telemetry-signal"
+    ],
+    "physical-science-base": [
+      "apparatus",
+      "classification-scheme-entry",
+      "funding-instrument",
+      "inquiry",
+      "observation",
+      "physical-quantity",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "plasma-physics": [
+      "apparatus",
+      "classification-scheme-entry",
+      "electric-discharge",
+      "elementary-plasma-process",
+      "funding-instrument",
+      "inquiry",
+      "intense-particle-beam-source",
+      "laser-inertial-confinement-device",
+      "laser-plasma-interaction",
+      "magnetic-confinement-configuration",
+      "observation",
+      "physical-quantity",
+      "pinch-device",
+      "plasma-application",
+      "plasma-device",
+      "plasma-diagnostic-technique",
+      "plasma-dynamics-flow",
+      "plasma-heating-method",
+      "plasma-interaction-nonlaser",
+      "plasma-parameter",
+      "plasma-property",
+      "plasma-simulation-method",
+      "plasma-wave-instability",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "platform-engineering": [
+      "architectural-decision",
+      "artifact",
+      "component",
+      "control",
+      "delivery-metric",
+      "design-pattern",
+      "developer-portal",
+      "engineering-practice",
+      "golden-path",
+      "policy",
+      "portal-integration",
+      "portal-plugin",
+      "process-discipline",
+      "provenance",
+      "software-template"
+    ],
+    "psycholinguistics": [
+      "architectural-decision",
+      "artifact",
+      "component",
+      "concept",
+      "control",
+      "delivery-metric",
+      "design-pattern",
+      "elicitation-protocol",
+      "engineering-practice",
+      "existing-framework-reference",
+      "file",
+      "linguistic-framework",
+      "organization",
+      "person",
+      "policy",
+      "process-discipline",
+      "provenance",
+      "psycholinguistic-construct",
+      "psychometric-index",
+      "research-instrument",
+      "stylometric-feature",
+      "technology"
+    ],
+    "regenerative-agriculture": [
+      "agricultural-equipment",
+      "agricultural-holding",
+      "agricultural-input",
+      "animal",
+      "buyer",
+      "carbon-baseline",
+      "carbon-credit",
+      "certification",
+      "climate-event",
+      "contract",
+      "crop",
+      "crop-rotation",
+      "cultivar",
+      "equipment",
+      "farm",
+      "field",
+      "grazing-plan",
+      "harvest-event",
+      "harvest-record",
+      "herd",
+      "input",
+      "inspection",
+      "land-parcel",
+      "managed-animal",
+      "planting",
+      "soil-profile",
+      "soil-unit",
+      "weather-event"
+    ],
+    "regenerative-agriculture-research": [
+      "adoption-trend",
+      "agricultural-equipment",
+      "agricultural-holding",
+      "agricultural-input",
+      "agronomic-practice",
+      "apparatus",
+      "architectural-decision",
+      "artifact",
+      "breed-characteristic",
+      "climate-event",
+      "compliance-regulation",
+      "component",
+      "concept",
+      "connectivity-link",
+      "conservation-cost-share",
+      "control",
+      "cultivar",
+      "delivery-metric",
+      "design-pattern",
+      "engineering-practice",
+      "equipment-or-input",
+      "farm-infrastructure",
+      "fencing-component",
+      "fencing-system",
+      "file",
+      "funding-instrument",
+      "grant-program",
+      "harvest-event",
+      "husbandry-practice",
+      "inquiry",
+      "iot-device",
+      "irrigation-system",
+      "land-parcel",
+      "livestock-health-condition",
+      "managed-animal",
+      "neonatal-care",
+      "network-segment",
+      "observation",
+      "organization",
+      "parturition-protocol",
+      "periparturient-nutrition",
+      "person",
+      "policy",
+      "power-system",
+      "process-discipline",
+      "proposition",
+      "provenance",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output",
+      "sensor-or-edge-node",
+      "soil-unit",
+      "technology"
+    ],
+    "regulatory-legal": [
+      "assessment",
+      "authority",
+      "compliance-regulation",
+      "compliance-report",
+      "contract",
+      "control-mapping",
+      "court-decision",
+      "jurisdiction",
+      "legal-act",
+      "legal-capacity",
+      "legal-person",
+      "legal-procedure",
+      "legal-right",
+      "legal-role",
+      "license-permit",
+      "obligation",
+      "regulatory-sanction",
+      "treaty"
+    ],
+    "research": [
+      "apparatus",
+      "funding-instrument",
+      "inquiry",
+      "observation",
+      "proposition",
+      "research-artifact",
+      "research-finding",
+      "research-procedure",
+      "scholarly-output"
+    ],
+    "scientific": [
+      "apparatus",
+      "cohort",
+      "data-catalog",
+      "data-distribution",
+      "data-provenance",
+      "data-service",
+      "dataset",
+      "dataset-series",
+      "funding-instrument",
+      "hypothesis",
+      "inquiry",
+      "measurement",
+      "method",
+      "observation",
+      "proposition",
+      "protocol-application",
+      "research-artifact",
+      "research-finding",
+      "research-funding",
+      "research-instrument",
+      "research-investigation",
+      "research-procedure",
+      "research-publication",
+      "sample-organism",
+      "scholarly-output",
+      "study"
+    ],
+    "shared-traits": [],
+    "software-engineering": [
+      "architectural-decision",
+      "artifact",
+      "component",
+      "control",
+      "delivery-metric",
+      "deployment-procedure",
+      "design-pattern",
+      "engineering-practice",
+      "incident-report",
+      "migration-guide",
+      "policy",
+      "process-discipline",
+      "provenance",
+      "runbook"
+    ],
+    "software-security": [
+      "architectural-decision",
+      "artifact",
+      "attack-campaign",
+      "attack-mitigation",
+      "attack-tactic",
+      "component",
+      "control",
+      "delivery-metric",
+      "design-pattern",
+      "engineering-practice",
+      "indicator-of-compromise",
+      "malware",
+      "poam",
+      "policy",
+      "process-discipline",
+      "provenance",
+      "security-assessment",
+      "security-control",
+      "security-framework",
+      "security-incident",
+      "security-infrastructure",
+      "security-policy",
+      "security-threat",
+      "security-tool",
+      "supply-chain-risk",
+      "threat-actor",
+      "threat-intelligence-report",
+      "vulnerability",
+      "weakness"
+    ],
+    "trend-analysis": [
+      "adoption-curve",
+      "critical-uncertainty",
+      "driver",
+      "emerging-issue",
+      "forecast",
+      "horizon",
+      "implication",
+      "megatrend",
+      "roadmap",
+      "scenario",
+      "signal",
+      "trend",
+      "vision",
+      "wild-card"
+    ]
+  },
+  "subtypeChecks": {
+    "cyclic.ontology.yaml": [
+      "  - subtype_of cycle: a -> b -> a"
+    ],
+    "dangling.ontology.yaml": [
+      "  - entity_type 'security-control': subtype_of parent 'control' is not a declared entity type in this ontology or any it extends"
+    ],
+    "extended.ontology.yaml": [
+      "  - entity_type 'security-control': subtype_of 'control' but its required set is missing parent field(s) ['control_name'] (a subtype must require at least the parent's)"
+    ],
+    "incompatible.ontology.yaml": [
+      "  - entity_type 'sub-thing': subtype_of 'base-thing' but its required set is missing parent field(s) ['b'] (a subtype must require at least the parent's)"
+    ],
+    "self.ontology.yaml": [
+      "  - entity_type 'a': subtype_of cannot reference itself"
+    ],
+    "valid.ontology.yaml": []
+  }
+}

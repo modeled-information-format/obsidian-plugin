@@ -22,6 +22,8 @@ const ctx = await esbuild.context({
   minify: prod,
   metafile: true,
   outfile: "main.js",
+  // Visible in Settings and the Ontology panel, to tell which build is running.
+  define: { __MIF_BUILD__: JSON.stringify(new Date().toISOString().replace(/\.\d+Z$/, "Z")) },
 });
 
 if (prod) {

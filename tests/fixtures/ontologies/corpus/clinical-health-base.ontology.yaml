@@ -1,0 +1,206 @@
+---
+# Clinical Health Base Ontology — shared clinical supertypes (Tier 1)
+#
+# A MIF-compliant intermediate layer between the domain-neutral generic core
+# (mif-base / shared-traits) and the clinical DOMAIN packs (cardiology, health,
+# fitness). It owns the entity-type shapes that recurred identically across all
+# three packs' independent research passes — the FHIR Patient/Encounter/
+# Observation shapes and the ICD-11 stem/extension-code shape — so the domains
+# inherit them instead of each re-declaring its own copy.
+#
+# Extends [research] -- NOT [mif-base, shared-traits] as originally specified
+# in finding-intermediary-layering-spec.json. That original claim is
+# unsatisfiable: cardiology's cardiac-catheterization-study needs to subtype a
+# protocol-execution shape, and fitness's met-value needs to subtype a
+# measured-quantity shape; neither scientific.ontology.yaml's
+# `protocol-application`/`measurement` (the shapes entity-inventory.json cites)
+# is reachable from [mif-base, shared-traits] alone -- scientific extends
+# research, and an extends chain only exposes ancestor types, never a child's
+# own types. research.ontology.yaml already carries mif-base + shared-traits
+# transitively and defines its own generic `research-procedure` ("A method,
+# protocol, or procedure applied in research, and its executions") and
+# `observation` ("A measured or observed datum produced by a procedure")
+# types -- exactly the ADR-0003-intended non-bio-specific targets. Extending
+# [research] mirrors scientific.ontology.yaml's own one-hop `extends:
+# [research]` and does not chain through a sibling domain pack (scientific) to
+# get there. See health-physics-ontology-domains research session
+# (finding-intermediary-layering-spec.json) for the entity-shape grounding.
+#
+# Version: 0.1.0
+# Last Updated: 2026-07-04
+
+ontology:
+  id: clinical-health-base
+  version: "0.1.0"
+  description: "Shared clinical supertypes — the MIF-compliant intermediate layer cardiology, health, and fitness extend"
+  extends:
+    - research
+
+# Custom namespaces under the cognitive triad inherited from mif-base.
+namespaces:
+  semantic:
+    children:
+      clinical-records:
+        description: "Clinical record subjects and diagnostic classification shapes"
+        type_hint: semantic
+  episodic:
+    children:
+      clinical-events:
+        description: "Clinical encounters and observations"
+        type_hint: episodic
+
+entity_types:
+  - name: clinical-record-subject
+    description: "The subject-of-record for a clinical encounter, observation, or diagnosis — the FHIR Patient-shaped entity domain packs reference rather than re-minting their own subject type"
+    base: semantic
+    traits:
+      - cited
+      - dated
+      - versioned
+    schema:
+      required:
+        - patient_id
+      properties:
+        patient_id:
+          type: string
+          description: "Stable subject identifier"
+        name:
+          type: string
+        birth_date:
+          type: string
+          format: date
+        gender:
+          type: string
+        identifiers:
+          type: array
+          items:
+            type: string
+    source_vocab: "HL7 FHIR"
+    source_class: "Patient resource (R5, Normative since v4.0.0)"
+    prior_art: "reuse -- clinical-health-base's generalized instantiation of FHIR's normative Patient resource; health's own `patient` subtypes this directly, cardiology and fitness reference it by ID rather than re-minting a subject type"
+    disposition: reuse
+
+  - name: clinical-encounter
+    description: "A time-bound clinical interaction — the FHIR Encounter-shaped entity a clinical activity (a study, a procedure, a prescription) occurs within"
+    base: episodic
+    traits:
+      - cited
+      - dated
+      - categorized
+    schema:
+      required:
+        - encounter_id
+        - status
+      properties:
+        encounter_id:
+          type: string
+        status:
+          type: string
+        class:
+          type: string
+        period:
+          type: string
+        subject_ref:
+          type: string
+          description: "Reference to the clinical-record-subject this encounter concerns"
+    source_vocab: "HL7 FHIR"
+    source_class: "Encounter resource (R5)"
+    prior_art: "reuse -- clinical-health-base's generalized instantiation of FHIR's Encounter resource; health's own `encounter` subtypes this directly"
+    disposition: reuse
+
+  - name: clinical-observation
+    description: "A measurement-or-assertion primitive about a clinical-record-subject — the FHIR Observation-shaped entity that is the single strongest cross-pack convergence in the clinical domain: health's own Observation reuse, cardiology's structured study/finding bundles, and fitness's device-sourced vital-sign readings are all specializations of this one shape"
+    base: episodic
+    traits:
+      - cited
+      - dated
+      - measured
+    schema:
+      required:
+        - observation_id
+        - code
+        - value
+      properties:
+        observation_id:
+          type: string
+        code:
+          type: string
+        value:
+          type: string
+        unit:
+          type: string
+        effective_time:
+          type: string
+          format: date-time
+        subject_ref:
+          type: string
+          description: "Reference to the clinical-record-subject this observation concerns"
+        modality:
+          type: string
+          description: "Imaging or acquisition modality, where applicable (cardiology extension)"
+        member_measurements:
+          type: array
+          items:
+            type: object
+          description: "Component measurements bundled within a structured study (cardiology extension)"
+    source_vocab: "HL7 FHIR"
+    source_class: "Observation resource (R5)"
+    prior_art: "reuse -- clinical-health-base's generalized instantiation of FHIR's Observation resource; health's own `fhir-observation` subtypes this directly (named fhir-observation, not observation, to avoid colliding with research.ontology.yaml's own observation type once resolved through this ontology's extends chain), cardiology's echocardiography-study/ecg-finding/cardiovascular-clinical-finding and fitness's four Open mHealth types (omh-step-count, omh-heart-rate, omh-calories-burned, omh-body-weight) are all clinical-observation subtypes since Open mHealth's own schema design deliberately mirrors FHIR Observation's unit-value-time shape"
+    disposition: reuse
+
+  - name: diagnostic-classification-entry
+    description: "A WHO ICD-11 stem-code or extension-code classification entry — the shape health's general diagnosis classification and cardiology's chapter-11-scoped circulatory disease types both instantiate"
+    base: semantic
+    traits:
+      - cited
+      - dated
+      - versioned
+      - categorized
+    schema:
+      required:
+        - stem_code
+        - title
+      properties:
+        stem_code:
+          type: string
+        title:
+          type: string
+        chapter:
+          type: string
+        foundation_uri:
+          type: string
+          format: uri
+    source_vocab: "WHO ICD-11"
+    source_class: "ICD-11-MMS stem code / Foundation category"
+    prior_art: "mint -- the general ICD-11 stem-code shape, promoted to clinical-health-base because health's clinical-diagnosis/diagnosis-extension-qualifier and cardiology's 13 circulatory-chapter disease types independently converged on the same pattern"
+    disposition: mint
+
+# No relationships declared here. The `occurs_within` relationship
+# (finding-intermediary-layering-spec.json: "cardiology's cardiac-
+# catheterization-study and fitness's exercise-prescription both occur WITHIN
+# a clinical-encounter") is declared in cardiology.ontology.yaml and
+# fitness.ontology.yaml instead, each pointing up at this base's
+# clinical-encounter -- not here, since a base ontology's extends chain only
+# exposes ancestor types, never a descendant's concrete types, and declaring
+# it here would have this ontology reference types it cannot see.
+
+# Discovery disabled: this is a base layer, not directly instantiated by
+# findings; only its leaf-pack specializations are (matching the precedent
+# research.ontology.yaml sets for a newly-minted base layer with more than one
+# consumer, per ADR-0003).
+discovery:
+  enabled: false
+  confidence_threshold: 0.8
+  patterns:
+    - content_pattern: "\\b(FHIR Patient|patient record|subject of record)\\b"
+      suggest_entity: clinical-record-subject
+      suggest_namespace: _semantic/clinical-records
+    - content_pattern: "\\b(FHIR Encounter|clinical encounter|inpatient admission|outpatient visit)\\b"
+      suggest_entity: clinical-encounter
+      suggest_namespace: _episodic/clinical-events
+    - content_pattern: "\\b(FHIR Observation|clinical observation|vital sign|lab result)\\b"
+      suggest_entity: clinical-observation
+      suggest_namespace: _episodic/clinical-events
+    - content_pattern: "\\b(ICD-11|diagnosis code|diagnostic classification)\\b"
+      suggest_entity: diagnostic-classification-entry
+      suggest_namespace: _semantic/clinical-records

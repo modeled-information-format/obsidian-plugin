@@ -122,9 +122,69 @@ def hermetic(bundle: Path) -> Path:
     return tmp
 
 
+def _load_script(path: Path, name: str):
+    """Import a hyphen-named script as a module. Annotations are deferred
+    (PEP 563) so scripts using `X | None` hints also load on Python 3.9;
+    the upstream file is not modified."""
+    import types
+
+    mod = types.ModuleType(name)
+    mod.__file__ = str(path)
+    sys.modules[name] = mod
+    code = compile("from __future__ import annotations\n" + path.read_text(), str(path), "exec")
+    exec(code, mod.__dict__)
+    return mod
+
+
+def ontology_goldens() -> dict:
+    """Ontology behaviour from the Python references:
+    - ontologies repo scripts/validate-namespaces.py: namespace flattening and
+      the corpus consistency check (type_hint conflicts with ancestors,
+      dangling `replaces`);
+    - MIF scripts/validate-ontologies.py: visible entity types along the
+      extends closure and subtype_of checks."""
+    import tempfile
+
+    ont_repo = Path(os.environ.get("ONTOLOGIES_REPO", ROOT.parent / "ontologies")).resolve()
+    ns = _load_script(ont_repo / "scripts" / "validate-namespaces.py", "ont_validate_namespaces")
+    vo = _load_script(MIF_REPO / "scripts" / "validate-ontologies.py", "mif_validate_ontologies")
+    corpus_dir = FIXTURES / "ontologies" / "corpus"
+    tmp = Path(tempfile.mkdtemp(prefix="mif-ont-"))
+    (tmp / "ontologies").symlink_to(corpus_dir)
+
+    ns_corpus = ns.load_corpus(tmp)
+    out = {
+        "namespaces": {oid: info["namespaces"] for oid, info in ns_corpus.items()},
+        "namespaceChecks": {k: v for k, v in ns.check_corpus(ns_corpus).items()},
+        "visibleTypes": {},
+        "subtypeChecks": {},
+    }
+    vo_corpus = vo.load_ontology_corpus([corpus_dir])
+    for oid in sorted(vo_corpus):
+        out["visibleTypes"][oid] = sorted(vo.visible_types(oid, vo_corpus))
+    sub_dir = FIXTURES / "ontologies" / "subtype_of"
+    sub_corpus = vo.load_ontology_corpus([sub_dir, corpus_dir])
+    for f in sorted(sub_dir.glob("*.ontology.yaml")):
+        data = vo.load_yaml(f)
+        oid = data["ontology"]["id"]
+        out["subtypeChecks"][f.name] = vo.check_subtype_of(data, vo.visible_types(oid, sub_corpus))
+    for f in sorted(corpus_dir.glob("*.ontology.yaml")):
+        data = vo.load_yaml(f)
+        oid = data["ontology"]["id"]
+        errs = vo.check_subtype_of(data, vo.visible_types(oid, vo_corpus))
+        if errs:
+            out["subtypeChecks"][f"corpus/{f.name}"] = errs
+    return out
+
+
 def main() -> int:
+    rust = OUT / "ontology-chains.json"
+    keep = rust.read_text() if rust.exists() else None
     if OUT.exists():
         shutil.rmtree(OUT)
+    OUT.mkdir(parents=True)
+    if keep is not None:
+        rust.write_text(keep)  # produced by scripts/gen_rust_goldens.mjs
     for name in list(BUNDLES):
         BUNDLES[name] = hermetic(BUNDLES[name])
     count = 0
@@ -160,6 +220,7 @@ def main() -> int:
 
     dump(OUT / "scalars.json", scalar_goldens())
     dump(OUT / "kebab.json", {k: okf._kebab(k) for k in KEBAB_CASES})
+    dump(OUT / "ontologies.json", ontology_goldens())
     dump(OUT / "uuid5.json", {
         "namespace": str(mig.MIF_NAMESPACE),
         "slugs": {s: str(__import__("uuid").uuid5(mig.MIF_NAMESPACE, s)) for s in UUID5_SLUGS},

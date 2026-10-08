@@ -5,7 +5,7 @@
 
 import type { ErrorObject } from "ajv";
 
-import { validateConfig as configValidator, validateMif as mifValidator } from "./generated/validators";
+import { validateConfig as configValidator, validateMif as mifValidator, validateOntology as ontologyValidator } from "./generated/validators";
 
 export const MIF_SCHEMA_ID = "https://mif-spec.dev/schema/mif.schema.json";
 export const CONFIG_SCHEMA_ID = "https://mif-spec.dev/schema/relationship-types-config.schema.json";
@@ -23,7 +23,13 @@ const toIssue = (e: ErrorObject): SchemaIssue => ({
   keyword: e.keyword,
 });
 
-const VALIDATORS: Record<string, typeof mifValidator | undefined> = { [MIF_SCHEMA_ID]: mifValidator, [CONFIG_SCHEMA_ID]: configValidator };
+export const ONTOLOGY_SCHEMA_ID = "https://mif-spec.dev/schema/ontology/ontology.schema.json";
+
+const VALIDATORS: Record<string, typeof mifValidator | undefined> = {
+  [MIF_SCHEMA_ID]: mifValidator,
+  [CONFIG_SCHEMA_ID]: configValidator,
+  [ONTOLOGY_SCHEMA_ID]: ontologyValidator,
+};
 
 /** Validate a document against a vendored schema by $id. */
 export function validateAgainst(schemaId: string, document: unknown): SchemaIssue[] {

@@ -2,28 +2,35 @@
 
 import { normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App } from "obsidian";
 
-import { newConceptText, promoteToConcept, type BaseType } from "./engine";
+import { newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
 import { MifManager } from "./manager";
-import { ConvertModal, NewConceptModal, slugify, type NewConceptInput } from "./modals";
+import { ConvertModal, NewConceptModal, slugify, type NewConceptInput, type OntologyHints } from "./modals";
 import { DEFAULT_SETTINGS, loadSettings, parseLines, type MifSettings, type SyncMode } from "./settings";
 import { runFidelitySpike } from "./spikes/fidelity";
 import { runLinkSpike } from "./spikes/links";
+import { BUILD_ID } from "./build";
+import { OntologyStore } from "./ontologyStore";
 import { MigrationModal, RELATED_VIEW, RelatedView, RelationshipModal, type RelationshipDraft } from "./relations";
+import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, OntologyView } from "./semanticViews";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
 
 export default class MifPlugin extends Plugin {
   override settings: MifSettings = DEFAULT_SETTINGS;
   manager!: MifManager;
+  store!: OntologyStore;
   private statusEl?: HTMLElement;
 
   override async onload(): Promise<void> {
     this.settings = loadSettings(await this.loadData());
-    this.manager = new MifManager(this.app, () => this.settings);
+    this.store = new OntologyStore(this.app, this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`);
+    this.manager = new MifManager(this.app, () => this.settings, this.store);
     this.addSettingTab(new MifSettingTab(this.app, this));
 
     this.registerView(DIAGNOSTICS_VIEW, (leaf) => new DiagnosticsView(leaf, this));
     this.registerView(REPORT_VIEW, (leaf) => new ReportView(leaf, this));
     this.registerView(RELATED_VIEW, (leaf) => new RelatedView(leaf, this));
+    this.registerView(ONTOLOGY_VIEW, (leaf) => new OntologyView(leaf, this));
+    this.registerView(ENTITIES_VIEW, (leaf) => new EntitiesView(leaf, this));
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("mif-status", "mod-clickable");
@@ -34,8 +41,11 @@ export default class MifPlugin extends Plugin {
     this.addRibbonIcon("list-checks", "MIF bundle report", () => void this.revealView(REPORT_VIEW));
 
     this.app.workspace.onLayoutReady(async () => {
+      this.manager.debug("loaded", { build: BUILD_ID, version: this.manifest.version });
+      await this.store.loadCache();
       await this.manager.loadBundles();
       await this.manager.scanAll();
+      void this.manager.ensureOntologies();
       this.registerVaultEvents();
       this.refreshStatus();
     });
@@ -72,6 +82,11 @@ export default class MifPlugin extends Plugin {
   async reloadBundles(): Promise<void> {
     await this.manager.loadBundles();
     await this.manager.scanAll();
+    void this.manager.ensureOntologies();
+  }
+
+  addEntityReference(file: TFile): void {
+    addEntityReference(this.app, this.manager, file);
   }
 
   async saveSettings(): Promise<void> {
@@ -118,7 +133,19 @@ export default class MifPlugin extends Plugin {
       callback: () => {
         const active = this.app.workspace.getActiveFile();
         const root = (active && this.manager.rootFor(active.path)) ?? this.settings.bundleRoots[0] ?? "";
-        new NewConceptModal(this.app, root, (input) => this.createConcept(input)).open();
+        const info = this.manager.bundleInfo(root);
+        const corpus = info?.corpus ?? new Map();
+        const hints: OntologyHints = {
+          ontologies: [...corpus.keys()].sort(),
+          namespaces: (ontology, type) => {
+            const id = ontology ?? (this.settings.defaultOntology || undefined);
+            if (!id || !corpus.has(id)) return [];
+            return [...visibleNamespaces(id, corpus)].filter(([, n]) => !n.type_hint || n.type_hint === type).map(([p]) => p).sort();
+          },
+          entityTypes: (ontology, type) =>
+            corpus.has(ontology) ? [...visibleTypes(ontology, corpus).values()].filter((t) => t.base === type).map((t) => t.name).sort() : [],
+        };
+        new NewConceptModal(this.app, root, (input) => this.createConcept(input), hints).open();
       },
     });
     this.addCommand({
@@ -156,6 +183,34 @@ export default class MifPlugin extends Plugin {
         return ok;
       },
     });
+    this.addCommand({ id: "open-ontology", name: "Open ontology panel", callback: () => void this.revealView(ONTOLOGY_VIEW) });
+    this.addCommand({ id: "open-entities", name: "Open entities panel", callback: () => void this.revealView(ENTITIES_VIEW) });
+    this.addCommand({
+      id: "add-entity-reference",
+      name: "Add entity reference",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.get(file.path)?.isConcept;
+        if (ok && !checking) this.addEntityReference(file!);
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "download-ontologies",
+      name: "Download all ontologies from mif-spec.dev",
+      callback: async () => {
+        new Notice("MIF: downloading the ontology catalog…");
+        const got = await this.store.downloadAll();
+        this.manager.refreshCorpora();
+        const errors = this.store.status.errors.slice(-3);
+        new Notice(`MIF: ${got.length} ontologies downloaded and verified.${errors.length ? ` Errors: ${errors.join("; ")}` : ""}`);
+      },
+    });
+    this.addCommand({
+      id: "reload-bundles",
+      name: "Reload bundle configuration (.mif)",
+      callback: () => void this.reloadBundles(),
+    });
     this.addCommand({
       id: "migrate-legacy",
       name: "Migrate MIF 0.1 notes",
@@ -188,13 +243,20 @@ export default class MifPlugin extends Plugin {
     const base = `${folder === "/" ? "" : `${folder}/`}${slugify(input.title)}`;
     let path = `${base}.md`;
     for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) path = `${base}-${n}.md`;
-    const text = newConceptText({
+    let text = newConceptText({
       type: input.type,
       title: input.title,
       namespace: input.namespace || undefined,
       id: crypto.randomUUID(),
       created: new Date(),
     });
+    if (input.ontology) {
+      const root = this.manager.rootFor(`${base}.md`) ?? "";
+      const def = this.manager.bundleInfo(root)?.corpus.get(input.ontology);
+      const extra: Record<string, unknown> = { ontology: def ? { id: input.ontology, version: def.version } : { id: input.ontology } };
+      if (input.entityType) extra.entity = { name: input.title, entity_type: input.entityType };
+      text = updateFrontmatter(text, extra);
+    }
     const file = await this.app.vault.create(path, text);
     await this.app.workspace.getLeaf(false).openFile(file);
     if (this.manager.rootFor(path) === null) new Notice(`MIF: ${path} is outside every MIF bundle, so it won't be validated.`);
@@ -245,6 +307,7 @@ class MifSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const s = this.plugin.settings;
+    containerEl.createEl("p", { cls: "mif-build", text: `MIF build ${BUILD_ID}` });
 
     new Setting(containerEl)
       .setName("Mode")
@@ -286,6 +349,38 @@ class MifSettingTab extends PluginSettingTab {
         t.inputEl.rows = 3;
         t.inputEl.addEventListener("blur", () => void this.plugin.reloadBundles());
       });
+
+    new Setting(containerEl).setName("Ontologies").setHeading();
+    const status = this.plugin.store.status;
+    new Setting(containerEl)
+      .setName("Download ontologies from mif-spec.dev")
+      .setDesc(
+        `When a concept declares an ontology the vault doesn't have, download it (and what it extends) from mif-spec.dev, check it against the catalog's sha256, and cache it in the plugin folder. Bundle .mif/ontologies/ files always take precedence. Cached: ${status.cached.length ? status.cached.sort().join(", ") : "none"}${status.catalogVersion ? ` (corpus ${status.catalogVersion})` : ""}.`,
+      )
+      .addToggle((t) =>
+        t.setValue(s.downloadOntologies).onChange(async (value) => {
+          s.downloadOntologies = value;
+          await this.plugin.saveSettings();
+          if (value) void this.plugin.manager.ensureOntologies();
+        }),
+      )
+      .addExtraButton((b) =>
+        b.setIcon("trash").setTooltip("Clear the downloaded ontology cache").onClick(async () => {
+          await this.plugin.store.clearCache();
+          this.plugin.manager.refreshCorpora();
+          this.display();
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Default ontology")
+      .setDesc("Used for namespace hints on concepts that declare no ontology. Entity types are only checked against a declared ontology.")
+      .addText((t) =>
+        t.setPlaceholder("mif-base").setValue(s.defaultOntology).onChange(async (value) => {
+          s.defaultOntology = value.trim();
+          await this.plugin.saveSettings();
+          this.plugin.manager.recomputeSemantics();
+        }),
+      );
 
     new Setting(containerEl)
       .setName("Developer commands")

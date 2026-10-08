@@ -47,3 +47,19 @@ export {
 } from "./relationships";
 export { buildIndex, bundleDiagnostics, titleForTarget, titleOf, toBundleConcept, type BundleConcept, type BundleIndex, type Edge } from "./bundle";
 export { legacySigns, migrateConcept, migratedPath, type LegacySigns } from "./migrate";
+export {
+  chainTraits,
+  composeTraits,
+  discover,
+  parseOntology,
+  resolveChain,
+  visibleNamespaces,
+  visibleTypes,
+  type ComposedType,
+  type Corpus,
+  type DiscoveryHit,
+  type EntityTypeDef,
+  type OntologyDef,
+} from "./ontology";
+export { entityReference, entitySlug, entityUrn, parseEntityFile, referencedEntities, renderEntityFile, ENTITY_URN, type EntityRecord } from "./entities";
+export { semanticDiagnostics, usefulSuggestions, type SemanticContext, type SemanticReport } from "./semantics";

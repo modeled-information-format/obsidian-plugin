@@ -16,11 +16,13 @@ for (const p of [
   "container.schema.json",
   "relationship-types-config.schema.json",
   "mif.schema.json",
+  "ontology/ontology.schema.json",
 ]) ajv.addSchema(load(p));
 
 const exportsMap = {
   validateMif: "https://mif-spec.dev/schema/mif.schema.json",
   validateConfig: "https://mif-spec.dev/schema/relationship-types-config.schema.json",
+  validateOntology: "https://mif-spec.dev/schema/ontology/ontology.schema.json",
 };
 const RUNTIME = {
   "ajv-formats/dist/formats": "formats",

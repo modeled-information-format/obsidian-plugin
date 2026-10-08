@@ -42,7 +42,15 @@ import {
   type Namespaces,
   type Registry,
   type RelationshipInput,
+  parseEntityFile,
+  renderEntityFile,
+  semanticDiagnostics,
+  type Corpus,
+  type EntityRecord,
+  type OntologyDef,
+  type SemanticReport,
 } from "./engine";
+import type { OntologyStore } from "./ontologyStore";
 import { textHunks } from "./engine/diff";
 import type { MifSettings } from "./settings";
 
@@ -56,9 +64,16 @@ export interface BundleInfo {
   root: string;
   namespaces?: Namespaces;
   registry: Registry;
-  /** Problems with .mif/config.yaml, if it exists. */
+  /** Problems with .mif/config.yaml, .mif/ontologies, or .mif/entities. */
   configIssues: string[];
   index?: BundleIndex;
+  /** Definitions from the bundle's own .mif/ontologies/. */
+  localOntologies: OntologyDef[];
+  corpus: Corpus;
+  reservedPrefixes: string[];
+  sharedAgreements: Set<string>;
+  /** Entities from .mif/entities/, by urn. */
+  entities: Map<string, EntityRecord>;
 }
 
 interface FileState {
@@ -66,6 +81,7 @@ interface FileState {
   root: string;
   concept: BundleConcept | null;
   legacy: LegacySigns | null;
+  semantic?: SemanticReport;
 }
 
 const RENAME_QUIET_MS = 1500;
@@ -140,17 +156,17 @@ export class MifManager extends Events {
   private indexTimer = 0;
   private renameBatch?: RenameBatch;
 
-  constructor(private readonly app: App, private settings: () => MifSettings) {
+  constructor(private readonly app: App, private settings: () => MifSettings, readonly store?: OntologyStore) {
     super();
   }
 
-  /** Rename diagnostics, only with Developer commands on. Written outside the vault index. */
-  private debug(event: string, detail: Record<string, unknown> = {}): void {
+  /** Developer log, only with Developer commands on. Written outside the vault index. */
+  debug(event: string, detail: Record<string, unknown> = {}): void {
     if (!this.settings().showDevCommands) return;
     const line = `${new Date().toISOString()} ${event} ${JSON.stringify(detail)}\n`;
     console.debug("MIF", event, detail);
     const adapter = this.app.vault.adapter as { append?: (p: string, d: string) => Promise<void> };
-    void adapter.append?.(`${this.app.vault.configDir ?? ".obsidian"}/plugins/mif/rename-debug.log`, line).catch(() => undefined);
+    void adapter.append?.(`${this.app.vault.configDir ?? ".obsidian"}/plugins/mif/debug.log`, line).catch(() => undefined);
   }
 
   private mirrorLines(text: string): string[] {
@@ -186,6 +202,10 @@ export class MifManager extends Events {
     return root ? `${root}/${bundlePath}` : bundlePath;
   }
 
+  bundleRoots(): string[] {
+    return [...this.bundles.keys()];
+  }
+
   bundleInfo(root: string): BundleInfo | undefined {
     return this.bundles.get(root);
   }
@@ -194,11 +214,19 @@ export class MifManager extends Events {
     this.bundles.clear();
     for (const root of this.settings().bundleRoots) {
       const configPath = `${root ? `${root}/` : ""}.mif/config.yaml`;
-      const info: BundleInfo = { root, configIssues: [], registry: buildRegistry(null) };
+      const info: BundleInfo = {
+        root, configIssues: [], registry: buildRegistry(null), localOntologies: [], corpus: new Map(),
+        reservedPrefixes: [], sharedAgreements: new Set(), entities: new Map(),
+      };
       // .mif/ is a dot-folder Obsidian does not index, so read through the adapter.
       if (await this.app.vault.adapter.exists(configPath)) {
         try {
-          const config = loadYaml(await this.app.vault.adapter.read(configPath)) as { namespaces?: Namespaces } | null;
+          const config = loadYaml(await this.app.vault.adapter.read(configPath)) as { namespaces?: Namespaces; reserved_prefixes?: unknown } | null;
+          if (Array.isArray(config?.reserved_prefixes)) {
+            info.reservedPrefixes = config.reserved_prefixes
+              .map((p) => (typeof p === "string" ? p : (p as { prefix?: unknown })?.prefix))
+              .filter((p): p is string => typeof p === "string");
+          }
           info.configIssues = validateBundleConfig(config ?? {}).map((i) => `${configPath}${i.path === "/" ? "" : i.path}: ${i.message}`);
           info.namespaces = config?.namespaces;
           // Like okf_validate: a malformed config does not opt the bundle in.
@@ -208,8 +236,131 @@ export class MifManager extends Events {
           info.configIssues = [`${configPath}: ${(err as Error).message}`];
         }
       }
+      await this.loadBundleSemantics(info);
       this.bundles.set(root, info);
     }
+  }
+
+  /** .mif/ontologies, .mif/shared-agreements, and .mif/entities for one bundle. */
+  private async loadBundleSemantics(info: BundleInfo): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    const mif = `${info.root ? `${info.root}/` : ""}.mif`;
+    if (this.store) {
+      const local = await this.store.loadBundleLocal(info.root);
+      info.localOntologies = local.defs;
+      info.configIssues.push(...local.errors);
+      info.corpus = this.store.corpusFor(local.defs);
+    }
+    if (await adapter.exists(`${mif}/shared-agreements`)) {
+      for (const f of (await adapter.list(`${mif}/shared-agreements`)).files) {
+        const m = /([^/]+)\.ya?ml$/.exec(f);
+        if (m) info.sharedAgreements.add(m[1]!);
+      }
+    }
+    info.entities = new Map();
+    const walk = async (dir: string): Promise<string[]> => {
+      if (!(await adapter.exists(dir))) return [];
+      const listed = await adapter.list(dir);
+      return [...listed.files, ...(await Promise.all(listed.folders.map(walk))).flat()];
+    };
+    for (const f of (await walk(`${mif}/entities`)).filter((p) => /\.ya?ml$/.test(p))) {
+      const { entity, error } = parseEntityFile(await adapter.read(f), f);
+      if (error) info.configIssues.push(error);
+      if (entity) info.entities.set(entity.urn, entity);
+    }
+  }
+
+  /** Re-derive every bundle's corpus from the store (after a download). */
+  refreshCorpora(): void {
+    if (!this.store) return;
+    for (const info of this.bundles.values()) info.corpus = this.store.corpusFor(info.localOntologies);
+    this.recomputeSemantics();
+  }
+
+  /** Ontology ids concepts declare that no corpus has yet. */
+  missingOntologies(): string[] {
+    const missing = new Set<string>();
+    const def = this.settings().defaultOntology;
+    for (const info of this.bundles.values()) if (def && !info.corpus.has(def)) missing.add(def);
+    for (const state of this.files.values()) {
+      const id = (state.analysis.frontmatter?.ontology as { id?: unknown } | undefined)?.id;
+      const info = this.bundles.get(state.root);
+      if (typeof id === "string" && info && !info.corpus.has(id)) missing.add(id);
+    }
+    return [...missing];
+  }
+
+  /** Download what concepts need, when the setting allows. */
+  async ensureOntologies(): Promise<void> {
+    if (!this.store || !this.settings().downloadOntologies) return;
+    const missing = this.missingOntologies();
+    if (!missing.length) return;
+    const got = await this.store.download(missing);
+    this.debug("ontologies", { missing, got, errors: this.store.status.errors });
+    if (got.length) this.refreshCorpora();
+  }
+
+  private semanticFor(state: FileState, path: string): SemanticReport | undefined {
+    const info = this.bundles.get(state.root);
+    if (!info || !state.concept) return undefined;
+    return semanticDiagnostics(state.concept.frontmatter, state.concept.body, path, {
+      corpus: info.corpus,
+      reservedPrefixes: info.reservedPrefixes,
+      sharedAgreements: info.sharedAgreements,
+      entities: info.entities,
+      downloadable: this.store ? new Set([...this.store.catalogIds()].filter((id) => !info.corpus.has(id))) : new Set(),
+      defaultOntology: this.settings().defaultOntology || undefined,
+    });
+  }
+
+  recomputeSemantics(): void {
+    for (const [path, state] of this.files) state.semantic = this.semanticFor(state, path);
+    this.trigger("changed", null);
+  }
+
+  semantic(path: string): SemanticReport | undefined {
+    return this.files.get(path)?.semantic;
+  }
+
+  /** Every entity in a bundle: from files, and referenced-only, with referrers. */
+  entityIndex(root: string): Map<string, { record?: EntityRecord; refs: Array<{ path: string; role?: string; name?: string }> }> {
+    const out = new Map<string, { record?: EntityRecord; refs: Array<{ path: string; role?: string; name?: string }> }>();
+    const info = this.bundles.get(root);
+    for (const [urn, record] of info?.entities ?? []) out.set(urn, { record, refs: [] });
+    for (const [path, state] of this.files) {
+      if (state.root !== root) continue;
+      const list = Array.isArray(state.analysis.frontmatter?.entities) ? (state.analysis.frontmatter!.entities as unknown[]) : [];
+      for (const r of list) {
+        const ref = r as { entity?: { "@id"?: unknown }; role?: unknown; name?: unknown };
+        const urn = ref?.entity?.["@id"];
+        if (typeof urn !== "string") continue;
+        if (!out.has(urn)) out.set(urn, { refs: [] });
+        out.get(urn)!.refs.push({ path, role: typeof ref.role === "string" ? ref.role : undefined, name: typeof ref.name === "string" ? ref.name : undefined });
+      }
+    }
+    return out;
+  }
+
+  /** Write `.mif/entities/<type>/<slug>.yaml` (no-op if it exists) and reload. */
+  async createEntity(root: string, urn: string, name?: string, typeName?: string): Promise<boolean> {
+    const m = /^urn:mif:entity:([a-z0-9-]+):([a-z0-9-]+)$/.exec(urn);
+    if (!m) {
+      new Notice(`MIF: ${urn} is not a urn:mif:entity:<type>:<slug> id.`);
+      return false;
+    }
+    const [, typeSegment, slug] = m;
+    const dir = `${root ? `${root}/` : ""}.mif/entities/${typeSegment}`;
+    const path = `${dir}/${slug}.yaml`;
+    const adapter = this.app.vault.adapter;
+    if (!(await adapter.exists(path))) {
+      for (const d of [`${root ? `${root}/` : ""}.mif`, `${root ? `${root}/` : ""}.mif/entities`, dir]) if (!(await adapter.exists(d))) await adapter.mkdir(d);
+      const pascal = typeName ?? typeSegment!.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join("");
+      await adapter.write(path, renderEntityFile({ typeName: pascal, name: name ?? slug!, slug: slug! }));
+    }
+    const info = this.bundles.get(root);
+    if (info) await this.loadBundleSemantics(info);
+    this.recomputeSemantics();
+    return true;
   }
 
   // --- analysis ---------------------------------------------------------------
@@ -229,7 +380,13 @@ export class MifManager extends Events {
       : [];
     return {
       ...state.analysis,
-      diagnostics: [...(this.rewrites.get(path) ?? []), ...legacy, ...state.analysis.diagnostics, ...(this.bundleDiags.get(path) ?? [])],
+      diagnostics: [
+        ...(this.rewrites.get(path) ?? []),
+        ...legacy,
+        ...state.analysis.diagnostics,
+        ...(this.bundleDiags.get(path) ?? []),
+        ...(state.semantic?.diagnostics ?? []),
+      ],
       path,
       root: state.root,
       legacy: state.legacy ?? undefined,
@@ -275,7 +432,9 @@ export class MifManager extends Events {
     this.reconcileRewrites(file.path, analysis.frontmatter);
 
     const concept = analysis.isConcept ? toBundleConcept(this.toBundlePath(root, file.path), text) : null;
-    this.files.set(file.path, { analysis, root, concept, legacy: legacySigns(file.path, text) });
+    const state: FileState = { analysis, root, concept, legacy: legacySigns(file.path, text) };
+    state.semantic = this.semanticFor(state, file.path);
+    this.files.set(file.path, state);
     if (!opts.quiet) this.scheduleIndex();
     return this.get(file.path);
   }
@@ -402,6 +561,20 @@ export class MifManager extends Events {
     }
     if (fix.transform === "migrate") {
       await this.migrate(file);
+      return;
+    }
+    if (fix.transform === "download-ontology" && this.store) {
+      const id = String(fix.data?.id ?? "");
+      const got = await this.store.download([id], { retry: true });
+      new Notice(got.length ? `MIF: downloaded ${got.join(", ")}.` : `MIF: could not download ${id}. ${this.store.status.errors.slice(-1)[0] ?? ""}`);
+      this.refreshCorpora();
+      return;
+    }
+    if (fix.transform === "create-entity") {
+      const root = this.rootFor(file.path);
+      if (root !== null) {
+        await this.createEntity(root, String(fix.data?.urn ?? ""), fix.data?.name as string | undefined, fix.data?.entityType as string | undefined);
+      }
       return;
     }
     const isRestore = (this.rewrites.get(file.path) ?? []).some((d) => d.fixes.includes(fix));

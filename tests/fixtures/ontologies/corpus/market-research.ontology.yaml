@@ -1,0 +1,575 @@
+---
+ontology:
+  id: market-research
+  version: "0.4.0"
+  description: Market-research domain ontology — segments, competitors, sizing, demand, intelligence
+  extends:
+  - mif-base
+  - shared-traits
+namespaces:
+  semantic:
+    children:
+      market:
+        description: Segments, competitors, brands, personas, sizing, forces, demand, data sources
+        type_hint: semantic
+      reports:
+        description: Market-intelligence reports and analyses
+        type_hint: semantic
+  procedural:
+    children:
+      research:
+        description: Survey instruments and research plan specifications
+        type_hint: procedural
+  episodic:
+    children:
+      research:
+        description: Win-loss analyses and research episodes
+        type_hint: episodic
+entity_types:
+- name: segment
+  description: A market segment — a defined slice of a market
+  aliases:
+    - "market segment"
+    - "buyer segment"
+    - "customer segment"
+    - "target segment"
+  exemplars:
+    - "A structured knowledge infrastructure product maps to several distinct buyer segments, each with its own pain point and willingness to pay"
+    - "Enterprise buyers have shifted decisively toward buying commercial software-as-a-service rather than building it in-house"
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      geographic_area:
+        type: string
+      audience_type:
+        type: string
+      identifier:
+        type: string
+  source_vocab: Umbrex market-mapping
+  source_class: market segment taxon
+  prior_art: Umbrex universe-of-entities taxonomy
+  disposition: mint
+- name: competitor
+  description: A competing organization in a market (EXTENDS schema:Organization)
+  negative_examples:
+    - "Individual vendors like CrowdStrike and Salesforce compete aggressively by undercutting on price, expanding feature sets faster than rivals, and differentiating on analyst rankings, collectively driving up the competitive intensity in the endpoint-security and CRM markets."
+  base: semantic
+  traits:
+  - cited
+  - dated
+  schema:
+    required:
+    - legal_name
+    properties:
+      legal_name:
+        type: string
+      url:
+        type: string
+        format: uri
+      area_served:
+        type: string
+      number_of_employees:
+        type: integer
+      founding_date:
+        type: string
+        format: date
+      makes_offer:
+        type: array
+        items:
+          type: string
+  source_vocab: schema.org
+  source_class: Organization
+  prior_art: schema.org/Organization / GoodRelations BusinessEntity
+  disposition: extend
+- name: brand
+  description: A brand maintained by a competitor (REUSES schema:Brand)
+  negative_examples:
+    - "New DTC skincare brands can enter the market at low cost via white-label manufacturing and Shopify platforms, allowing fresh entrants to compete for social-media discovery and rapidly gain mindshare among Gen Z consumers."
+    - "Salesforce, Inc. (NYSE: CRM), a San Francisco enterprise CRM vendor, and Shopify Inc. (NYSE: SHOP), an Ottawa commerce-platform vendor, are both publicly traded companies competing in their respective markets."
+    - "Gen Z and Millennial consumers increasingly check ingredient lists via apps like INCIDecoder or Yuka before buying 'clean-label' skincare, pressuring legacy brands to reformulate or launch clean-label sub-brands."
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      logo:
+        type: string
+        format: uri
+      slogan:
+        type: string
+      aggregate_rating:
+        type: string
+      review:
+        type: array
+        items:
+          type: string
+      url:
+        type: string
+        format: uri
+  source_vocab: schema.org
+  source_class: schema:Brand
+  prior_art: https://schema.org/Brand
+  disposition: reuse
+- name: buyer-persona
+  description: A target buyer audience or ideal-customer profile (REUSES schema:Audience)
+  negative_examples:
+    - "This segment, aged 13-26, discovers and buys skincare mainly via TikTok and Instagram Reels rather than search, weighting ingredient transparency and influencer endorsement heavily, with low brand loyalty."
+    - "LinkedIn, acquired by Microsoft in 2016 and reported as a standalone segment, is cited in B2B market research via its Sales Navigator and Talent Solutions products for firmographic targeting data."
+    - "This cohort was screened for current software-purchasing involvement at 1,000+-employee organizations with at least director-level title, yielding 412 qualified respondents for a brand-awareness and vendor-consideration study."
+    - "This skincare subscription box, personalized to skin type and concerns at signup, relies on a pause-rather-than-cancel default and periodic re-personalization surveys to manage churn."
+    - "In this win-loss analysis, retail category buyers repeatedly declined a DTC skincare brand's shelf-placement pitch over inability to verify its claimed online repeat-purchase rate, used as a sell-through-risk proxy."
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - audience_type
+    properties:
+      audience_type:
+        type: string
+      geographic_area:
+        type: string
+      required_gender:
+        type: string
+      required_min_age:
+        type: integer
+      required_max_age:
+        type: integer
+  source_vocab: schema.org
+  source_class: Audience
+  prior_art: schema.org/Audience / schema.org/PeopleAudience
+  disposition: reuse
+- name: respondent-segment
+  description: A survey-respondent cohort defined by screening criteria
+  negative_examples:
+    - "Demand for F2P games skews heavily toward older-demographics segments aged 40+ who prefer puzzle and strategy mechanics, representing a growing revenue opportunity for mobile developers."
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      audience_type:
+        type: string
+      geographic_area:
+        type: string
+      required_min_age:
+        type: integer
+      required_max_age:
+        type: integer
+  source_vocab: Market research practice
+  source_class: respondent cohort
+  prior_art: Pollfish market-research survey methodology
+  disposition: mint
+- name: sizing-estimate
+  description: A market-sizing estimate (TAM/SAM/SOM)
+  base: semantic
+  traits:
+  - cited
+  - dated
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      estimated_value:
+        type: string
+      valid_through:
+        type: string
+        format: date
+      eligible_region:
+        type: string
+      description:
+        type: string
+  source_vocab: TAM/SAM/SOM practice
+  source_class: total-addressable-market
+  prior_art: HubSpot TAM/SAM/SOM sizing methodology
+  disposition: mint
+- name: competitive-force
+  description: A Porter competitive force shaping competitive intensity
+  base: semantic
+  traits:
+  - cited
+  - dated
+  schema:
+    required:
+    - force_type
+    - industry_scope
+    properties:
+      force_type:
+        type: string
+        enum:
+        - new-entrants
+        - buyer-power
+        - supplier-power
+        - substitutes
+        - competitive-rivalry
+      intensity:
+        type: string
+        enum:
+        - high
+        - medium
+        - low
+        - indeterminate
+      industry_scope:
+        type: string
+      key_drivers:
+        type: string
+      trend_direction:
+        type: string
+        enum:
+        - increasing
+        - stable
+        - decreasing
+  source_vocab: Porter Five Forces
+  source_class: competitive-force
+  prior_art: Porter Five Forces framework (HBR 1979/2008)
+  disposition: mint
+- name: service-offering
+  description: A service offering provided into a market (EXTENDS schema:Service)
+  negative_examples:
+    - "Demand for embedded-payment capabilities is driving vendors to offer recurring-revenue models like subscription-box curation, where payment processing becomes a value-add feature bundled with the core product experience."
+    - "New observability vendors are offering cloud-native monitoring and AI-driven root-cause-analysis services that compete with legacy enterprise monitoring platforms, changing how operations teams approach infrastructure visibility."
+    - "Stripe, Inc., a privately held, venture-backed payments-infrastructure vendor in South San Francisco offering Stripe Treasury and Stripe Capital, competes with Adyen and Braintree among developer-first platforms."
+    - "CB Insights' embedded-fintech intelligence service provides analysis and tracking of fintech-in-enterprise offerings, helping investors and operators understand the strategic implications of fintech integrations."
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      provider:
+        type: string
+      audience:
+        type: string
+      brand:
+        type: string
+      area_served:
+        type: string
+      service_type:
+        type: string
+      offers:
+        type: array
+        items:
+          type: string
+  source_vocab: schema.org
+  source_class: schema:Service
+  prior_art: https://schema.org/Service
+  disposition: reuse
+- name: market-demand
+  description: Market demand for an offered item (REUSES schema:Demand)
+  negative_examples:
+    - "Buyers with negotiating power in CRM and enterprise software markets demand better pricing, lower switching costs, and extended payment terms, forcing vendors to improve commercial flexibility to maintain customer retention and market share."
+    - "Conjoint-analysis survey instruments measure demand for specific pricing tiers and feature bundles, revealing which value combinations customers would actually choose across hypothetical product configurations."
+  base: semantic
+  traits:
+  - cited
+  - dated
+  schema:
+    required:
+    - item_offered
+    properties:
+      item_offered:
+        type: string
+      eligible_region:
+        type: string
+      seller:
+        type: string
+      business_function:
+        type: string
+      valid_from:
+        type: string
+        format: date
+      valid_through:
+        type: string
+        format: date
+  source_vocab: schema.org
+  source_class: schema:Demand
+  prior_art: https://schema.org/Demand
+  disposition: reuse
+- name: value-proposition
+  description: A value proposition mapping offerings to customer jobs, pains and gains
+  negative_examples:
+    - "K-12 tutoring software demand, initially subsidized by federal ESSER relief funds, has moderated as ESSER funding wound down through its 2024 obligation deadline, shifting purchasing back to district general funds."
+    - "This cohort screened for owners or sole financial decision-makers at businesses with fewer than 50 employees, yielding 650 qualified respondents for a study measuring unaided and aided brand awareness of accounting-software vendors. Quotas were set to match US Census Bureau small-business industry distribution rather than allowing a convenience sample skewed toward any single vertical."
+    - "Enterprise software buying centers (5,000+ employees) require formal RFPs and multi-stakeholder sign-off; Gartner and Forrester treat this as distinct since criteria like SOC 2 and SSO/SAML diverge from smaller buyers."
+    - "In this win-loss analysis, a vertical-SaaS company chose an embedded-payments partner based on API documentation and sandbox quality evaluated by its own engineers, weighing more than per-transaction pricing."
+  base: semantic
+  traits:
+  - cited
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      audience:
+        type: string
+      service_type:
+        type: string
+      slogan:
+        type: string
+  source_vocab: Strategyzer Value Proposition Canvas
+  source_class: value-proposition
+  prior_art: Osterwalder Value Proposition Canvas methodology
+  disposition: mint
+- name: market-intelligence-report
+  description: A market-intelligence report or analysis
+  aliases:
+    - "market intelligence brief"
+    - "competitive intelligence report"
+    - "industry analyst report"
+    - "market research report"
+  exemplars:
+    - "Pricing signals from adjacent enterprise software markets establish a willingness-to-pay range for a new category of infrastructure product"
+    - "An analyst quadrant report evaluates competing vendors in one category across execution and vision criteria, naming market leaders"
+    - "An annual industry index tracks aggregated billing data across hundreds of companies to compare single- versus multi-model revenue architectures"
+  negative_examples:
+    - "Demand for managed-detection-and-response (MDR) in ransomware protection is documented in industry reports like CB Insights' cybersecurity threat analysis and Forrester Wave assessments of the MDR market."
+    - "Healthcare payers represent a distinct market segment; industry intelligence reports track payer consolidation trends, reimbursement-policy shifts, and vendor adoption rates within this sector."
+  base: semantic
+  traits:
+  - cited
+  - versioned
+  - documented
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      date_published:
+        type: string
+        format: date
+      publisher:
+        type: string
+      about:
+        type: string
+      mentions:
+        type: array
+        items:
+          type: string
+      is_based_on:
+        type: array
+        items:
+          type: string
+  source_vocab: schema.org
+  source_class: Report
+  prior_art: schema.org/Report / IAO:0000311 publication
+  disposition: mint
+- name: market-data-source
+  description: A catalog of market-intelligence data (REUSES schema:DataCatalog)
+  negative_examples:
+    - "Adobe (NASDAQ: ADBE) acquired Marketo Engage in 2018 for B2B marketing automation, while CrowdStrike (NASDAQ: CRWD), maker of the Falcon EDR platform, faced scrutiny after its July 2024 outage disrupted Windows systems globally."
+    - "Predictive-maintenance IoT demand has grown as unplanned downtime, cited at tens of thousands of dollars per hour for large facilities, strengthens the business case for sensor instrumentation investment."
+    - "Sensor Tower's mobile-gaming report tracks in-app-purchase revenue and downloads via its own app-store data-panel estimation methodology, a standard but non-publisher-disclosed secondary source in mobile-gaming competitive analysis."
+    - "Organizations of 200-2,000 employees lacking a 24/7 SOC but facing SOC 2 or cyber-insurance compliance pressure typically outsource threat monitoring entirely to a managed security provider rather than building hybrid coverage."
+    - "In this win-loss analysis, non-converting industrial-IoT pilots most often failed due to integration friction with the facility's existing SCADA/PLC vendor ecosystem, discovered only during the pilot itself."
+  base: semantic
+  traits:
+  - cited
+  - versioned
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      url:
+        type: string
+        format: uri
+      provider:
+        type: string
+      dataset:
+        type: array
+        items:
+          type: string
+      measurement_technique:
+        type: string
+      date_modified:
+        type: string
+        format: date
+  source_vocab: schema.org
+  source_class: DataCatalog
+  prior_art: schema.org/DataCatalog / W3C DCAT 3 dcat:Catalog
+  disposition: reuse
+- name: survey-instrument
+  description: A survey instrument — a research plan specification
+  negative_examples:
+    - "A surveyed cohort of 250 manufacturing plant managers is gathered using a multi-question screening protocol that filters for facility size and recent technology-evaluation activity to ensure respondent relevance to IoT adoption studies."
+    - "Clinical procurement leads at healthcare systems are characterized as decision-makers; capturing their preferences requires a structured interview protocol covering budget authority, risk tolerance, and vendor-certification requirements."
+    - "The K-12 edtech segment is researched using survey instruments that measure teacher adoption rates, student engagement outcomes, and curriculum-fit perceptions to guide product roadmap decisions."
+    - "Observability platforms communicate unified value propositions through surveys and buyer interviews, emphasizing single-pane-of-glass visibility, AI-driven insights, and cost reduction as key differentiators."
+  base: procedural
+  traits:
+  - cited
+  - versioned
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      measurement_technique:
+        type: string
+      about:
+        type: string
+      audience:
+        type: string
+  source_vocab: IAO
+  source_class: plan-specification
+  prior_art: IAO plan-specification / OBI protocol
+  disposition: mint
+- name: win-loss-analysis
+  description: A win-loss analysis episode — post-decision interviews with won/lost prospects
+  negative_examples:
+    - "Win-loss discussion guides are survey instruments used to conduct structured interviews with customers about their vendor-selection reasoning, competitive comparisons, and deal-outcome drivers."
+  base: episodic
+  traits:
+  - cited
+  - dated
+  schema:
+    required:
+    - name
+    properties:
+      name:
+        type: string
+      about:
+        type: string
+      date_created:
+        type: string
+        format: date
+      mentions:
+        type: array
+        items:
+          type: string
+      description:
+        type: string
+  source_vocab: Competitive intelligence practice
+  source_class: win-loss artifact
+  prior_art: Clozd / Corporate Visions win-loss methodology
+  disposition: mint
+relationships:
+  analyzes-competitor:
+    description: A win-loss-analysis analyzes a competitor (schema:about)
+    from:
+    - win-loss-analysis
+    to:
+    - competitor
+    symmetric: false
+  based-on-source:
+    description: A market-intelligence-report is based on a market-data-source (schema:isBasedOn)
+    from:
+    - market-intelligence-report
+    to:
+    - market-data-source
+    symmetric: false
+  covers-segment:
+    description: A market-intelligence-report covers a segment (schema:about)
+    from:
+    - market-intelligence-report
+    to:
+    - segment
+    symmetric: false
+  targets-audience:
+    description: A value-proposition targets a buyer-persona (schema:audience)
+    from:
+    - value-proposition
+    to:
+    - buyer-persona
+    symmetric: false
+  tracks-competitive-force:
+    description: A competitor tracks a competitive-force (schema:knowsAbout)
+    from:
+    - competitor
+    to:
+    - competitive-force
+    symmetric: false
+  item-offered:
+    description: Market-demand is for an offered service-offering (schema:itemOffered)
+    from:
+    - market-demand
+    to:
+    - service-offering
+    symmetric: false
+  maintains-brand:
+    description: A competitor maintains a brand (schema:brand / gr:hasBrand)
+    from:
+    - competitor
+    to:
+    - brand
+    symmetric: false
+  operates-in:
+    description: A service-offering operates in a segment (schema:areaServed, extended to segment)
+    from:
+    - service-offering
+    to:
+    - segment
+    symmetric: false
+  provides-service:
+    description: A competitor provides a service-offering (inverse of schema:provider)
+    from:
+    - competitor
+    to:
+    - service-offering
+    symmetric: false
+discovery:
+  enabled: true
+  confidence_threshold: 0.8
+  patterns:
+  - content_pattern: \b(segment|vertical|buyer size|price band|market segment)\b
+    suggest_entity: segment
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(competitor|incumbent|rival vendor|market player)\b
+    suggest_entity: competitor
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(buyer persona|target audience|ICP|jobs[- ]to[- ]be[- ]done)\b
+    suggest_entity: buyer-persona
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(TAM|SAM|SOM|total addressable market|market siz(e|ing))\b
+    suggest_entity: sizing-estimate
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(five forces|bargaining power|threat of substitutes|new entrants)\b
+    suggest_entity: competitive-force
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(market report|landscape analysis|competitive intelligence report)\b
+    suggest_entity: market-intelligence-report
+    suggest_namespace: _semantic/reports
+  - content_pattern: \b(questionnaire|survey instrument|conjoint|MaxDiff|NPS survey)\b
+    suggest_entity: survey-instrument
+    suggest_namespace: _procedural/research
+  - content_pattern: \b(respondent|screener|n=\d+|qualified respondents)\b
+    suggest_entity: respondent-segment
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(value proposition|jobs addressed|pains relieved|gains created)\b
+    suggest_entity: value-proposition
+    suggest_namespace: _semantic/market
+  - content_pattern: \b(win[- ]loss|win rate|deal review|loss reasons)\b
+    suggest_entity: win-loss-analysis
+    suggest_namespace: _episodic/research
+  - content_pattern: \b(syndicated|panel data|transaction data|data provider)\b
+    suggest_entity: market-data-source
+    suggest_namespace: _semantic/market

@@ -142,3 +142,37 @@ describe("writes to open notes", () => {
     expect(edits[0]!.text.length).toBeLessThan(20);
   });
 });
+
+describe("entities", () => {
+  it("creates a missing entity file from the diagnostic's fix, which then resolves", async () => {
+    const { memoryAdapter } = await import("./support/obsidian-stub");
+    const concept = [
+      "---",
+      "id: 11111111-2222-4333-8444-555555555555",
+      "type: semantic",
+      "created: 2026-01-01T00:00:00Z",
+      "entities:",
+      "  - '@type': EntityReference",
+      "    entity:",
+      "      '@id': urn:mif:entity:person:jane-doe",
+      "    name: Jane Doe",
+      "    entityType: Person",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n");
+    const v = memoryApp({ "note.md": concept });
+    const dotFiles = new Map<string, string>();
+    (v.app.vault as { adapter: unknown }).adapter = memoryAdapter(dotFiles);
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const d = manager.get("note.md")!.diagnostics.find((x) => x.code === "entity-unresolved")!;
+    expect(d.fixes[0]!.data).toEqual({ urn: "urn:mif:entity:person:jane-doe", name: "Jane Doe", entityType: "Person" });
+    await manager.applyFix(v.files.get("note.md") as never, d.fixes[0]!);
+    expect(dotFiles.get(".mif/entities/person/jane-doe.yaml")).toContain("name: Jane Doe");
+    expect(manager.get("note.md")!.diagnostics.map((x) => x.code)).not.toContain("entity-unresolved");
+    expect(manager.entityIndex("").get("urn:mif:entity:person:jane-doe")!.refs.map((r) => r.path)).toEqual(["note.md"]);
+  });
+});
