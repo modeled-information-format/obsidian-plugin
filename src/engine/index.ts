@@ -37,6 +37,7 @@ export {
   kebab,
   malformedMirrorLines,
   mirrorDrift,
+  linkTarget,
   relativeTarget,
   removeRelationship,
   resolveTarget,

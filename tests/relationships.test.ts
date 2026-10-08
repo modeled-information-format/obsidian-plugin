@@ -14,6 +14,7 @@ import {
   frontmatterRelationships,
   incomingLabel,
   kebab,
+  linkTarget,
   mirrorDrift,
   relativeTarget,
   removeRelationship,
@@ -180,6 +181,22 @@ describe("targets", () => {
     expect(relativeTarget("sub/c.md", "a.md")).toBe("../a.md");
     expect(relativeTarget("a.md", "sub/c.md")).toBe("sub/c.md");
     expect(relativeTarget("x/y/z.md", "x/q.md")).toBe("../q.md");
+  });
+
+  it("encodes path targets so the mirror line stays a link", () => {
+    expect(linkTarget("Streams/Phase 1 Listen.md")).toBe("Streams/Phase%201%20Listen.md");
+    expect(linkTarget("a (draft) <x> 100%.md")).toBe("a%20%28draft%29%20%3Cx%3E%20100%25.md");
+    expect(relativeTarget("Daily/2026-10-07.md", "Streams/Phase 1 Listen.md")).toBe("../Streams/Phase%201%20Listen.md");
+    for (const path of ["Streams/Phase 1 Listen.md", "a (draft) <x> 100%.md", "plain/b.md"]) {
+      expect(resolveTarget(relativeTarget("Daily/n.md", path), "Daily/n.md")).toEqual({ kind: "path", bundlePath: path });
+      expect(resolveTarget(`/${linkTarget(path)}`, "Daily/n.md")).toEqual({ kind: "path", bundlePath: path });
+    }
+    const base = "---\nid: 7b3c1e90-5a2f-4c8d-9e10-2f6a4b8c1d3e\ntype: episodic\ncreated: 2026-10-07T09:00:00Z\n---\n\n# Note\n";
+    const target = relativeTarget("Daily/n.md", "Streams/Phase 1 Listen (draft).md");
+    const out = addRelationship(base, { type: "part-of", target }, () => "Phase 1");
+    const { frontmatter, body } = parseMarkdown(out);
+    expect(bodyRelationships(body).map((r) => r.target)).toEqual([target]);
+    expect(mirrorDrift(frontmatter, body)).toBeNull();
   });
 
   it("retargets referrers after a rename, keeping each target's style", () => {
