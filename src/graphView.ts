@@ -155,11 +155,19 @@ export class GraphView extends ItemView {
     }
     for (const n of graph.nodes) {
       const node = svg.createSvg("g", { cls: ["mif-graph-node", `mif-graph-${n.conceptType ?? "none"}`, ...(n.id === center ? ["is-center"] : [])], attr: { transform: `translate(${n.x} ${n.y})` } });
+      // A transparent, larger hit target: the dot alone is hard to click.
+      node.createSvg("circle", { cls: "mif-graph-hit" });
       node.createSvg("circle", { cls: n.id === center ? "is-center" : [] });
       node.createSvg("text").textContent = n.label;
-      node.addEventListener("click", () => {
-        const f = this.app.vault.getAbstractFileByPath(this.host.manager.toVaultPath(root, n.id));
-        if (f instanceof TFile) void this.app.workspace.getLeaf(false).openFile(f);
+      // A click (not the end of a drag) opens the concept in the main editor;
+      // openLinkText picks the main area even though the graph is in a sidebar.
+      node.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      node.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const path = this.host.manager.toVaultPath(root, n.id);
+        const f = this.app.vault.getAbstractFileByPath(path);
+        this.host.manager.debug("graph-click", { path, found: f instanceof TFile });
+        if (f instanceof TFile) void this.app.workspace.openLinkText(f.path, "", false);
       });
     }
 

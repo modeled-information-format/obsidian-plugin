@@ -204,6 +204,22 @@ describe("JSON-LD and graph panels", () => {
     expect(el.querySelector(".mif-graph-type.is-hidden")).not.toBeNull();
   });
 
+  it("graph opens a concept from its dot or its label", async () => {
+    const { GraphView } = await import("../src/graphView");
+    const { v, host } = await setup(files, "a.md");
+    const opened: string[] = [];
+    (v.app as { workspace: Record<string, unknown> }).workspace.openLinkText = async (p: string) => void opened.push(p);
+    const view = make(GraphView, v.app, host);
+    await view.open();
+    const node = view.contentEl.querySelector("g.mif-graph-node:not(.is-center)")!;
+    expect(node.querySelector("circle.mif-graph-hit")).not.toBeNull();
+    (node.querySelector("text") as unknown as HTMLElement).dispatchEvent(new Event("click", { bubbles: true }));
+    (node.querySelector("circle:not(.mif-graph-hit)") as unknown as HTMLElement).dispatchEvent(new Event("click", { bubbles: true }));
+    expect(opened).toHaveLength(2);
+    expect(opened[0]).toBe(opened[1]);
+    expect(["b.md", "d.md", "e.md", "sub/c.md"]).toContain(opened[0]);
+  });
+
   it("JSON-LD panel shows the projection and a lossless round trip", async () => {
     const { JsonLdView } = await import("../src/jsonldView");
     const { v, host } = await setup(files, "a.md");

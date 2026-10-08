@@ -165,11 +165,13 @@
 .mif-graph-node { cursor: pointer; }
 .mif-graph-node circle { r: calc(6px * var(--mif-graph-scale)); stroke: var(--background-primary); stroke-width: calc(1.5px * var(--mif-graph-scale)); fill: var(--text-muted); }
 .mif-graph-node circle.is-center { r: calc(9px * var(--mif-graph-scale)); }
+/* Invisible hit area; more specific than the type / centre colours below. */
+.mif-graph .mif-graph-node circle.mif-graph-hit { r: calc(14px * var(--mif-graph-scale)); fill: transparent; stroke: none; }
 .mif-graph-node.mif-graph-semantic circle { fill: var(--mif-machine); }
 .mif-graph-node.mif-graph-episodic circle { fill: var(--mif-human); }
 .mif-graph-node.mif-graph-procedural circle { fill: var(--mif-valid); }
 .mif-graph-node.is-center circle { stroke: var(--text-normal); stroke-width: calc(2.5px * var(--mif-graph-scale)); }
-.mif-graph-node text { font-size: calc(12px * var(--mif-graph-scale)); transform: translate(calc(10px * var(--mif-graph-scale)), calc(4px * var(--mif-graph-scale))); fill: var(--text-normal); pointer-events: none; paint-order: stroke; stroke: var(--background-primary); stroke-width: calc(3px * var(--mif-graph-scale)); }
+.mif-graph-node text { font-size: calc(12px * var(--mif-graph-scale)); transform: translate(calc(10px * var(--mif-graph-scale)), calc(4px * var(--mif-graph-scale))); fill: var(--text-normal); cursor: pointer; paint-order: stroke; stroke: var(--background-primary); stroke-width: calc(3px * var(--mif-graph-scale)); }
 .mif-graph-c1 { color: var(--mif-graph-1); stroke: var(--mif-graph-1); } .mif-graph-fill.mif-graph-c1 { fill: var(--mif-graph-1); }
 .mif-graph-c2 { color: var(--mif-graph-2); stroke: var(--mif-graph-2); } .mif-graph-fill.mif-graph-c2 { fill: var(--mif-graph-2); }
 .mif-graph-c3 { color: var(--mif-graph-3); stroke: var(--mif-graph-3); } .mif-graph-fill.mif-graph-c3 { fill: var(--mif-graph-3); }
