@@ -95,7 +95,14 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
         trashed.push(f.path);
       },
     },
-    fileManager: {},
+    fileManager: {
+      // As Obsidian: honours the user's deletion preference; here, recorded.
+      trashFile: async (f: TFile) => {
+        files.delete(f.path);
+        texts.delete(f.path);
+        trashed.push(f.path);
+      },
+    },
     workspace: { iterateAllLeaves: () => {} },
   };
   const move = (from: string, to: string) => {

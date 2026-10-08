@@ -1,7 +1,7 @@
 // Shared helpers for the spikes. Spikes run inside Obsidian, write a
 // markdown report under SPIKE_ROOT, and never touch files outside it.
 
-import { apiVersion, normalizePath, TFile, type App } from "obsidian";
+import { apiVersion, normalizePath, Platform, TFile, type App } from "obsidian";
 
 import { RESERVED_FILENAMES } from "../engine";
 
@@ -51,8 +51,11 @@ export function waitForCache(app: App, file: TFile, timeoutMs = 5000): Promise<b
   });
 }
 
+const platformName = () =>
+  [Platform.isMobile ? "mobile" : "desktop", Platform.isIosApp ? "iOS" : Platform.isAndroidApp ? "Android" : Platform.isMacOS ? "macOS" : Platform.isWin ? "Windows" : Platform.isLinux ? "Linux" : "other"].join(" / ");
+
 export const reportHeader = (title: string) =>
-  `# ${title}\n\n- Obsidian API: ${apiVersion}\n- Platform: ${navigator.userAgent}\n- Run at: ${new Date().toISOString()}\n`;
+  `# ${title}\n\n- Obsidian API: ${apiVersion}\n- Platform: ${platformName()}\n- Run at: ${new Date().toISOString()}\n`;
 
 /** Escape a value for a markdown table cell. */
 export const cell = (v: unknown) =>

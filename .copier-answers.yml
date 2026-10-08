@@ -1,0 +1,10 @@
+# This file is managed by Copier; do not edit by hand.
+# It records your answers and the template version so `copier update` can
+# re-apply later template improvements to this project.
+_commit: a824258
+_src_path: https://github.com/modeled-information-format/mif-repo-template.git
+description: 'MIF for Obsidian: author, validate, and sync MIF (Modeled Information
+    Format) bundles'
+owner: modeled-information-format
+project_name: obsidian-plugin
+

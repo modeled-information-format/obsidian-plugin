@@ -3,7 +3,7 @@
 // sync rule are ported from MIF's scripts/okf_validate.py so the plugin
 // agrees with the reference validator; tests/golden/*/rels.json pins them.
 
-import { parseMarkdown, type Frontmatter } from "./convert";
+import { parseMarkdown, scalarText, type Frontmatter } from "./convert";
 import { setScalarIn, updateFrontmatter } from "./writer";
 
 /** okf_validate._kebab: PascalCase / snake / spaced → kebab, namespace-aware. */
@@ -137,8 +137,8 @@ export function frontmatterRelationships(fm: Frontmatter): FrontmatterRelationsh
     }
     out.push({
       index,
-      type: kebab(String(r.type ?? r.relationshipType ?? "")),
-      target: String(target),
+      type: kebab(scalarText(r.type ?? r.relationshipType ?? "")),
+      target: scalarText(target),
       strength: typeof r.strength === "number" ? r.strength : undefined,
       metadata: r.metadata && typeof r.metadata === "object" ? (r.metadata as Record<string, unknown>) : undefined,
     });

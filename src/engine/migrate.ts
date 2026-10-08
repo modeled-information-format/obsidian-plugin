@@ -9,7 +9,7 @@
 // since mif.schema.json rejects the old names (additionalProperties: false).
 // Edits go through the format-preserving writer rather than re-serialising.
 
-import { parseMarkdown, type Frontmatter } from "./convert";
+import { parseMarkdown, scalarText, type Frontmatter } from "./convert";
 import { titleize, WIKILINK_REL_RE } from "./relationships";
 import { updateFrontmatter } from "./writer";
 
@@ -174,11 +174,11 @@ export function migrateConcept(text: string): string {
   const { frontmatter: fm, body } = parseMarkdown(text);
   const updates: Record<string, unknown> = {};
 
-  const rawId = String(fm.id ?? "").trim();
+  const rawId = scalarText(fm.id ?? "").trim();
   if (!UUID_RE.test(rawId)) {
     updates.id = uuid5(rawId || text.slice(0, 64), MIF_NAMESPACE);
     if (rawId) {
-      const aliases = Array.isArray(fm.aliases) ? fm.aliases : [];
+      const aliases: unknown[] = Array.isArray(fm.aliases) ? fm.aliases : [];
       updates.aliases = aliases.includes(rawId) ? aliases : [...aliases, rawId];
     }
   }

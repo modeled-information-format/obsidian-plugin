@@ -103,7 +103,7 @@ export class NewConceptModal extends Modal {
     }
     new Setting(this.contentEl)
       .setName("Namespace")
-      .setDesc("Optional. Setting one also adds modified and temporal, giving a Level 2 concept.")
+      .setDesc("Optional. Setting one also adds modified and temporal, giving a level 2 concept.")
       .addText((t) => {
         t.setPlaceholder("_semantic/policies").onChange((v) => (this.input.namespace = v.trim()));
         t.inputEl.setAttr("list", "mif-ns-suggestions");
@@ -181,6 +181,21 @@ export class ConfirmModal extends Modal {
           this.close();
         }),
       );
+  }
+  override onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/** A read-only report: a title, lines of text, and Close. */
+export class ReportModal extends Modal {
+  constructor(app: App, private readonly title: string, private readonly lines: string[]) {
+    super(app);
+  }
+  override onOpen() {
+    this.setTitle(this.title);
+    for (const line of this.lines) this.contentEl.createEl("p", { text: line });
+    new Setting(this.contentEl).addButton((b) => b.setButtonText("Close").setCta().onClick(() => this.close()));
   }
   override onClose() {
     this.contentEl.empty();

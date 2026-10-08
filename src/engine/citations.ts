@@ -9,7 +9,7 @@
 // so these stay errors, and the spec's fallbacks are offered as fixes.
 
 import type { Diagnostic, Fix } from "./analyze";
-import { parseMarkdown, type Frontmatter } from "./convert";
+import { parseMarkdown, scalarText, type Frontmatter } from "./convert";
 import { applyEdit } from "./form";
 
 export const CITATION_TYPES: Record<string, string> = {
@@ -371,7 +371,7 @@ const fmCitations = (fm: Frontmatter) =>
 
 const fieldValue = (c: Record<string, unknown>, label: (typeof FIELD_LABELS)[number]): string | undefined => {
   const v = { Type: c.citationType, Role: c.citationRole, Relevance: c.relevance, Accessed: c.accessed }[label];
-  return v === undefined || v === null || v === "" ? undefined : String(v);
+  return v === undefined || v === null || v === "" ? undefined : scalarText(v);
 };
 
 /** What differs between a frontmatter citation and its body entry (frontmatter wins). */

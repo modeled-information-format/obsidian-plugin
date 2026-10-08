@@ -1,0 +1,23 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://modeled-information-format.github.io/vex/obsidian-plugin/v1",
+  "author": "modeled-information-format",
+  "role": "Project Maintainer",
+  "timestamp": "2026-06-19T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-0000-00000"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/modeled-information-format/obsidian-plugin"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Sample disposition — replace with real entries. This shows how a non-applicable CVE is recorded so the deploy gate can enforce 'no UNDISPOSITIONED high/critical vulnerabilities' rather than 'zero findings'."
+    }
+  ]
+}

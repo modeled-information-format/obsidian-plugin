@@ -134,7 +134,7 @@ export class OntologyStore {
     const add = (id: string) => {
       if (want.has(id) || !catalog.ontologies[id]) return;
       want.add(id);
-      for (const p of catalog.ontologies[id]!.extends ?? []) add(p);
+      for (const p of catalog.ontologies[id].extends ?? []) add(p);
     };
     for (const id of requested) add(id);
     for (const id of want) {

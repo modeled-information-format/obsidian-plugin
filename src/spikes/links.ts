@@ -8,7 +8,7 @@
 
 import { TFile, type App } from "obsidian";
 
-import { parseMarkdown } from "../engine";
+import { parseMarkdown, scalarText } from "../engine";
 import { cell, conceptFiles, reportHeader, waitForCache, writeSpikeFile } from "./util";
 
 interface Relationship {
@@ -51,7 +51,7 @@ export async function runLinkSpike(app: App): Promise<string> {
     }
     const resolved = app.metadataCache.resolvedLinks[file.path] ?? {};
     for (const rel of rels) {
-      const target = String(rel.target ?? "");
+      const target = scalarText(rel.target ?? "");
       const inResolved = Object.keys(resolved).some((dest) => `/${dest}` === target || dest === target);
       relRows.push(`| ${[file.path, rel.type, target, resolveTarget(app, target, file.path), inResolved ? "yes" : "no"].map(cell).join(" | ")} |`);
     }

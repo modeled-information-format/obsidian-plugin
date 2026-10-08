@@ -27,7 +27,7 @@ export const TRUST_LEVELS: Record<string, string> = {
 /** Option text for vocabulary dropdowns. */
 export function vocabularyLabel(field: string, value: string): string | undefined {
   if (field === "sourceType" && SOURCE_TYPES[value]) {
-    const { description, range } = SOURCE_TYPES[value]!;
+    const { description, range } = SOURCE_TYPES[value];
     return `${value} — ${description} (${range[0].toFixed(2)}–${range[1].toFixed(2)})`;
   }
   if (field === "trustLevel" && TRUST_LEVELS[value]) return `${value} — ${TRUST_LEVELS[value]}`;

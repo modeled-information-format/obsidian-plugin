@@ -1,8 +1,10 @@
 // An Obsidian Bases view ("MIF table"). Bases filters, sorts, and
 // groups notes by their properties; this view adds the values MIF computes
 // live and never writes to frontmatter: level, freshness, trust, issues.
+// Bases (Obsidian 1.10) sets the plugin's minAppVersion: Obsidian's review
+// rules do not allow APIs newer than it, even behind a runtime check.
 
-import { BasesView, type QueryController } from "obsidian";
+import { BasesView, type Plugin, type QueryController } from "obsidian";
 
 import type { MifApi } from "./api";
 import { freshnessLabel } from "./freshnessView";
@@ -10,7 +12,15 @@ import type { MifManager } from "./manager";
 
 export const BASES_VIEW = "mif-table";
 
-export class MifBasesView extends BasesView {
+export function registerMifBasesView(plugin: Plugin, api: MifApi, manager: MifManager): boolean {
+  return plugin.registerBasesView(BASES_VIEW, {
+    name: "MIF table",
+    icon: "list-checks",
+    factory: (controller, containerEl) => new MifBasesView(controller, containerEl, api, manager),
+  });
+}
+
+class MifBasesView extends BasesView {
   readonly type = BASES_VIEW;
 
   constructor(controller: QueryController, private readonly containerEl: HTMLElement, private readonly api: MifApi, private readonly manager: MifManager) {

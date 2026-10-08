@@ -39,7 +39,7 @@ export interface FieldModel {
 type Schema = Record<string, unknown>;
 const ROOT = mif as Schema;
 const DEFS = (ROOT.$defs ?? {}) as Record<string, Schema>;
-const EXTERNAL: Record<string, Schema> = { "./definitions/entity-reference.schema.json": entityReference as Schema };
+const EXTERNAL: Record<string, Schema> = { "./definitions/entity-reference.schema.json": entityReference };
 
 function resolve(s: Schema): Schema {
   const ref = s.$ref;
@@ -230,7 +230,7 @@ function setIn(root: unknown, path: Array<string | number>, value: unknown): unk
   if (path.length === 0) return value;
   const [head, ...rest] = path;
   const base = root && typeof root === "object" ? root : typeof head === "number" ? [] : {};
-  const copy = Array.isArray(base) ? [...base] : { ...(base as Record<string, unknown>) };
+  const copy = Array.isArray(base) ? (base as unknown[]).slice() : { ...(base as Record<string, unknown>) };
   const next = setIn((base as Record<string | number, unknown>)[head!], rest, value);
   if (next === undefined) {
     if (Array.isArray(copy)) copy.splice(head as number, 1);

@@ -253,7 +253,7 @@ export function editStructure(text: string, path: Array<string | number>, value:
   let next: string | null = null;
 
   if (isMap(parent) && !parent.flow && typeof last === "string") {
-    const pairs = parent.items as Pair[];
+    const pairs = parent.items;
     const idx = pairs.findIndex((p) => isScalar(p.key) && p.key.value === last);
     if (value === undefined) {
       if (idx === -1) return null;

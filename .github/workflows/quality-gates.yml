@@ -1,0 +1,89 @@
+---
+name: quality-gates
+
+# Merge-time quality gates — thin callers of the modeled-information-format/.github central
+# reusable workflows (pinned by full commit SHA). Each gate normalizes on SARIF
+# and surfaces in the repository Security tab; wire the "Code scanning results"
+# check as a required status check to make it a merge gate.
+#
+# These run on every push/PR (and weekly). The release pipeline (release.yml)
+# additionally re-runs SAST/SCA/IaC-license over the release subject and signs
+# each verdict as a digest-bound attestation; posture (Scorecard) is a
+# repo-level signal and stays here, not re-attested per release.
+#
+# CodeQL scans the workflows (`actions`) and the plugin source
+# (`javascript-typescript`); OSV scans both npm lockfiles.
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "37 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sast:
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+      packages: read
+    # modeled-information-format/.github main @ 70389a7
+    uses: >-
+      modeled-information-format/.github/.github/workflows/reusable-sast-codeql.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+    with:
+      languages: actions,javascript-typescript
+      build-mode: none
+
+  sca:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      pull-requests: write
+    # modeled-information-format/.github main @ 70389a7
+    uses: >-
+      modeled-information-format/.github/.github/workflows/reusable-sca-osv.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+    with:
+      fail-on-severity: high
+      scan-args: |-
+        --lockfile=package-lock.json
+        --lockfile=tools/lint/package-lock.json
+
+  posture:
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    # modeled-information-format/.github main @ 70389a7
+    uses: >-
+      modeled-information-format/.github/.github/workflows/reusable-scorecard.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+    with:
+      publish-results: false
+    secrets:
+      # CI app key so Scorecard scores Branch-Protection from real settings; its
+      # client-id is vars.CI_CLIENT_APP_ID (read inside the reusable).
+      app-private-key: ${{ secrets.CI_CLIENT_APP_PRIVATE_KEY }}
+
+  trivy:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      packages: read
+    # modeled-information-format/.github main @ 70389a7
+    uses: >-
+      modeled-information-format/.github/.github/workflows/reusable-trivy.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+    with:
+      scan-iac: true

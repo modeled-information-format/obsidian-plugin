@@ -2,7 +2,7 @@
   "id": "mif",
   "name": "MIF",
   "version": "0.0.1",
-  "minAppVersion": "1.8.0",
+  "minAppVersion": "1.10.0",
   "description": "Author, validate, and sync MIF (Modeled Information Format) knowledge bundles.",
   "author": "Modeled Information Format",
   "authorUrl": "https://mif-spec.dev",

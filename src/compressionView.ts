@@ -67,7 +67,7 @@ export function isFirstBodySection(el: HTMLElement, info: { lineStart: number; t
   if (!el.isConnected || !el.parentElement) return undefined;
   if (el.classList.contains("mod-frontmatter")) return false; // hidden; never host the banner
   for (let p = el.previousElementSibling; p; p = p.previousElementSibling) {
-    const section = [...p.classList].some((c) => c.startsWith("el-"));
+    const section = /(^|\s)el-/.test(p.getAttribute("class") ?? "");
     if (section && !p.classList.contains("mod-frontmatter")) return false;
   }
   return true;

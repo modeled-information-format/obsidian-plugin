@@ -1,0 +1,130 @@
+---
+name: CI
+
+# Continuous integration for the MIF Obsidian plugin: every push and pull
+# request to main. Instantiated from mif-repo-template (.copier-answers.yml);
+# the pin-check and workflow-lint jobs are thin callers of the org's central
+# reusables, and every action is pinned to a full commit SHA.
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # modeled-information-format/.github main @ 70389a7
+  pin-check:
+    permissions:
+      contents: read
+    uses: >-
+      modeled-information-format/.github/.github/workflows/pin-check.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+
+  # modeled-information-format/.github main @ 70389a7
+  validate-workflows:
+    permissions:
+      contents: read
+    uses: >-
+      modeled-information-format/.github/.github/workflows/reusable-actionlint.yml@70389a7199d4d587b3d350e831334889bbcbd9de
+
+  # ---------------------------------------------------------------------------
+  # The plugin: lint (Obsidian's review rules), typecheck, tests (golden parity
+  # with MIF's reference scripts), build, and the mobile load check.
+  # ---------------------------------------------------------------------------
+  plugin:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up Node
+        # v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/lint/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint:install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Mobile load check
+        run: npm run check:mobile
+
+      - name: Reference docs match the source
+        run: npm run check:docs
+
+  # ---------------------------------------------------------------------------
+  # Parity oracle (ADR-0001, D5): mif-rs compiled to WASM from a pinned ref,
+  # compared with the plugin's engine over every fixture. Differences must be
+  # listed in tests/wasm-parity.test.ts with the spec finding that explains them.
+  # ---------------------------------------------------------------------------
+  parity:
+    name: Parity with mif-rs (WASM)
+    runs-on: ubuntu-latest
+    env:
+      # mif-rs main @ 4d7296d (2026-10-08); bump deliberately, with the oracle.
+      MIF_RS_REF: 4d7296d4744fb8b684847f26d97311bebc8bd075
+    steps:
+      - name: Checkout repository
+        # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          path: plugin
+
+      - name: Checkout mif-rs at the pinned ref
+        # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: modeled-information-format/mif-rs
+          ref: ${{ env.MIF_RS_REF }}
+          path: mif-rs
+
+      - name: Set up Node
+        # v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - name: Build the WASM oracle
+        working-directory: plugin/spikes/mif-wasm
+        run: |
+          set -euo pipefail
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-pack --locked --version 0.15.0
+          wasm-pack build --release --target nodejs --out-dir pkg-node
+
+      - name: Compare
+        working-directory: plugin
+        run: |
+          npm ci --no-audit --no-fund
+          npm run -s validators
+          npx vitest run tests/wasm-parity.test.ts

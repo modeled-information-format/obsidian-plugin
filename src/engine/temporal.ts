@@ -10,7 +10,7 @@
 //     whatever the strength; validFrom in the future is "not yet valid".
 
 import type { Diagnostic } from "./analyze";
-import type { Frontmatter } from "./convert";
+import { scalarText, type Frontmatter } from "./convert";
 
 export type FreshnessState = "fresh" | "ageing" | "stale" | "expired" | "not-yet-valid" | "timeless";
 
@@ -88,8 +88,8 @@ export function freshness(fm: Frontmatter, now: Date = new Date(), thresholds: T
   const model = (typeof decay.model === "string" && ["none", "linear", "exponential", "step"].includes(decay.model) ? decay.model : "none") as Freshness["model"];
   const halfLifeMs = durationMs(decay.halfLife);
   const ttlMs = durationMs(temporal.ttl);
-  if (decay.halfLife !== undefined && halfLifeMs === null) problems.push(`decay.halfLife '${String(decay.halfLife)}' is not an ISO 8601 duration`);
-  if (temporal.ttl !== undefined && ttlMs === null) problems.push(`ttl '${String(temporal.ttl)}' is not an ISO 8601 duration`);
+  if (decay.halfLife !== undefined && halfLifeMs === null) problems.push(`decay.halfLife '${scalarText(decay.halfLife)}' is not an ISO 8601 duration`);
+  if (temporal.ttl !== undefined && ttlMs === null) problems.push(`ttl '${scalarText(temporal.ttl)}' is not an ISO 8601 duration`);
   if (model === "exponential" && !halfLifeMs) problems.push("exponential decay needs decay.halfLife");
   if ((model === "linear" || model === "step") && !ttlMs) problems.push(`${model} decay needs temporal.ttl`);
 

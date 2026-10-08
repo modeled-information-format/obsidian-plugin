@@ -4,6 +4,7 @@
 // src/engine.
 
 export {
+  scalarText,
   CONTEXT_URL,
   FRONTMATTER_ORDER,
   FrontmatterError,

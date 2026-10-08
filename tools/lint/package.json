@@ -1,0 +1,13 @@
+{
+  "name": "obsidian-mif-lint",
+  "private": true,
+  "description": "ESLint for the plugin, isolated: typescript-eslint needs TypeScript's JS API, which TypeScript 7 (used to build the plugin) does not have.",
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "eslint-plugin-obsidianmd": "0.4.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1"
+  }
+}

@@ -5,6 +5,7 @@
 import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import {
+  scalarText,
   chainTraits,
   composeTraits,
   entityReference,
@@ -136,7 +137,7 @@ export class OntologyView extends ItemView {
     const refs = Array.isArray(fm.entities) ? (fm.entities as Array<Record<string, unknown>>) : [];
     if (!refs.length) el.createEl("p", { cls: "mif-muted", text: "None referenced." });
     for (const r of refs) {
-      const urn = String((r.entity as Record<string, unknown> | undefined)?.["@id"] ?? "");
+      const urn = scalarText((r.entity as Record<string, unknown> | undefined)?.["@id"] ?? "");
       const known = info.entities.get(urn);
       const row = el.createDiv({ cls: "mif-rel-row" });
       row.createSpan({ text: known?.name ?? (typeof r.name === "string" ? r.name : urn) });
@@ -235,7 +236,7 @@ export class EntitiesView extends ItemView {
       head.createSpan({ text: e.record?.name ?? urn });
       head.createSpan({ cls: "mif-muted", text: ` ${urn}` });
       if (!e.record) {
-        const create = head.createEl("a", { cls: "mif-row-actions", text: "create file", href: "#" });
+        const create = head.createEl("a", { cls: "mif-row-actions", text: "Create file", href: "#" });
         create.onclick = (ev) => {
           ev.preventDefault();
           void this.host.manager.createEntity(root, urn, e.refs[0]?.name);
@@ -350,7 +351,7 @@ export function addCitationAuthor(app: App, manager: MifManager, file: TFile, in
     if (!citation) return;
     const ref = { ...entityReference({ urn: e.urn, name: e.name, entityType: e.typeName }) };
     const current = citation.author;
-    const refs = Array.isArray(current) ? current : current && typeof current === "object" ? [current] : [];
+    const refs: unknown[] = Array.isArray(current) ? current : current && typeof current === "object" ? [current] : [];
     if (refs.some((r) => (r as { entity?: { "@id"?: string } })?.entity?.["@id"] === e.urn)) {
       new Notice("MIF: that entity is already an author.");
       return;

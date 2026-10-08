@@ -64,6 +64,10 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Split a concept file into (frontmatter, body). */
+/** Text for a frontmatter value: primitives as written, anything else as JSON (never "[object Object]"). */
+export const scalarText = (v: unknown): string =>
+  v === undefined || v === null ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" || typeof v === "bigint" ? String(v) : JSON.stringify(v);
+
 export function parseMarkdown(md: string): { frontmatter: Frontmatter; body: string } {
   const match = FRONTMATTER_RE.exec(md);
   if (!match) throw new FrontmatterError("No YAML frontmatter found");

@@ -14,7 +14,11 @@
     "sync-schemas": "node scripts/sync-schemas.mjs && npm run -s validators",
     "install-vault": "node scripts/install-vault.mjs",
     "validators": "node scripts/build-validators.mjs",
-    "mif-align": "node scripts/mif-align.mjs"
+    "mif-align": "node scripts/mif-align.mjs",
+    "lint": "tools/lint/node_modules/.bin/eslint --config tools/lint/eslint.config.mjs src",
+    "lint:install": "npm ci --prefix tools/lint --no-audit --no-fund --legacy-peer-deps",
+    "check:mobile": "node scripts/check-mobile.mjs",
+    "check:docs": "node scripts/check-docs.mjs"
   },
   "license": "MIT",
   "devDependencies": {

@@ -84,11 +84,11 @@ export class RelatedView extends ItemView {
     this.section(el, "Outgoing", outgoing, (e) => e.type, (row, e) => {
       this.target(row, e, index.concepts.get(e.resolved ?? ""), () => open(e.resolved));
       const actions = row.createSpan({ cls: "mif-row-actions" });
-      actions.createEl("a", { text: "edit", href: "#" }).onclick = (ev) => {
+      actions.createEl("a", { text: "Edit", href: "#" }).onclick = (ev) => {
         ev.preventDefault();
         this.host.editRelationship(file, e.index);
       };
-      actions.createEl("a", { text: "remove", href: "#" }).onclick = (ev) => {
+      actions.createEl("a", { text: "Remove", href: "#" }).onclick = (ev) => {
         ev.preventDefault();
         void this.host.manager.removeRelationship(file, e.index);
       };
@@ -204,7 +204,7 @@ export class RelationshipModal extends Modal {
 
     new Setting(this.contentEl)
       .setName("Write target as")
-      .setDesc("Bundle path is the MIF default. An id survives moves without rewriting, but Obsidian will not show it as a backlink.")
+      .setDesc("Bundle path is the MIF default. An ID survives moves without rewriting, but Obsidian will not show it as a backlink.")
       .addDropdown((dd) =>
         dd
           .addOptions({ path: "Bundle path (/folder/note.md)", relative: "Relative path", id: "Concept id (urn:mif:…)" })

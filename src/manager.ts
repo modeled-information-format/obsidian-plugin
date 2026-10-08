@@ -6,6 +6,7 @@
 import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } from "obsidian";
 
 import {
+  scalarText,
   addRelationship,
   exportPath,
   roundtripDrift,
@@ -178,7 +179,7 @@ export class MifManager extends Events {
     const line = `${new Date().toISOString()} ${event} ${JSON.stringify(detail)}\n`;
     console.debug("MIF", event, detail);
     const adapter = this.app.vault.adapter as { append?: (p: string, d: string) => Promise<void> };
-    void adapter.append?.(`${this.app.vault.configDir ?? ".obsidian"}/plugins/mif/debug.log`, line).catch(() => undefined);
+    void adapter.append?.(`${this.app.vault.configDir}/plugins/mif/debug.log`, line).catch(() => undefined);
   }
 
   private mirrorLines(text: string): string[] {
@@ -371,7 +372,7 @@ export class MifManager extends Events {
     for (const [urn, record] of info?.entities ?? []) out.set(urn, { record, refs: [] });
     for (const [path, state] of this.files) {
       if (state.root !== root) continue;
-      const list = Array.isArray(state.analysis.frontmatter?.entities) ? (state.analysis.frontmatter!.entities as unknown[]) : [];
+      const list = Array.isArray(state.analysis.frontmatter?.entities) ? (state.analysis.frontmatter.entities as unknown[]) : [];
       for (const r of list) {
         const ref = r as { entity?: { "@id"?: unknown }; role?: unknown; name?: unknown };
         const urn = ref?.entity?.["@id"];
@@ -533,7 +534,7 @@ export class MifManager extends Events {
     const previousAnalysis = { ...previous, diagnostics: previous.diagnostics.filter((d) => d.code !== "rewritten") };
     const found = detectRewrites(previousAnalysis, now).map((d) => ({
       ...d,
-      fixes: [...d.fixes, { label: "Keep the new value", dismiss: true, path: d.path } as ManagedFix],
+      fixes: [...d.fixes, { label: "Keep the new value", dismiss: true, path: d.path }],
     }));
     if (found.length) this.rewrites.set(path, [...(this.rewrites.get(path) ?? []), ...found]);
   }
@@ -598,7 +599,7 @@ export class MifManager extends Events {
       return;
     }
     if (fix.transform === "download-ontology" && this.store) {
-      const id = String(fix.data?.id ?? "");
+      const id = scalarText(fix.data?.id ?? "");
       const got = await this.store.download([id], { retry: true });
       new Notice(got.length ? `MIF: downloaded ${got.join(", ")}.` : `MIF: could not download ${id}. ${this.store.status.errors.slice(-1)[0] ?? ""}`);
       this.refreshCorpora();
@@ -607,7 +608,7 @@ export class MifManager extends Events {
     if (fix.transform === "create-entity") {
       const root = this.rootFor(file.path);
       if (root !== null) {
-        await this.createEntity(root, String(fix.data?.urn ?? ""), fix.data?.name as string | undefined, fix.data?.entityType as string | undefined);
+        await this.createEntity(root, scalarText(fix.data?.urn ?? ""), fix.data?.name as string | undefined, fix.data?.entityType as string | undefined);
       }
       return;
     }
@@ -924,7 +925,7 @@ export class MifManager extends Events {
       for (const stale of staleExports(existing, folder, this.bundleName(root), byBundle.get(root) ?? [])) {
         const f = this.app.vault.getAbstractFileByPath(stale);
         if (f instanceof TFile) {
-          await this.app.vault.trash(f, true);
+          await this.app.fileManager.trashFile(f);
           removed++;
         }
       }

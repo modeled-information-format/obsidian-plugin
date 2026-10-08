@@ -2,10 +2,10 @@
 
 import { MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
-import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
+import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType, type Corpus, type OntologyDef } from "./engine";
 import { isFirstBodySection, renderCompressed } from "./compressionView";
 import { MifManager } from "./manager";
-import { ConfirmModal, ConvertModal, NewConceptModal, slugify, type NewConceptInput, type OntologyHints } from "./modals";
+import { ConfirmModal, ConvertModal, NewConceptModal, ReportModal, slugify, type NewConceptInput, type OntologyHints } from "./modals";
 import { DEFAULT_SETTINGS, loadSettings, parseLines, type MifSettings, type SyncMode } from "./settings";
 import { runFidelitySpike } from "./spikes/fidelity";
 import { runLinkSpike } from "./spikes/links";
@@ -17,7 +17,7 @@ import { PROPERTIES_VIEW, PropertiesView } from "./propertiesView";
 import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, OntologyView } from "./semanticViews";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
 import { MifApi } from "./api";
-import { BASES_VIEW, MifBasesView } from "./basesView";
+import { registerMifBasesView } from "./basesView";
 import { ingestNotice, MifCli, SearchModal } from "./cliBridge";
 import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
@@ -61,13 +61,7 @@ export default class MifPlugin extends Plugin {
     this.api = new MifApi(this.manager);
     this.cli = new MifCli(this.app, this.manager, () => this.settings);
     // Bases (Obsidian 1.10+): a "MIF table" view with level, freshness, trust.
-    if (typeof this.registerBasesView === "function") {
-      this.registerBasesView(BASES_VIEW, {
-        name: "MIF table",
-        icon: "list-checks",
-        factory: (controller, containerEl) => new MifBasesView(controller, containerEl, this.api, this.manager),
-      });
-    }
+    registerMifBasesView(this, this.api, this.manager);
 
     this.settings = loadSettings(await this.loadData());
     this.addSettingTab(new MifSettingTab(this.app, this));
@@ -222,7 +216,7 @@ export default class MifPlugin extends Plugin {
         const active = this.app.workspace.getActiveFile();
         const root = (active && this.manager.rootFor(active.path)) ?? this.settings.bundleRoots[0] ?? "";
         const info = this.manager.bundleInfo(root);
-        const corpus = info?.corpus ?? new Map();
+        const corpus: Corpus = info?.corpus ?? new Map<string, OntologyDef>();
         const hints: OntologyHints = {
           ontologies: [...corpus.keys()].sort(),
           namespaces: (ontology, type) => {
@@ -238,7 +232,7 @@ export default class MifPlugin extends Plugin {
     });
     this.addCommand({
       id: "convert-note",
-      name: "Convert note to MIF concept",
+      name: "Convert note to a concept",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const a = file && this.manager.get(file.path);
@@ -256,7 +250,7 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && !!this.manager.indexFor(file.path)?.index.concepts.has(this.manager.indexFor(file.path)!.bundlePath);
-        if (ok && !checking) this.editRelationship(file!);
+        if (ok && !checking) this.editRelationship(file);
         return ok;
       },
     });
@@ -281,13 +275,13 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && !!this.manager.get(file.path)?.isConcept;
-        if (ok && !checking) this.addEntityReference(file!);
+        if (ok && !checking) this.addEntityReference(file);
         return ok;
       },
     });
     this.addCommand({
       id: "download-ontologies",
-      name: "Download all ontologies from mif-spec.dev",
+      name: "Download all ontologies from the spec catalog",
       callback: async () => {
         new Notice("MIF: downloading the ontology catalog…");
         const got = await this.store.downloadAll();
@@ -298,12 +292,12 @@ export default class MifPlugin extends Plugin {
     });
     this.addCommand({
       id: "reload-bundles",
-      name: "Reload bundle configuration (.mif)",
+      name: "Reload bundle configuration",
       callback: () => void this.reloadBundles(),
     });
     this.addCommand({
       id: "migrate-legacy",
-      name: "Migrate MIF 0.1 notes",
+      name: "Migrate version 0.1 notes to 1.0",
       callback: () => new MigrationModal(this.app, this.manager, this.manager.legacyFiles()).open(),
     });
     this.addCommand({ id: "open-report", name: "Open bundle report", callback: () => void this.revealView(REPORT_VIEW) });
@@ -321,7 +315,7 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && !!this.manager.get(file.path)?.isConcept;
-        if (ok && !checking) void exportScope(file!.path, file!.basename);
+        if (ok && !checking) void exportScope(file.path, file.basename);
         return ok;
       },
     });
@@ -331,19 +325,19 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && this.manager.rootFor(file.path) !== null;
-        if (ok && !checking) void exportScope(file!.parent?.path === "/" ? "" : file!.parent?.path ?? "", file!.parent?.path || "the vault");
+        if (ok && !checking) void exportScope(file.parent?.path === "/" ? "" : file.parent?.path ?? "", file.parent?.path || "the vault");
         return ok;
       },
     });
     this.addCommand({ id: "export-jsonld-all", name: "Export all bundles as JSON-LD", callback: () => void exportScope("", "all bundles") });
     this.addCommand({
       id: "roundtrip-check",
-      name: "Check the round trip of every concept (Invariant 4)",
+      name: "Check that every concept round-trips losslessly",
       callback: async () => {
         const drift = await this.manager.roundtripReport();
-        new ConfirmModal(this.app, "MIF round-trip check", drift.length
+        new ReportModal(this.app, "MIF round-trip check", drift.length
           ? [`${drift.length} concept${drift.length === 1 ? "" : "s"} do not survive markdown → JSON-LD → markdown unchanged:`, ...drift.map((d) => `${d.path}: ${d.drift.split("\n")[0]}`)]
-          : ["Every concept round-trips losslessly."], "OK", async () => {}).open();
+          : ["Every concept round-trips losslessly."]).open();
       },
     });
     const withCli = (run: () => Promise<void>) => {
@@ -353,17 +347,17 @@ export default class MifPlugin extends Plugin {
     };
     this.addCommand({
       id: "cli-ingest-note",
-      name: "Ingest this note into the vector store (mif-cli)",
+      name: "Ingest this note into the vector store",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && !!this.manager.get(file.path)?.isConcept && !this.cli.unavailable();
-        if (ok && !checking) withCli(async () => ingestNotice(file!, await this.cli.ingest(file!)));
+        if (ok && !checking) withCli(async () => ingestNotice(file, await this.cli.ingest(file)));
         return ok;
       },
     });
     this.addCommand({
       id: "cli-ingest-bundle",
-      name: "Ingest this bundle into the vector store (mif-cli)",
+      name: "Ingest this bundle into the vector store",
       checkCallback: (checking) => {
         // The active note's bundle; otherwise (no note, or a .base / canvas open) the first bundle.
         const file = this.app.workspace.getActiveFile();
@@ -371,7 +365,7 @@ export default class MifPlugin extends Plugin {
         const ok = root !== undefined && !this.cli.unavailable();
         if (ok && !checking) withCli(async () => {
           const notice = new Notice("MIF: ingesting…", 0);
-          const r = await this.cli.ingestBundle(root!, (done, total) => notice.setMessage(`MIF: ingesting ${done} / ${total}…`));
+          const r = await this.cli.ingestBundle(root, (done, total) => notice.setMessage(`MIF: ingesting ${done} / ${total}…`));
           notice.hide();
           new Notice(`MIF: ${r.stored} concepts ingested into ${root ? `${root}/` : ""}.mif/vectors.db${r.failed.length ? `; ${r.failed.length} refused (${r.failed.slice(0, 3).map((f) => `${f.path}: ${f.problem.title}`).join("; ")}${r.failed.length > 3 ? "; …" : ""})` : ""}.`, 12_000);
         });
@@ -380,7 +374,7 @@ export default class MifPlugin extends Plugin {
     });
     this.addCommand({
       id: "cli-search",
-      name: "Semantic search (mif-cli)",
+      name: "Semantic search",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const root = (file ? this.manager.rootFor(file.path) : null) ?? this.manager.bundleRoots()[0] ?? "";
@@ -391,13 +385,13 @@ export default class MifPlugin extends Plugin {
     });
     this.addCommand({
       id: "cli-similar",
-      name: "Find concepts similar to this note (mif-cli)",
+      name: "Find concepts similar to this note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const ok = !!file && !!this.manager.get(file.path)?.isConcept && !this.cli.unavailable();
         if (ok && !checking) withCli(async () => {
-          const hits = await this.cli.similar(file!);
-          new SearchModal(this.app, this.cli, this.manager.rootFor(file!.path) ?? "", { title: `Similar to ${file!.basename}`, hits }).open();
+          const hits = await this.cli.similar(file);
+          new SearchModal(this.app, this.cli, this.manager.rootFor(file.path) ?? "", { title: `Similar to ${file.basename}`, hits }).open();
         });
         return ok;
       },
@@ -415,7 +409,7 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const c = activeConcept();
         const ok = !!c && Array.isArray(c.fm.citations) && c.fm.citations.length > 0;
-        if (ok && !checking) void this.manager.applyFix(c!.file, { label: hasCitationSection(c!.a.body ?? "") ? "Update ## Citations" : "Write ## Citations", transform: "citations-sync" });
+        if (ok && !checking) void this.manager.applyFix(c.file, { label: hasCitationSection(c.a.body ?? "") ? "Update ## Citations" : "Write ## Citations", transform: "citations-sync" });
         return ok;
       },
     });
@@ -430,7 +424,7 @@ export default class MifPlugin extends Plugin {
           new ConfirmModal(this.app, "Compress this concept", [
             "The body is replaced by the summary. The original text is kept in extensions.original_content, and the ## Relationships and ## Citations sections stay.",
             "“Restore original content” undoes it.",
-          ], "Compress", () => this.manager.applyFix(c!.file, { label: "Compress", transform: "compress" })).open();
+          ], "Compress", () => this.manager.applyFix(c.file, { label: "Compress", transform: "compress" })).open();
         }
         return ok;
       },
@@ -441,7 +435,7 @@ export default class MifPlugin extends Plugin {
       checkCallback: (checking) => {
         const c = activeConcept();
         const ok = !!c && compressionState(c.fm).hasOriginal;
-        if (ok && !checking) void this.manager.applyFix(c!.file, { label: "Restore original content", transform: "decompress" });
+        if (ok && !checking) void this.manager.applyFix(c.file, { label: "Restore original content", transform: "decompress" });
         return ok;
       },
     });
@@ -489,6 +483,19 @@ export default class MifPlugin extends Plugin {
       });
     spike("spike-frontmatter-fidelity", "Spike B: frontmatter write fidelity", runFidelitySpike);
     spike("spike-link-resolution", "Spike C: relationship link resolution", runLinkSpike);
+
+    // Obsidian's (undocumented) mobile emulation, so the
+    // plugin can be checked in the phone layout without the developer console.
+    this.addCommand({
+      id: "toggle-mobile-emulation",
+      name: "Toggle mobile emulation (developer)",
+      checkCallback: (checking) => {
+        const app = this.app as unknown as { emulateMobile?: (on: boolean) => void; isMobile?: boolean };
+        const ok = this.settings.showDevCommands && typeof app.emulateMobile === "function";
+        if (ok && !checking) app.emulateMobile!(!Platform.isMobile);
+        return ok;
+      },
+    });
   }
 
   private async createConcept(input: NewConceptInput): Promise<void> {
@@ -565,7 +572,7 @@ class MifSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Mode")
-      .setDesc("Observe validates and offers fixes. Sync also updates `modified` after you edit a concept.")
+      .setDesc("Observe validates and offers fixes. Sync also updates `modified`, the ## Relationships mirror, and an existing ## Citations section after you edit a concept.")
       .addDropdown((d) =>
         d.addOptions({ observe: "Observe", sync: "Sync" }).setValue(s.mode).onChange(async (value) => {
           s.mode = value as SyncMode;
@@ -639,7 +646,7 @@ class MifSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Freshness").setHeading();
     new Setting(containerEl)
       .setName("Thresholds")
-      .setDesc("Decay strength for “fresh” and “ageing”; below the second is “stale”. The spec defines none.")
+      .setDesc("Decay strength for “fresh” and “ageing”; below the second is “stale”. The spec defines no bands.")
       .addText((t) =>
         t.setValue(String(s.freshThreshold)).onChange(async (v) => {
           const n = Number(v);
@@ -717,7 +724,7 @@ class MifSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Developer commands")
-      .setDesc("Show the spike commands. They write only under _spike/.")
+      .setDesc("Show the developer spike commands. They write only under _spike/.")
       .addToggle((t) =>
         t.setValue(s.showDevCommands).onChange(async (value) => {
           s.showDevCommands = value;

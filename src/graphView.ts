@@ -106,7 +106,7 @@ export class GraphView extends ItemView {
     }
     const { graph, root, center } = g;
     if (this.reach === "local" && !center) {
-      el.createEl("p", { cls: "mif-muted", text: "Open a MIF concept to see its neighbourhood, or choose Whole bundle." });
+      el.createEl("p", { cls: "mif-muted", text: "Open a MIF concept to see its neighbourhood, or show the whole bundle." });
       return;
     }
 

@@ -5,6 +5,18 @@
 An Obsidian plugin for authoring, validating, and syncing
 [MIF](https://mif-spec.dev) bundles. Status: in development.
 
+## Conformance
+
+The plugin implements **MIF 1.4.0 at Level 3 (Full)** (spec §13.3): it reads,
+validates, and edits every Level 1–3 feature — identity, namespaces, entity
+references, typed relationships with their body mirror, bi-temporal
+metadata and decay, W3C-PROV-aligned provenance, embedding references,
+citations, compression, and extensions — and projects concepts to JSON-LD
+losslessly. Evidence: golden tests against MIF's reference scripts
+(`mif_convert.py`, `okf_validate.py`, `migrate_0_1_to_1_0.py`), schema
+validation against the vendored 1.4.0 schemas, and a parity oracle against
+mif-rs.
+
 ## Network use
 
 The plugin works offline. One optional feature uses the network: when
@@ -42,47 +54,50 @@ and caches it. Embeddings are stored in each bundle's `.mif/vectors.db`.
   `concept(path)`, `concepts()`, `relations(path)`, and `jsonld(path)` return
   values computed live; nothing is written to frontmatter.
 
+## Documentation
+
+User and maintainer documentation is in [docs/](docs/README.md): a
+[getting-started tutorial](docs/tutorial/getting-started.md), how-to guides,
+reference (commands, settings, diagnostic codes, API), and explanation.
+Security and release verification: [SECURITY.md](SECURITY.md).
+
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `src/engine/` | Obsidian-free MIF engine: parse, JSON-LD projection, round trip, schema validation |
-| `src/spikes/` | in-Obsidian experiments (developer commands) |
-| `src/main.ts` | Plugin entry: settings, status-bar check, commands |
+| `src/engine/` | Obsidian-free MIF engine: parsing, JSON-LD projection, round trip, validation, relationships, ontologies, temporal, citations, compression, export |
+| `src/*.ts` | The plugin: manager (vault model and writes), panels, Bases view, graph, mif-cli bridge, API |
 | `schemas/` | Vendored canonical schemas; `SOURCE.json` records the MIF commit |
-| `test-vault/` | Copy of `MIF/examples`, opened in Obsidian for manual and spike runs |
-| `tests/fixtures/edge/` | Edge-case bundle (YAML 1.1 scalars, timestamps, CRLF, key order, …) |
-| `tests/golden/` | Outputs of the MIF reference converter the engine is tested against |
+| `tests/` | Vitest suite: goldens from MIF's reference scripts, headless panel tests, fixtures |
+| `test-vault/` | Copy of `MIF/examples`; `npm run install-vault` stages the fixtures for manual testing |
+| `spikes/mif-wasm/` | mif-rs compiled to WebAssembly: the parity oracle |
+| `tools/lint/` | ESLint with Obsidian's review rules (isolated: it needs TypeScript 5's API) |
+| `.github/workflows/` | CI, quality gates, and the attested release pipeline (from mif-repo-template) |
 
 ## Develop
 
-Requires Node 22+ and Python 3 with PyYAML (for regenerating goldens). The
-MIF repo is expected at `../MIF`; override with `MIF_REPO`.
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Run the parity tests:
-
-   ```bash
-   npm test
-   ```
-
-3. Build and install into the test vault:
-
-   ```bash
-   npm run build && npm run install-vault
-   ```
-
-4. Open `test-vault` as a vault in Obsidian, trust the plugin, and run
-   **Spike B** and **Spike C** from the command palette. Reports are written to
-   `test-vault/_spike/`.
-
-After the MIF repo changes, refresh the schemas and goldens, then re-run the tests:
+Requires Node 22+; Python 3 with PyYAML to regenerate goldens; Rust and
+`wasm-pack` for the parity oracle. Sibling checkouts are expected at
+`../MIF` and `../mif-rs` (override with `MIF_REPO`).
 
 ```bash
-npm run sync-schemas && npm run golden && npm test
+npm ci && npm run lint:install        # dependencies
+npm run lint && npm run typecheck     # ESLint (Obsidian rules), TypeScript
+npm test                              # tests, incl. golden parity with MIF's scripts
+npm run build && npm run check:mobile # main.js, and the mobile load check
+npm run check:docs                    # reference docs match the source
+npm run install-vault                 # copy the build into test-vault and stage fixtures
+```
+
+Parity oracle: `(cd spikes/mif-wasm && wasm-pack build --release --target
+nodejs --out-dir pkg-node)`, after which `npm test` also compares the engine
+with mif-rs. Live mif-cli test: `MIF_CLI=/path/to/mif-cli npx vitest run
+tests/live-mif-cli.test.ts`.
+
+Keeping up with MIF:
+
+```bash
+npm run mif-align -- origin/main                      # test against a MIF ref
+MIF_REF=origin/main npm run sync-schemas && npm test  # vendor its schemas
+npm run golden                                        # if the reference scripts changed
 ```

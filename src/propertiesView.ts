@@ -6,6 +6,7 @@ import { ItemView, Notice, setIcon, type TFile, type WorkspaceLeaf } from "obsid
 
 import { BUILD_ID } from "./build";
 import {
+  scalarText,
   checkInput,
   compressionState,
   dumpYaml,
@@ -33,7 +34,7 @@ export interface PropertiesHost {
 type Path = Array<string | number>;
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const show = (v: unknown) => (v === undefined || v === null ? "" : typeof v === "string" ? v : String(v));
+const show = (v: unknown) => (v === undefined || v === null ? "" : typeof v === "string" ? v : scalarText(v));
 const yamlOf = (v: unknown) => (v === undefined || v === null || (isObj(v) && !Object.keys(v).length) ? "" : dumpYaml(v).trimEnd());
 
 export class PropertiesView extends ItemView {

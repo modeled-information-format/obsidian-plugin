@@ -10,6 +10,7 @@
 // composeTraits implements §10.8.6, which no reference tool implements yet
 //.
 
+import { scalarText } from "./convert";
 import { loadYaml } from "./yaml11";
 import { ONTOLOGY_SCHEMA_ID, validateAgainst } from "./validate";
 
@@ -129,7 +130,7 @@ export function parseOntology(text: string, source: string): { def?: OntologyDef
     errors,
     def: {
       id: o.id as string,
-      version: String(o.version ?? ""),
+      version: scalarText(o.version ?? ""),
       description: typeof o.description === "string" ? o.description : undefined,
       extends: strings(o.extends),
       namespaceTree: isObj(data.namespaces) ? data.namespaces : {},
@@ -377,7 +378,7 @@ export function composeTraits(type: EntityTypeDef & { ontology: string }, traits
     for (const req of r.requires) requires.add(req);
     for (const [k, v] of r.fields) candidates.set(k, [...(candidates.get(k) ?? []), v]);
   }
-  const entityProps = isObj(type.schema?.properties) ? type.schema!.properties! : {};
+  const entityProps = isObj(type.schema?.properties) ? type.schema.properties : {};
   const conflicts: TraitConflict[] = [];
   for (const [field, defs] of candidates) {
     if (field in entityProps) continue; // entity wins (below)

@@ -191,7 +191,7 @@ export function ambiguities(frontmatter: Frontmatter, yamlText: string): Ambigui
 function setIn(root: unknown, path: Array<string | number>, value: unknown): unknown {
   if (path.length === 0) return value;
   const [head, ...rest] = path;
-  const copy = Array.isArray(root) ? [...root] : { ...(root as Record<string, unknown>) };
+  const copy = Array.isArray(root) ? (root as unknown[]).slice() : { ...(root as Record<string, unknown>) };
   (copy as Record<string | number, unknown>)[head!] = setIn((root as Record<string | number, unknown>)?.[head!], rest, value);
   return copy;
 }
@@ -275,7 +275,7 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
     diagnostics.push({ severity: "error", code: "missing-id", message: "Missing `id` (a UUID).", path: ["id"], line: 1,
       fixes: [{ label: "Add a new UUID", updates: { id: uuid() } }] });
   } else if (typeof frontmatter.id === "string" && !UUID_RE.test(frontmatter.id)) {
-    const aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [];
+    const aliases: unknown[] = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [];
     diagnostics.push({ severity: "warning", code: "id-not-uuid",
       message: `\`id\` must be a UUID (spec §4.1, §13.1); "${frontmatter.id}" is not.`,
       path: ["id"], line: locator.line(["id"]),
