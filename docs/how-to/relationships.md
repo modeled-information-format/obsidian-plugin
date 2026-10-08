@@ -17,7 +17,10 @@ Obsidian's backlinks and graph) can follow them.
 - **Write target as:** *Bundle path* (`/folder/note.md`, the MIF default),
   *Relative path*, or *Concept id* (`urn:mif:<uuid>`). An id survives moves
   without any rewriting, but Obsidian does not show it as a backlink. MIF 1.4
-  recommends paths for targets in the same bundle.
+  recommends paths for targets in the same bundle. Spaces, parentheses,
+  angle brackets, and `%` in a path are written percent-encoded
+  (`Phase%201.md`), so the `## Relationships` line renders as a link;
+  targets written either way resolve to the same note.
 - **Edit / Remove:** use the links beside an outgoing edge in the related
   panel.
 

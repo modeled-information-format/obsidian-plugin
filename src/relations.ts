@@ -3,7 +3,7 @@
 
 import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
-import { incomingLabel, relativeTarget, titleOf, type BundleConcept, type Edge, type RelType } from "./engine";
+import { incomingLabel, linkTarget, relativeTarget, titleOf, type BundleConcept, type Edge, type RelType } from "./engine";
 import type { MifManager } from "./manager";
 import { renderCompressed } from "./compressionView";
 import { renderTimeline } from "./freshnessView";
@@ -242,7 +242,7 @@ export class RelationshipModal extends Modal {
       const id = this.concepts.find((c) => c.path === d.targetPath)?.frontmatter.id;
       if (typeof id === "string") return `urn:mif:${id}`;
     }
-    return d.style === "relative" ? relativeTarget(this.sourcePath, d.targetPath) : `/${d.targetPath}`;
+    return d.style === "relative" ? relativeTarget(this.sourcePath, d.targetPath) : `/${linkTarget(d.targetPath)}`;
   }
 
   override onClose() {

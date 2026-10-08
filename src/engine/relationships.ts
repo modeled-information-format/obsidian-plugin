@@ -436,13 +436,23 @@ export function resolveTarget(raw: string, from: string): ResolvedTarget {
   return bundlePath === null ? { kind: "external" } : { kind: "path", bundlePath };
 }
 
-/** Relative path from one bundle file's folder to another bundle path. */
+/**
+ * A bundle path written as a link target: characters that would end or
+ * break a markdown link destination (space, parentheses, angle brackets)
+ * and "%" itself are percent-encoded, so the body mirror line renders as a
+ * link. resolveTarget decodes them back.
+ */
+export function linkTarget(path: string): string {
+  return path.replace(/[% ()<>]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`);
+}
+
+/** Relative path from one bundle file's folder to another bundle path, encoded as a link target. */
 export function relativeTarget(from: string, to: string): string {
   const fromDir = from.includes("/") ? from.slice(0, from.lastIndexOf("/")).split("/") : [];
   const toParts = to.split("/");
   let i = 0;
   while (i < fromDir.length && i < toParts.length - 1 && fromDir[i] === toParts[i]) i++;
-  return [...fromDir.slice(i).map(() => ".."), ...toParts.slice(i)].join("/");
+  return linkTarget([...fromDir.slice(i).map(() => ".."), ...toParts.slice(i)].join("/"));
 }
 
 /**
@@ -463,7 +473,7 @@ export function retarget(text: string, self: { from: string; to: string }, moved
     const res = resolveTarget(r.target, self.from);
     if (res.kind !== "path") continue;
     const dest = moved.get(res.bundlePath!) ?? res.bundlePath!;
-    const raw = r.target.startsWith("/") ? `/${dest}` : relativeTarget(self.to, dest);
+    const raw = r.target.startsWith("/") ? `/${linkTarget(dest)}` : relativeTarget(self.to, dest);
     lineTargets.set(dest, raw);
     // Splice just the target string, leaving the rest of the block as written.
     if (raw !== r.target) out = setScalarIn(out, ["relationships", r.index, "target"], raw);
