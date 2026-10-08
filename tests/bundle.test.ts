@@ -112,6 +112,14 @@ describe("bundle index", () => {
     ]);
   });
 
+  it("says when regenerating would drop body-only lines, and offers to keep them first", () => {
+    const fixes = bundleDiagnostics(index).get("e.md")!.find((d) => d.code === "mirror-drift")!.fixes.map((f) => f.label);
+    expect(fixes).toEqual([
+      "Add body-only relationships to frontmatter",
+      "Regenerate the body mirror from frontmatter (drops 2 body-only lines)",
+    ]);
+  });
+
   it("puts diagnostics on the right lines", () => {
     const b = index.concepts.get("b.md")!;
     const ds = bundleDiagnostics(index).get("b.md")!;

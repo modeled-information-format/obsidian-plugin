@@ -7,7 +7,7 @@
 // compared with the intended frontmatter before it is returned. An edit that
 // would disturb any other value throws instead of writing.
 
-import { isMap, isNode, isScalar, parseDocument, type Pair } from "yaml";
+import { isMap, isNode, isScalar, isSeq, parseDocument, type Pair } from "yaml";
 
 import { FRONTMATTER_ORDER, FrontmatterError, parseMarkdown, type Frontmatter } from "./convert";
 import { dumpYaml, LOAD_OPTIONS } from "./yaml11";
@@ -209,3 +209,102 @@ function setPath(root: Frontmatter, path: Array<string | number>, value: unknown
 
 /** Replace CRLF line endings with LF. */
 export const toLf = (text: string) => text.replace(/\r\n/g, "\n");
+
+// --- line-level structural edits ------------------------------------------------
+
+const lineStartOf = (t: string, i: number) => t.lastIndexOf("\n", i - 1) + 1;
+const lineEndOf = (t: string, i: number) => {
+  const nl = t.indexOf("\n", i);
+  return nl === -1 ? t.length : nl + 1;
+};
+
+/** Indent a rendered YAML block by `n` spaces (all lines). */
+const indentBlock = (block: string, n: number) => block.split("\n").map((l) => (l ? " ".repeat(n) + l : l)).join("\n");
+
+/**
+ * Add a key to a nested block mapping, append an item to a block sequence,
+ * or remove a nested pair / sequence item — by inserting or deleting whole
+ * lines, so siblings keep their exact formatting (quotes, styles, comments).
+ * Returns null when the structure is not plain block YAML; callers then fall
+ * back to rewriting the top-level key.
+ *   value === undefined → remove `path`
+ *   path ends in an index equal to the sequence length → append
+ *   otherwise → add a key that does not exist yet
+ */
+export function editStructure(text: string, path: Array<string | number>, value: unknown): string | null {
+  if (path.length < 2) return null;
+  const parts = split(text);
+  if (!parts) return null;
+  const yaml = parts.yaml;
+  const doc = parseDocument(yaml, LOAD_OPTIONS);
+  if (doc.errors.length) return null;
+  const parentPath = path.slice(0, -1);
+  const last = path[path.length - 1]!;
+  const parent = doc.getIn(parentPath, true);
+  let next: string | null = null;
+
+  if (isMap(parent) && !parent.flow && typeof last === "string") {
+    const pairs = parent.items as Pair[];
+    const idx = pairs.findIndex((p) => isScalar(p.key) && p.key.value === last);
+    if (value === undefined) {
+      if (idx === -1) return null;
+      const pair = pairs[idx]!;
+      const kr = (pair.key as { range?: [number, number, number] }).range;
+      const vr = isNode(pair.value) ? pair.value.range : undefined;
+      if (!kr) return null;
+      const end = lineEndOf(yaml, Math.max((vr?.[1] ?? kr[1]) - 1, kr[1]));
+      next = yaml.slice(0, lineStartOf(yaml, kr[0])) + yaml.slice(end);
+    } else {
+      if (idx !== -1 || !pairs.length) return null;
+      const first = (pairs[0]!.key as { range?: [number, number, number] }).range;
+      const lastPair = pairs[pairs.length - 1]!;
+      const lastEnd = isNode(lastPair.value) && lastPair.value.range ? lastPair.value.range[1] : (lastPair.key as { range?: number[] }).range?.[1];
+      if (!first || lastEnd === undefined) return null;
+      const indent = first[0] - lineStartOf(yaml, first[0]);
+      const at = lineEndOf(yaml, lastEnd - 1);
+      const rendered = indentBlock(dumpYaml({ [last]: value }, { indentSeq: false }).trimEnd(), indent);
+      const before = yaml.slice(0, at);
+      next = before + (before.endsWith("\n") ? "" : "\n") + rendered + (at < yaml.length ? "\n" : "") + yaml.slice(at);
+    }
+  } else if (isSeq(parent) && !parent.flow && typeof last === "number") {
+    const items = parent.items;
+    if (value === undefined) {
+      const item = items[last];
+      const r = isNode(item) ? item.range : undefined;
+      if (!r) return null;
+      const end = lineEndOf(yaml, Math.max(r[1] - 1, r[0]));
+      next = yaml.slice(0, lineStartOf(yaml, r[0])) + yaml.slice(end);
+    } else {
+      if (last !== items.length || !items.length) return null;
+      const firstR = isNode(items[0]) ? items[0].range : undefined;
+      const lastItem = items[items.length - 1];
+      const lastR = isNode(lastItem) ? lastItem.range : undefined;
+      if (!firstR || !lastR) return null;
+      const dash = yaml.lastIndexOf("-", firstR[0]);
+      const indent = dash - lineStartOf(yaml, dash);
+      const at = lineEndOf(yaml, lastR[1] - 1);
+      const rendered = indentBlock(dumpYaml([value]).trimEnd(), indent);
+      const before = yaml.slice(0, at);
+      next = before + (before.endsWith("\n") ? "" : "\n") + rendered + (at < yaml.length ? "\n" : "") + yaml.slice(at);
+    }
+  }
+  if (next === null) return null;
+  if (next.endsWith("\n")) next = next.slice(0, -1);
+  const result = parts.head + next + parts.tail;
+
+  // Verify against the intended frontmatter; otherwise let the caller fall back.
+  const fm = parseMarkdown(text).frontmatter;
+  const expected = JSON.parse(JSON.stringify(fm)) as Frontmatter;
+  let cur: Record<string | number, unknown> = expected;
+  for (const k of parentPath) cur = cur[k] as Record<string | number, unknown>;
+  if (value === undefined) {
+    if (Array.isArray(cur)) cur.splice(last as number, 1);
+    else delete cur[last];
+  } else cur[last] = JSON.parse(JSON.stringify(value));
+  try {
+    if (JSON.stringify(sortKeys(parseMarkdown(result).frontmatter)) !== JSON.stringify(sortKeys(expected))) return null;
+  } catch {
+    return null;
+  }
+  return result;
+}

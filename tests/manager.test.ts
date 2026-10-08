@@ -104,42 +104,31 @@ describe("renames", () => {
 });
 
 describe("writes to open notes", () => {
-  it("go through the editor as one minimal edit, not underneath it", async () => {
-    const { MarkdownView } = await import("./support/obsidian-stub");
+  it("go through Vault.process and are read back", async () => {
     const v = memoryApp(relFixtures());
-    let buffer = v.texts.get("b.md")!;
-    const edits: Array<{ from: number; to: number; text: string }> = [];
-    const toOffset = (pos: { line: number; ch: number }) =>
-      buffer.split("\n").slice(0, pos.line).reduce((n, l) => n + l.length + 1, 0) + pos.ch;
-    const editor = {
-      getValue: () => buffer,
-      offsetToPos: (o: number) => {
-        const before = buffer.slice(0, o).split("\n");
-        return { line: before.length - 1, ch: before[before.length - 1]!.length };
-      },
-      transaction: (tx: { changes: Array<{ from: { line: number; ch: number }; to: { line: number; ch: number }; text: string }> }) => {
-        for (const c of tx.changes) {
-          const from = toOffset(c.from);
-          const to = toOffset(c.to);
-          edits.push({ from, to, text: c.text });
-          buffer = buffer.slice(0, from) + c.text + buffer.slice(to);
-        }
-      },
-    };
-    const view = Object.assign(new MarkdownView(), { file: v.files.get("b.md"), editor });
-    (v.app as { workspace: unknown }).workspace = { iterateAllLeaves: (cb: (l: unknown) => void) => cb({ view }) };
     const processSpy = vi.spyOn(v.app.vault, "process");
     const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
     await manager.loadBundles();
     await manager.scanAll();
-
     await manager.applyFix(v.files.get("b.md") as never, { label: "mirror", transform: "mirror" });
-    expect(processSpy).not.toHaveBeenCalled();
-    expect(buffer).toContain("- supersedes [Concept A](/a.md)");
-    expect(buffer).not.toContain("- relates-to [Concept A](/a.md)");
-    // Only the changed span is replaced: "relates-to" → "supersedes".
-    expect(edits).toHaveLength(1);
-    expect(edits[0]!.text.length).toBeLessThan(20);
+    expect(processSpy).toHaveBeenCalledTimes(1);
+    expect(v.texts.get("b.md")).toContain("- supersedes [Concept A](/a.md)");
+  });
+
+  it("report a write that does not stick", async () => {
+    const v = memoryApp(relFixtures());
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    // Something else rewrites the file right after the plugin's write.
+    const real = v.app.vault.process;
+    v.app.vault.process = async (f: Parameters<typeof real>[0], fn: (t: string) => string) => {
+      await real(f, fn);
+      v.texts.set("b.md", "clobbered");
+      return "clobbered";
+    };
+    const ok = await manager.write(v.files.get("b.md") as never, (t) => t + "\n");
+    expect(ok).toBe(false);
   });
 });
 
@@ -174,5 +163,27 @@ describe("entities", () => {
     expect(dotFiles.get(".mif/entities/person/jane-doe.yaml")).toContain("name: Jane Doe");
     expect(manager.get("note.md")!.diagnostics.map((x) => x.code)).not.toContain("entity-unresolved");
     expect(manager.entityIndex("").get("urn:mif:entity:person:jane-doe")!.refs.map((r) => r.path)).toEqual(["note.md"]);
+  });
+});
+
+describe("Properties panel edits", () => {
+  it("edit one field through the writer and refresh diagnostics", async () => {
+    const v = memoryApp(relFixtures());
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const before = v.texts.get("a.md")!;
+    expect(manager.get("a.md")!.level).toBe(1);
+    await manager.editField(v.files.get("a.md") as never, ["namespace"], "_semantic/test");
+    await manager.editField(v.files.get("a.md") as never, ["modified"], "2026-03-02T00:00:00Z");
+    await manager.editField(v.files.get("a.md") as never, ["temporal"], { recordedAt: "2026-03-01T09:00:00Z" });
+    const after = v.texts.get("a.md")!;
+    expect(manager.get("a.md")!.level).toBe(2);
+    // Only additions; the relationships block and body are untouched.
+    expect(after.split("\n").filter((l) => !before.split("\n").includes(l))).toEqual([
+      "modified: 2026-03-02T00:00:00Z", "namespace: _semantic/test", "temporal:", "  recordedAt: 2026-03-01T09:00:00Z",
+    ]);
+    expect(await manager.editField(v.files.get("a.md") as never, ["provenance", "confidence"], 0.8)).toBe(true);
+    expect(v.texts.get("a.md")).toContain("provenance:\n  confidence: 0.8");
   });
 });

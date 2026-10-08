@@ -3,11 +3,13 @@
 // write the plugin makes. All writes go through the engine's
 // format-preserving writer.
 
-import { Events, MarkdownView, Notice, TFile, TFolder, Vault, type App, type Editor, type TAbstractFile } from "obsidian";
+import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } from "obsidian";
 
 import {
   addRelationship,
+  adoptMirror,
   analyze,
+  applyEdit,
   buildIndex,
   buildRegistry,
   bundleDiagnostics,
@@ -51,7 +53,6 @@ import {
   type SemanticReport,
 } from "./engine";
 import type { OntologyStore } from "./ontologyStore";
-import { textHunks } from "./engine/diff";
 import type { MifSettings } from "./settings";
 
 export interface FileAnalysis extends Analysis {
@@ -505,53 +506,43 @@ export class MifManager extends Events {
 
   // --- writes -----------------------------------------------------------------
 
-  /** The editor of a Markdown view showing this file, if one is open. */
-  private openEditor(file: TFile): Editor | undefined {
-    let editor: Editor | undefined;
-    this.app.workspace.iterateAllLeaves((leaf) => {
-      if (!editor && leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) editor = leaf.view.editor;
-    });
-    return editor;
-  }
-
   /**
    * Write through the format-preserving writer; returns false on refusal.
-   * A note open in an editor is changed through that editor as one minimal
-   * edit, so the editor's buffer stays the single source of truth; writing
-   * the file underneath an open editor races its own merge and save.
+   * Always via Vault.process — the route Obsidian's own Properties panel uses
+   * for open notes; the open editor picks the change up. (Editing through
+   * the Editor API dropped some changes in testing.) Every write is
+   * read back: a mismatch is reported, never silent.
    */
   async write(file: TFile, edit: (text: string) => string): Promise<boolean> {
+    let expected: string | undefined;
     try {
-      const editor = this.openEditor(file);
-      if (editor) {
-        const before = editor.getValue();
-        const after = edit(before);
-        this.ownWrites.set(file.path, after);
-        const hunks = textHunks(before, after);
-        if (hunks.length) {
-          editor.transaction({
-            changes: hunks.map((h) => ({ from: editor.offsetToPos(h.from), to: editor.offsetToPos(h.to), text: h.text })),
-          }, "mif");
-          this.debug("write-editor", { path: file.path, hunks: hunks.map((h) => [h.from, h.to, h.text]) });
-        }
-        return true;
-      }
       await this.app.vault.process(file, (text) => {
         const out = edit(text);
+        expected = out;
         this.ownWrites.set(file.path, out);
         return out;
       });
-      return true;
     } catch (err) {
       if (err instanceof WriteError || (err instanceof Error && err.name === "FrontmatterError")) {
         new Notice(`MIF: not saved — ${err.message}`);
+        this.debug("write-refused", { path: file.path, message: err.message });
         return false;
       }
+      this.debug("write-error", { path: file.path, message: (err as Error).message });
       throw err;
     }
+    const actual = await this.app.vault.read(file);
+    if (expected !== undefined && actual !== expected) {
+      this.debug("write-mismatch", { path: file.path, expectedLength: expected.length, actualLength: actual.length });
+      new Notice(`MIF: ${file.basename} changed while saving; check the note.`);
+      return false;
+    }
+    this.debug("write", { path: file.path, bytes: actual.length });
+    return true;
   }
 
   async applyFix(file: TFile, fix: ManagedFix): Promise<void> {
+    this.debug("fix", { path: file.path, label: fix.label, transform: fix.transform ?? null });
     if ("dismiss" in fix) {
       const list = (this.rewrites.get(file.path) ?? []).filter((d) => d.path.join(".") !== fix.path.join("."));
       if (list.length) this.rewrites.set(file.path, list);
@@ -580,7 +571,10 @@ export class MifManager extends Events {
     const isRestore = (this.rewrites.get(file.path) ?? []).some((d) => d.fixes.includes(fix));
     const titleFor = this.titleFor(file.path);
     const ok = await this.write(file, (text) =>
-      fix.transform === "lf" ? toLf(text) : fix.transform === "mirror" ? syncMirror(text, titleFor) : updateFrontmatter(text, fix.updates ?? {}),
+      fix.transform === "lf" ? toLf(text)
+        : fix.transform === "mirror" ? syncMirror(text, titleFor)
+        : fix.transform === "mirror-adopt" ? syncMirror(adoptMirror(text), titleFor)
+        : updateFrontmatter(text, fix.updates ?? {}),
     );
     if (ok && isRestore) {
       const list = (this.rewrites.get(file.path) ?? []).filter((d) => !d.fixes.includes(fix));
@@ -588,6 +582,15 @@ export class MifManager extends Events {
       else this.rewrites.delete(file.path);
     }
     await this.analyzeFile(file);
+  }
+
+  /** Edit one frontmatter path from the Properties panel (a user edit, for Sync mode). */
+  async editField(file: TFile, path: Array<string | number>, value: unknown): Promise<boolean> {
+    this.markDirty(file.path);
+    const ok = await this.write(file, (text) => applyEdit(text, path, value));
+    await this.analyzeFile(file);
+    this.scheduleStamp(file);
+    return ok;
   }
 
   // --- relationships ------------------------------------------------------------

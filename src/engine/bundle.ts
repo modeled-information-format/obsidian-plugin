@@ -198,7 +198,15 @@ export function bundleDiagnostics(index: BundleIndex): Map<string, Diagnostic[]>
         message: describeDrift(drift),
         path: ["relationships"],
         line: heading !== -1 ? c.bodyLine + heading : relationshipLine(c),
-        fixes: [{ label: "Regenerate the body mirror from frontmatter", transform: "mirror" }],
+        fixes: [
+          ...(drift.missingInFrontmatter.length ? [{ label: "Add body-only relationships to frontmatter", transform: "mirror-adopt" as const }] : []),
+          {
+            label: drift.missingInFrontmatter.length
+              ? `Regenerate the body mirror from frontmatter (drops ${drift.missingInFrontmatter.length} body-only line${drift.missingInFrontmatter.length > 1 ? "s" : ""})`
+              : "Regenerate the body mirror from frontmatter",
+            transform: "mirror",
+          },
+        ],
       });
     }
 

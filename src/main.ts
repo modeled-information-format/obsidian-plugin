@@ -1,6 +1,6 @@
 // MIF for Obsidian — authoring and Level 1 validation.
 
-import { normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App } from "obsidian";
+import { normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import { newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
 import { MifManager } from "./manager";
@@ -11,6 +11,7 @@ import { runLinkSpike } from "./spikes/links";
 import { BUILD_ID } from "./build";
 import { OntologyStore } from "./ontologyStore";
 import { MigrationModal, RELATED_VIEW, RelatedView, RelationshipModal, type RelationshipDraft } from "./relations";
+import { PROPERTIES_VIEW, PropertiesView } from "./propertiesView";
 import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, OntologyView } from "./semanticViews";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
 
@@ -21,16 +22,32 @@ export default class MifPlugin extends Plugin {
   private statusEl?: HTMLElement;
 
   override async onload(): Promise<void> {
-    this.settings = loadSettings(await this.loadData());
+    // Views are registered before anything is awaited: Obsidian may restore
+    // the saved layout while onload is suspended, and a leaf restored before
+    // its view type exists never gets the view.
     this.store = new OntologyStore(this.app, this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`);
     this.manager = new MifManager(this.app, () => this.settings, this.store);
-    this.addSettingTab(new MifSettingTab(this.app, this));
+    // Each factory is logged (developer log) so a view that never appears can be traced.
+    const view = <V>(type: string, make: (leaf: WorkspaceLeaf) => V) =>
+      this.registerView(type, (leaf) => {
+        try {
+          const v = make(leaf);
+          this.manager.debug("view-created", { type });
+          return v as never;
+        } catch (err) {
+          this.manager.debug("view-create-error", { type, message: (err as Error).message, stack: (err as Error).stack?.split("\n").slice(0, 6) });
+          throw err;
+        }
+      });
+    view(DIAGNOSTICS_VIEW, (leaf) => new DiagnosticsView(leaf, this));
+    view(REPORT_VIEW, (leaf) => new ReportView(leaf, this));
+    view(RELATED_VIEW, (leaf) => new RelatedView(leaf, this));
+    view(ONTOLOGY_VIEW, (leaf) => new OntologyView(leaf, this));
+    view(ENTITIES_VIEW, (leaf) => new EntitiesView(leaf, this));
+    view(PROPERTIES_VIEW, (leaf) => new PropertiesView(leaf, this));
 
-    this.registerView(DIAGNOSTICS_VIEW, (leaf) => new DiagnosticsView(leaf, this));
-    this.registerView(REPORT_VIEW, (leaf) => new ReportView(leaf, this));
-    this.registerView(RELATED_VIEW, (leaf) => new RelatedView(leaf, this));
-    this.registerView(ONTOLOGY_VIEW, (leaf) => new OntologyView(leaf, this));
-    this.registerView(ENTITIES_VIEW, (leaf) => new EntitiesView(leaf, this));
+    this.settings = loadSettings(await this.loadData());
+    this.addSettingTab(new MifSettingTab(this.app, this));
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("mif-status", "mod-clickable");
@@ -114,14 +131,34 @@ export default class MifPlugin extends Plugin {
     el.setAttr("data-tooltip-position", "top");
   }
 
+  /**
+   * Show one of the plugin's panels. A tab restored from the saved layout
+   * may be deferred (Obsidian 1.7+) or hold a placeholder if it was restored
+   * before the view type was registered; both are loaded or re-opened here.
+   */
   async revealView(type: string): Promise<void> {
+    try {
+      await this.revealViewInner(type);
+    } catch (err) {
+      this.manager.debug("reveal-error", { type, message: (err as Error).message, stack: (err as Error).stack?.split("\n").slice(0, 6) });
+      new Notice(`MIF: could not open the panel — ${(err as Error).message}`);
+    }
+  }
+
+  private async revealViewInner(type: string): Promise<void> {
     const { workspace } = this.app;
+    this.manager.debug("reveal", { type, existing: workspace.getLeavesOfType(type).map((l) => ({ deferred: l.isDeferred, view: l.view?.getViewType() })) });
     let leaf = workspace.getLeavesOfType(type)[0];
     if (!leaf) {
       leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true);
       await leaf.setViewState({ type, active: true });
     }
     await workspace.revealLeaf(leaf);
+    await leaf.loadIfDeferred();
+    if (leaf.view.getViewType() !== type) {
+      this.manager.debug("reopen-view", { type, found: leaf.view.getViewType() });
+      await leaf.setViewState({ type, active: true });
+    }
   }
 
   // --- commands -----------------------------------------------------------------
@@ -184,6 +221,7 @@ export default class MifPlugin extends Plugin {
       },
     });
     this.addCommand({ id: "open-ontology", name: "Open ontology panel", callback: () => void this.revealView(ONTOLOGY_VIEW) });
+    this.addCommand({ id: "open-properties", name: "Open properties panel", callback: () => void this.revealView(PROPERTIES_VIEW) });
     this.addCommand({ id: "open-entities", name: "Open entities panel", callback: () => void this.revealView(ENTITIES_VIEW) });
     this.addCommand({
       id: "add-entity-reference",

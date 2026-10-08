@@ -62,6 +62,7 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
       getMarkdownFiles: () => [...files.values()].filter((f) => f.extension === "md"),
       getFiles: () => [...files.values()],
       cachedRead: async (f: TFile) => texts.get(f.path)!,
+      read: async (f: TFile) => texts.get(f.path)!,
       process: async (f: TFile, fn: (t: string) => string) => {
         const out = fn(texts.get(f.path)!);
         texts.set(f.path, out);
@@ -134,3 +135,58 @@ export function memoryAdapter(files: Map<string, string>) {
     },
   };
 }
+
+export function setIcon() {}
+
+export class Component {
+  register() {}
+  registerEvent() {}
+  registerDomEvent(el: { addEventListener: (n: string, f: () => void) => void }, name: string, fn: () => void) {
+    el.addEventListener(name, fn);
+  }
+}
+
+/**
+ * Internal members of Obsidian's View/ItemView/Component that a subclass must
+ * never redefine as data (a field named `open` broke the Properties panel).
+ */
+export const VIEW_INTERNALS = [
+  "open", "close", "load", "unload", "onload", "onunload", "setState", "getState", "setEphemeralState",
+  "getEphemeralState", "containerEl", "contentEl", "leaf", "app", "icon", "navigation", "scope", "register",
+  "registerEvent", "registerDomEvent", "registerInterval", "addChild", "removeChild",
+] as const;
+
+/** ItemView with a real contentEl (needs tests/support/dom installDom()). */
+export class ItemView extends Component {
+  contentEl: HTMLElement;
+  app: unknown;
+  constructor(public leaf: { app?: unknown }) {
+    super();
+    this.app = leaf.app;
+    this.contentEl = document.createElement("div");
+  }
+  /** As Obsidian: the leaf calls view.open(), which runs onOpen(). */
+  async open(_containerEl?: HTMLElement): Promise<void> {
+    await (this as unknown as { onOpen(): Promise<void> }).onOpen();
+  }
+  async close(): Promise<void> {}
+}
+
+export class Modal {
+  constructor(public app: unknown) {}
+  open() {}
+  close() {}
+  setTitle() {}
+}
+export class SuggestModal extends Modal {
+  setPlaceholder() {}
+}
+export class FuzzySuggestModal extends SuggestModal {}
+export class Setting {
+  constructor() {
+    const self: unknown = new Proxy(this, { get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : () => self) });
+    return self as Setting;
+  }
+}
+export class PluginSettingTab {}
+export class Plugin {}

@@ -90,3 +90,21 @@
 .mif-fields th, .mif-fields td { padding: 2px var(--size-4-1); border-bottom: 1px solid var(--background-modifier-border); text-align: left; }
 .mif-fields td:first-child { font-family: var(--font-monospace); color: var(--mif-machine); }
 .mif-build { margin-top: var(--size-4-4); font-size: var(--font-ui-smaller); color: var(--text-faint); font-family: var(--font-monospace); }
+
+/* Properties panel */
+.mif-properties .mif-section { margin: var(--size-4-2) 0; border-top: 1px solid var(--background-modifier-border); padding-top: var(--size-4-1); }
+.mif-properties .mif-section > summary { cursor: pointer; font-weight: var(--font-semibold); padding: var(--size-4-1) 0; }
+.mif-field { display: grid; grid-template-columns: minmax(6em, 32%) 1fr; gap: var(--size-4-1) var(--size-4-2); align-items: start; margin: var(--size-4-1) 0; }
+.mif-field-label { color: var(--text-muted); font-size: var(--font-ui-small); padding-top: 4px; overflow-wrap: anywhere; }
+.mif-field-control { display: flex; flex-wrap: wrap; gap: var(--size-4-1); min-width: 0; }
+.mif-field-control > input[type="text"], .mif-field-control > input[type="number"], .mif-field-control > select, .mif-textarea { flex: 1; min-width: 0; width: 100%; }
+.mif-textarea { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); resize: vertical; }
+.mif-field-readonly { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); color: var(--text-muted); overflow-wrap: anywhere; }
+.mif-field-error, .mif-field-diag { grid-column: 2; font-size: var(--font-ui-smaller); }
+.mif-field-error { color: var(--mif-invalid); }
+.mif-field-error:empty { display: none; }
+.mif-object, .mif-array { width: 100%; border-left: 2px solid var(--background-modifier-border); padding-left: var(--size-4-2); }
+.mif-kind-object > .mif-field-control, .mif-kind-array > .mif-field-control { grid-column: 1 / -1; }
+.mif-array-item { margin-bottom: var(--size-4-2); }
+.mif-array-head { display: flex; justify-content: space-between; align-items: center; }
+.mif-now { font-size: var(--font-ui-smaller); }

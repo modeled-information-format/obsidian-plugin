@@ -491,3 +491,17 @@ export function retarget(text: string, self: { from: string; to: string }, moved
   if (bodyChanged) out = out.slice(0, bodyStart) + lines.join("\n");
   return out;
 }
+
+/**
+ * Keep relationships that exist only in the body mirror by adding them to
+ * the frontmatter (the alternative to regenerating them away). Mirror lines
+ * are left as written; afterwards both sides agree.
+ */
+export function adoptMirror(text: string): string {
+  const { frontmatter, body } = parseMarkdown(text);
+  const drift = mirrorDrift(frontmatter, body);
+  if (!drift || drift.missingInFrontmatter.length === 0) return text;
+  const list = rawList(frontmatter);
+  for (const [type, target] of drift.missingInFrontmatter) list.push({ type, target });
+  return updateFrontmatter(text, { relationships: list });
+}

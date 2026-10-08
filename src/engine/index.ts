@@ -27,6 +27,7 @@ export { newConceptText, promoteToConcept, type BaseType, type NewConcept, type 
 export { toLf, updateFrontmatter, WriteError } from "./writer";
 export {
   addRelationship,
+  adoptMirror,
   bodyRelationships,
   buildRegistry,
   CORE_TYPES,
@@ -63,3 +64,4 @@ export {
 } from "./ontology";
 export { entityReference, entitySlug, entityUrn, parseEntityFile, referencedEntities, renderEntityFile, ENTITY_URN, type EntityRecord } from "./entities";
 export { semanticDiagnostics, usefulSuggestions, type SemanticContext, type SemanticReport } from "./semantics";
+export { applyEdit, checkInput, FORM_KEYS, SECTIONS, topLevelModel, type Checked, type FieldKind, type FieldModel } from "./form";
