@@ -8,6 +8,7 @@ import { ConvertModal, NewConceptModal, slugify, type NewConceptInput } from "./
 import { DEFAULT_SETTINGS, loadSettings, parseLines, type MifSettings, type SyncMode } from "./settings";
 import { runFidelitySpike } from "./spikes/fidelity";
 import { runLinkSpike } from "./spikes/links";
+import { MigrationModal, RELATED_VIEW, RelatedView, RelationshipModal, type RelationshipDraft } from "./relations";
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
 
 export default class MifPlugin extends Plugin {
@@ -22,6 +23,7 @@ export default class MifPlugin extends Plugin {
 
     this.registerView(DIAGNOSTICS_VIEW, (leaf) => new DiagnosticsView(leaf, this));
     this.registerView(REPORT_VIEW, (leaf) => new ReportView(leaf, this));
+    this.registerView(RELATED_VIEW, (leaf) => new RelatedView(leaf, this));
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("mif-status", "mod-clickable");
@@ -48,9 +50,11 @@ export default class MifPlugin extends Plugin {
         if (info.file) this.manager.markDirty(info.file.path);
       }),
     );
+    this.registerEvent(this.app.metadataCache.on("changed", () => void this.manager.noteActivity()));
     this.registerEvent(
       vault.on("modify", async (file) => {
         if (!(file instanceof TFile)) return;
+        void this.manager.noteActivity(file);
         if (file.path.endsWith(".mif/config.yaml")) return this.reloadBundles();
         await this.manager.analyzeFile(file);
         this.manager.scheduleStamp(file);
@@ -62,12 +66,7 @@ export default class MifPlugin extends Plugin {
       }),
     );
     this.registerEvent(vault.on("delete", (file) => this.manager.forget(file.path)));
-    this.registerEvent(
-      vault.on("rename", (file, oldPath) => {
-        this.manager.forget(oldPath);
-        if (file instanceof TFile) void this.manager.analyzeFile(file);
-      }),
-    );
+    this.registerEvent(vault.on("rename", (file, oldPath) => this.manager.handleRename(file, oldPath)));
   }
 
   async reloadBundles(): Promise<void> {
@@ -135,6 +134,33 @@ export default class MifPlugin extends Plugin {
       },
     });
     this.addCommand({ id: "open-diagnostics", name: "Open diagnostics", callback: () => void this.revealView(DIAGNOSTICS_VIEW) });
+    this.addCommand({ id: "open-related", name: "Open related panel", callback: () => void this.revealView(RELATED_VIEW) });
+    this.addCommand({
+      id: "add-relationship",
+      name: "Add relationship",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.indexFor(file.path)?.index.concepts.has(this.manager.indexFor(file.path)!.bundlePath);
+        if (ok && !checking) this.editRelationship(file!);
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "regenerate-mirror",
+      name: "Regenerate body relationships from frontmatter",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const a = file && this.manager.get(file.path);
+        const ok = !!a?.isConcept && !!a.frontmatter;
+        if (ok && !checking) void this.manager.applyFix(file!, { label: "mirror", transform: "mirror" });
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "migrate-legacy",
+      name: "Migrate MIF 0.1 notes",
+      callback: () => new MigrationModal(this.app, this.manager, this.manager.legacyFiles()).open(),
+    });
     this.addCommand({ id: "open-report", name: "Open bundle report", callback: () => void this.revealView(REPORT_VIEW) });
 
     const spike = (id: string, name: string, run: (app: App) => Promise<string>) =>
@@ -172,6 +198,30 @@ export default class MifPlugin extends Plugin {
     const file = await this.app.vault.create(path, text);
     await this.app.workspace.getLeaf(false).openFile(file);
     if (this.manager.rootFor(path) === null) new Notice(`MIF: ${path} is outside every MIF bundle, so it won't be validated.`);
+  }
+
+  /** Open the add (index undefined) or edit dialog for a concept's relationship. */
+  editRelationship(file: TFile, index?: number): void {
+    const ctx = this.manager.indexFor(file.path);
+    if (!ctx) return;
+    const { index: bundleIndex, bundlePath, info } = ctx;
+    const edge = index === undefined ? undefined : bundleIndex.outgoing.get(bundlePath)?.find((e) => e.index === index);
+    const draft: RelationshipDraft = edge
+      ? {
+          type: edge.type,
+          targetPath: edge.resolved,
+          rawTarget: edge.resolved ? undefined : edge.target,
+          style: edge.target.startsWith("urn:") ? "id" : edge.target.startsWith("/") ? "path" : "relative",
+          strength: edge.strength,
+        }
+      : { type: "relates-to", style: "path" };
+    const types = [...info.registry.types.values()];
+    const concepts = [...bundleIndex.concepts.values()].sort((a, b) => a.path.localeCompare(b.path));
+    new RelationshipModal(this.app, types, concepts, bundlePath, draft, async (type, target, strength) => {
+      const rel = { type, target, strength };
+      if (index === undefined) await this.manager.addRelationship(file, rel);
+      else await this.manager.updateRelationship(file, index, rel);
+    }).open();
   }
 
   convertActive(): void {

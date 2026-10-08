@@ -76,3 +76,11 @@
 .mif-report th, .mif-report td { padding: var(--size-4-1) var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); text-align: left; }
 .mif-report td:nth-child(4), .mif-report td:nth-child(5) { text-align: right; }
 .mif-report a { color: var(--mif-machine); word-break: break-all; }
+
+.mif-rel-group { margin: 0 0 var(--size-4-2); }
+.mif-rel-type { font-family: var(--font-monospace); font-size: var(--font-ui-smaller); color: var(--mif-machine); }
+.mif-rel-row { display: flex; gap: var(--size-4-1); align-items: baseline; padding-left: var(--size-4-3); }
+.mif-rel-row a { color: var(--mif-human); }
+.mif-row-actions { margin-left: auto; display: flex; gap: var(--size-4-2); font-size: var(--font-ui-smaller); }
+.mif-row-actions a { color: var(--text-muted); }
+.mif-migration-list { max-height: 40vh; overflow: auto; font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }

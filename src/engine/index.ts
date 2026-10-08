@@ -25,3 +25,25 @@ export { dumpYaml, loadYaml, pythonIsoTimestamp } from "./yaml11";
 export { analyze, ambiguities, detectRewrites, BASE_TYPES, isoSeconds, L2_FIELDS, levelOf, type Analysis, type AnalyzeOptions, type Diagnostic, type Fix, type Level, type Severity } from "./analyze";
 export { newConceptText, promoteToConcept, type BaseType, type NewConcept, type Promotion } from "./concept";
 export { toLf, updateFrontmatter, WriteError } from "./writer";
+export {
+  addRelationship,
+  bodyRelationships,
+  buildRegistry,
+  CORE_TYPES,
+  frontmatterRelationships,
+  incomingLabel,
+  kebab,
+  malformedMirrorLines,
+  mirrorDrift,
+  relativeTarget,
+  removeRelationship,
+  resolveTarget,
+  retarget,
+  syncMirror,
+  updateRelationship,
+  type RelationshipInput,
+  type Registry,
+  type RelType,
+} from "./relationships";
+export { buildIndex, bundleDiagnostics, titleForTarget, titleOf, toBundleConcept, type BundleConcept, type BundleIndex, type Edge } from "./bundle";
+export { legacySigns, migrateConcept, migratedPath, type LegacySigns } from "./migrate";

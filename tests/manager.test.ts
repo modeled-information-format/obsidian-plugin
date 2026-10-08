@@ -1,0 +1,144 @@
+// MifManager under a stubbed `obsidian` module: renames, and the race with
+// Obsidian's own link updater found in testing.
+
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("obsidian", () => import("./support/obsidian-stub"));
+
+import { MifManager } from "../src/manager";
+import { DEFAULT_SETTINGS } from "../src/settings";
+import { memoryApp, type TFile } from "./support/obsidian-stub";
+
+const REL = join(__dirname, "fixtures", "rel");
+const walk = (d: string): string[] =>
+  readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
+const relFixtures = () => Object.fromEntries(walk(REL).map((p) => [relative(REL, p), readFileSync(p, "utf8")]));
+
+async function setup(config: Record<string, unknown> = {}) {
+  const vault = memoryApp(relFixtures(), config);
+  const manager = new MifManager(vault.app as never, () => DEFAULT_SETTINGS);
+  vault.onModify((f) => void manager.noteActivity(f as never));
+  await manager.loadBundles();
+  await manager.scanAll();
+  return { ...vault, manager };
+}
+
+/** Move sub/c.md to c.md, as in the manual test, and return the pre-move texts. */
+function moveC(v: Awaited<ReturnType<typeof setup>>) {
+  const before = { c: v.texts.get("sub/c.md")!, a: v.texts.get("a.md")! };
+  const c = v.move("sub/c.md", "c.md");
+  v.manager.handleRename(c as never, "sub/c.md");
+  return before;
+}
+
+/** What Obsidian's updater writes for that move (offsets from before the move). */
+function obsidianUpdates(v: Awaited<ReturnType<typeof setup>>, before: { c: string; a: string }) {
+  v.staleReplace("c.md", before.c, "[Concept A](../a.md)", "[Concept A](a.md)");
+  v.staleReplace("a.md", before.a, "[the C source](/sub/c.md)", "[the C source](/c.md)");
+}
+
+const clean = (v: Awaited<ReturnType<typeof setup>>) => {
+  expect(v.texts.get("c.md")).toContain("- part-of [Concept A](a.md)");
+  expect(v.texts.get("c.md")).toContain("target: a.md");
+  expect(v.texts.get("a.md")).toContain("[the C source](/c.md)");
+  expect(v.texts.get("a.md")).toContain("target: /c.md");
+};
+
+describe("renames", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("retargets referrers and the moved concept's own relative targets", async () => {
+    const v = await setup({ alwaysUpdateLinks: true });
+    const c = v.move("sub/c.md", "procedures/c.md");
+    v.manager.handleRename(c as never, "sub/c.md");
+    await vi.advanceTimersByTimeAsync(11_000); // no Obsidian update: auto-update cap
+    expect(v.texts.get("a.md")).toContain("target: /procedures/c.md");
+    expect(v.texts.get("a.md")).toContain("[the C source](/procedures/c.md)");
+    expect(v.texts.get("procedures/c.md")).toContain("target: ../a.md");
+  });
+
+  it("waits for Obsidian's prompted link update, however late it lands", async () => {
+    const v = await setup(); // "Automatically update internal links" off: Obsidian asks first
+    const before = moveC(v);
+    await vi.advanceTimersByTimeAsync(4000); // user clicks the dialog after 4 s
+    expect(v.texts.get("c.md")).toBe(before.c); // untouched while waiting
+    obsidianUpdates(v, before);
+    await vi.advanceTimersByTimeAsync(3000);
+    clean(v);
+  });
+
+  it("applies its own fixes after the cap when the user declines the dialog", async () => {
+    const v = await setup();
+    moveC(v);
+    await vi.advanceTimersByTimeAsync(61_000);
+    clean(v);
+  });
+
+  it("follows Obsidian's immediate update when auto-update is on", async () => {
+    const v = await setup({ alwaysUpdateLinks: true });
+    const before = moveC(v);
+    await vi.advanceTimersByTimeAsync(200);
+    obsidianUpdates(v, before);
+    await vi.advanceTimersByTimeAsync(3000);
+    clean(v);
+  });
+
+  it("repairs a mirror line damaged after its own edits (safety net)", async () => {
+    const v = await setup({ alwaysUpdateLinks: true });
+    const before = moveC(v);
+    await vi.advanceTimersByTimeAsync(200);
+    obsidianUpdates(v, before);
+    await vi.advanceTimersByTimeAsync(1700); // plugin edits land
+    // A late writer splices with offsets 7 characters off, as seen in Obsidian.
+    const text = v.texts.get("c.md")!;
+    const at = text.indexOf("[Concept A](a.md)") + 7;
+    v.texts.set("c.md", text.slice(0, at) + "[Concept A](a.md)" + text.slice(at + 10));
+    expect(v.texts.get("c.md")).toContain("[Concep[Concept A](a.md)");
+    await vi.advanceTimersByTimeAsync(3500); // verification pass
+    expect(v.texts.get("c.md")).toContain("- part-of [Concept A](a.md)");
+    expect(v.texts.get("c.md")).not.toContain("Concep[");
+  });
+});
+
+describe("writes to open notes", () => {
+  it("go through the editor as one minimal edit, not underneath it", async () => {
+    const { MarkdownView } = await import("./support/obsidian-stub");
+    const v = memoryApp(relFixtures());
+    let buffer = v.texts.get("b.md")!;
+    const edits: Array<{ from: number; to: number; text: string }> = [];
+    const toOffset = (pos: { line: number; ch: number }) =>
+      buffer.split("\n").slice(0, pos.line).reduce((n, l) => n + l.length + 1, 0) + pos.ch;
+    const editor = {
+      getValue: () => buffer,
+      offsetToPos: (o: number) => {
+        const before = buffer.slice(0, o).split("\n");
+        return { line: before.length - 1, ch: before[before.length - 1]!.length };
+      },
+      transaction: (tx: { changes: Array<{ from: { line: number; ch: number }; to: { line: number; ch: number }; text: string }> }) => {
+        for (const c of tx.changes) {
+          const from = toOffset(c.from);
+          const to = toOffset(c.to);
+          edits.push({ from, to, text: c.text });
+          buffer = buffer.slice(0, from) + c.text + buffer.slice(to);
+        }
+      },
+    };
+    const view = Object.assign(new MarkdownView(), { file: v.files.get("b.md"), editor });
+    (v.app as { workspace: unknown }).workspace = { iterateAllLeaves: (cb: (l: unknown) => void) => cb({ view }) };
+    const processSpy = vi.spyOn(v.app.vault, "process");
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+
+    await manager.applyFix(v.files.get("b.md") as never, { label: "mirror", transform: "mirror" });
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(buffer).toContain("- supersedes [Concept A](/a.md)");
+    expect(buffer).not.toContain("- relates-to [Concept A](/a.md)");
+    // Only the changed span is replaced: "relates-to" → "supersedes".
+    expect(edits).toHaveLength(1);
+    expect(edits[0]!.text.length).toBeLessThan(20);
+  });
+});

@@ -2,7 +2,7 @@
 // the vault can be opened in Obsidian for the spikes. Everything written
 // here is gitignored (test-vault/.obsidian/, test-vault/_fixtures/).
 //   npm run build && npm run install-vault
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(".");
@@ -19,11 +19,15 @@ if (!existsSync(join(pluginDir, "data.json"))) {
   writeFileSync(join(pluginDir, "data.json"), JSON.stringify({ showDevCommands: true }) + "\n");
 }
 
-// Edge fixtures exercise Spike B with YAML 1.1 scalars, timestamps, etc.
-const fixtures = join(vault, "_fixtures", "edge");
-rmSync(fixtures, { recursive: true, force: true });
-mkdirSync(fixtures, { recursive: true });
-const edge = join(root, "tests", "fixtures", "edge");
-for (const f of readdirSync(edge).filter((f) => f.endsWith(".md"))) cpSync(join(edge, f), join(fixtures, f));
-
-console.log(`installed plugin into ${pluginDir}\nstaged edge fixtures into ${fixtures}`);
+// Fixture bundles for manual testing: edge cases (Spike B),
+// relationships (add "_fixtures/rel" as a bundle root), and MIF 0.1.
+const STAGE = {
+  edge: join(root, "tests", "fixtures", "edge"),
+  rel: join(root, "tests", "fixtures", "rel"),
+  legacy: join(root, "tests", "fixtures", "mif", "legacy-0.1-bundle"),
+};
+rmSync(join(vault, "_fixtures"), { recursive: true, force: true });
+for (const [name, src] of Object.entries(STAGE)) {
+  cpSync(src, join(vault, "_fixtures", name), { recursive: true });
+}
+console.log(`installed plugin into ${pluginDir}\nstaged fixtures into ${join(vault, "_fixtures")}: ${Object.keys(STAGE).join(", ")}`);

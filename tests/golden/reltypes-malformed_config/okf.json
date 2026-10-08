@@ -1,0 +1,9 @@
+{
+  "errors": [
+    "config.yaml.relationship_types[0].name: 'lowercase-invalid' does not match '^[A-Z][a-zA-Z0-9]*$'",
+    "config.yaml.relationship_types[0].namespace: 'FARM' does not match '^[a-z][a-z0-9]*$'"
+  ],
+  "warnings": [
+    "a.md: broken link -> /b.md"
+  ]
+}

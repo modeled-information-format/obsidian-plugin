@@ -1,0 +1,8 @@
+{
+  "errors": [
+    "a.md: relationship type 'farm:undeclared-type' is not declared in .mif/config.yaml's relationship_types (bundle has opted in to custom-type validation by defining that file)"
+  ],
+  "warnings": [
+    "a.md: broken link -> /b.md"
+  ]
+}

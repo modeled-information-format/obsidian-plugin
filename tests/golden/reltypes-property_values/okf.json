@@ -1,0 +1,10 @@
+{
+  "errors": [
+    "invalid.md: relationship 'farm:contradicts' metadata['farm:contradiction_type']: 'bogus' is not one of the declared enum values ['direct', 'indirect', 'partial']",
+    "invalid.md: relationship 'farm:contradicts' metadata['farm:severity']: 5.0 is outside the declared range [0.0, 1.0]"
+  ],
+  "warnings": [
+    "invalid.md: broken link -> /other.md",
+    "valid.md: broken link -> /other.md"
+  ]
+}

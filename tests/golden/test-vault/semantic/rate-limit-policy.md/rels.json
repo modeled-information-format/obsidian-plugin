@@ -1,0 +1,22 @@
+{
+  "frontmatter": [
+    [
+      "derived-from",
+      "/episodic/incident-2026-01-rate-spike.md"
+    ],
+    [
+      "relates-to",
+      "/procedural/rotate-api-keys.md"
+    ]
+  ],
+  "body": [
+    [
+      "derived-from",
+      "/episodic/incident-2026-01-rate-spike.md"
+    ],
+    [
+      "relates-to",
+      "/procedural/rotate-api-keys.md"
+    ]
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "@context": "https://mif-spec.dev/schema/context.jsonld",
+  "@type": "Concept",
+  "@id": "urn:mif:11111111-2222-3333-4444-555555555001",
+  "conceptType": "semantic",
+  "created": "2026-01-01T00:00:00Z",
+  "namespace": "_semantic/livestock",
+  "title": "Ram",
+  "relationships": [
+    {
+      "type": "farm:breeds-with",
+      "target": "/ewe.md"
+    }
+  ],
+  "timestamp": "2026-01-01T00:00:00Z",
+  "content": "Ram.\n\n## Relationships\n\n- farm:breeds-with [Ewe](/ewe.md)"
+}

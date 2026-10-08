@@ -1,0 +1,10 @@
+{
+  "errors": [
+    "empty-frontmatter.md: missing required frontmatter 'type'",
+    "key-order.md: round-trip drift in key-order.md",
+    "no-frontmatter.md: No YAML frontmatter found",
+    "timestamps.md: round-trip drift in timestamps.md",
+    "unicode-long.md: round-trip drift in unicode-long.md"
+  ],
+  "warnings": []
+}

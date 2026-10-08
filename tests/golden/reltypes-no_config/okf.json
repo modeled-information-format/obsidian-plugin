@@ -1,0 +1,6 @@
+{
+  "errors": [],
+  "warnings": [
+    "a.md: broken link -> /b.md"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "@context": "https://mif-spec.dev/schema/context.jsonld",
+  "@type": "Concept",
+  "@id": "urn:mif:11111111-2222-3333-4444-555555555010",
+  "conceptType": "semantic",
+  "created": "2026-01-01T00:00:00Z",
+  "namespace": "_semantic/test",
+  "title": "Valid",
+  "relationships": [
+    {
+      "type": "farm:contradicts",
+      "target": "/other.md",
+      "metadata": {
+        "farm:contradiction_type": "direct",
+        "farm:severity": 0.5
+      }
+    }
+  ],
+  "timestamp": "2026-01-01T00:00:00Z",
+  "content": "Valid.\n\n## Relationships\n\n- farm:contradicts [Other](/other.md)"
+}

@@ -1,0 +1,14 @@
+{
+  "frontmatter": [
+    [
+      "part-of",
+      "../a.md"
+    ]
+  ],
+  "body": [
+    [
+      "part-of",
+      "../a.md"
+    ]
+  ]
+}

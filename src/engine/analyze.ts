@@ -20,7 +20,8 @@ export type Level = 0 | 1 | 2 | 3;
 export interface Fix {
   label: string;
   updates?: Record<string, unknown>;
-  transform?: "lf";
+  /** lf: CRLF → LF; mirror: regenerate the body mirror; migrate: MIF 0.1 → 1.0. */
+  transform?: "lf" | "mirror" | "migrate";
 }
 
 export interface Diagnostic {

@@ -1,0 +1,14 @@
+{
+  "frontmatter": [
+    [
+      "supersedes",
+      "/a.md"
+    ]
+  ],
+  "body": [
+    [
+      "relates-to",
+      "/a.md"
+    ]
+  ]
+}

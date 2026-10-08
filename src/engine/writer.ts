@@ -70,7 +70,10 @@ function pairSpans(yaml: string): PairSpan[] {
 }
 
 /** `key: value` lines for one pair, without a trailing newline. */
-const renderPair = (key: string, value: unknown) => dumpYaml({ [key]: value }).trimEnd();
+const renderPair = (key: string, value: unknown, indentSeq = false) => dumpYaml({ [key]: value }, { indentSeq }).trimEnd();
+
+/** Whether a block indents its sequence items under the key (`key:\n  - x`). */
+const usesIndentedSeq = (block: string) => /\n[ \t]+- /.test(block) && !/\n- /.test(block);
 
 /** A scalar's inline text, or null if it needs more than one line. */
 function inlineScalar(value: unknown): string | null {
@@ -112,8 +115,10 @@ function editYaml(yaml: string, key: string, value: unknown): string {
       const [vs, ve] = existing.inlineValue;
       return yaml.slice(0, vs) + inline + yaml.slice(ve);
     }
-    const keepNewline = yaml.slice(existing.start, existing.end).endsWith("\n");
-    return yaml.slice(0, existing.start) + renderPair(key, value) + (keepNewline ? "\n" : "") + yaml.slice(existing.end);
+    const block = yaml.slice(existing.start, existing.end);
+    const keepNewline = block.endsWith("\n");
+    // Keep the file's list style when a block value is rewritten.
+    return yaml.slice(0, existing.start) + renderPair(key, value, usesIndentedSeq(block)) + (keepNewline ? "\n" : "") + yaml.slice(existing.end);
   }
 
   const at = insertionOffset(spans, key, yaml.length);
@@ -163,6 +168,43 @@ function sortKeys(value: unknown): unknown {
     return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys((value as Record<string, unknown>)[k])]));
   }
   return value;
+}
+
+/**
+ * Set a nested scalar (e.g. ["relationships", 0, "target"]) by splicing just
+ * that value's text. Falls back to rewriting the top-level key when the path
+ * does not end at an existing inline scalar.
+ */
+export function setScalarIn(text: string, path: Array<string | number>, value: string | number | boolean | null): string {
+  const parts = split(text);
+  if (!parts || path.length < 2) return updateFrontmatter(text, { [String(path[0])]: setPath(parseMarkdown(text).frontmatter, path, value)[String(path[0])] });
+  const doc = parseDocument(parts.yaml, LOAD_OPTIONS);
+  const node = doc.getIn(path, true);
+  const inline = inlineScalar(value);
+  const fm = parseMarkdown(text).frontmatter;
+  const expected = setPath(fm, path, value);
+  if (isScalar(node) && node.range && node.type !== "BLOCK_LITERAL" && node.type !== "BLOCK_FOLDED" && inline !== null
+    && !parts.yaml.slice(node.range[0], node.range[1]).includes("\n")) {
+    const yaml = parts.yaml.slice(0, node.range[0]) + inline + parts.yaml.slice(node.range[1]);
+    const result = parts.head + yaml + parts.tail;
+    if (JSON.stringify(sortKeys(parseMarkdown(result).frontmatter)) !== JSON.stringify(sortKeys(expected))) {
+      throw new WriteError("Edit would change values other than the ones requested");
+    }
+    return result;
+  }
+  const top = String(path[0]);
+  return updateFrontmatter(text, { [top]: expected[top] });
+}
+
+function setPath(root: Frontmatter, path: Array<string | number>, value: unknown): Frontmatter {
+  const clone = JSON.parse(JSON.stringify(root)) as Frontmatter;
+  let cur: Record<string | number, unknown> = clone;
+  for (const key of path.slice(0, -1)) {
+    if (cur[key] === null || typeof cur[key] !== "object") cur[key] = typeof path[path.indexOf(key) + 1] === "number" ? [] : {};
+    cur = cur[key] as Record<string | number, unknown>;
+  }
+  cur[path[path.length - 1]!] = value;
+  return clone;
 }
 
 /** Replace CRLF line endings with LF. */

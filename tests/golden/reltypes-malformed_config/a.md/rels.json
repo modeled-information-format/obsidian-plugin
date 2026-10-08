@@ -1,0 +1,14 @@
+{
+  "frontmatter": [
+    [
+      "farm:whatever",
+      "/b.md"
+    ]
+  ],
+  "body": [
+    [
+      "farm:whatever",
+      "/b.md"
+    ]
+  ]
+}

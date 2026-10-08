@@ -1,0 +1,24 @@
+{
+  "@context": "https://mif-spec.dev/schema/context.jsonld",
+  "@type": "Concept",
+  "@id": "urn:mif:d4d4d4d4-0000-4000-8000-000000000004",
+  "conceptType": "semantic",
+  "created": "2026-03-03T09:00:00Z",
+  "title": "Concept D",
+  "relationships": [
+    {
+      "type": "relates-to",
+      "target": "/a.md"
+    },
+    {
+      "type": "relates-to",
+      "target": "/a.md"
+    },
+    {
+      "type": "conflicts-with",
+      "target": "/b.md"
+    }
+  ],
+  "timestamp": "2026-03-03T09:00:00Z",
+  "content": "# Concept D\n\nFrontmatter relationships with no body mirror at all; one is duplicated.\n\n## Notes\n\nSome other section."
+}

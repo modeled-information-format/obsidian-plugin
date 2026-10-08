@@ -1,0 +1,11 @@
+{
+  "errors": [
+    "b.md: relationships out of sync (no body link for [('supersedes', '/a.md')]; no frontmatter entry for [('relates-to', '/a.md')])",
+    "d.md: relationships out of sync (no body link for [('conflicts-with', '/b.md'), ('relates-to', '/a.md'), ('relates-to', '/a.md')])",
+    "e.md: relationships out of sync (no frontmatter entry for [('mentions', '/d.md'), ('relates-to', '/a.md')])"
+  ],
+  "warnings": [
+    "a.md: temporal inconsistency -> 'derived-from' target /sub/c.md is created 2026-04-01T09:00:00Z, after concept created 2026-03-01T09:00:00Z",
+    "b.md: broken link -> /missing.md"
+  ]
+}

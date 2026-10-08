@@ -1,0 +1,15 @@
+{
+  "frontmatter": {
+    "id": "b2b2b2b2-0000-4000-8000-000000000002",
+    "type": "episodic",
+    "created": "2026-03-02T09:00:00Z",
+    "title": "Concept B",
+    "relationships": [
+      {
+        "type": "supersedes",
+        "target": "/a.md"
+      }
+    ]
+  },
+  "body": "\n# Concept B\n\nOut of sync both ways, plus a broken prose link to [nowhere](/missing.md).\n\n## Relationships\n\n- relates-to [Concept A](/a.md)\n"
+}

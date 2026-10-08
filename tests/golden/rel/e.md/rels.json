@@ -1,0 +1,13 @@
+{
+  "frontmatter": [],
+  "body": [
+    [
+      "relates-to",
+      "/a.md"
+    ],
+    [
+      "mentions",
+      "/d.md"
+    ]
+  ]
+}

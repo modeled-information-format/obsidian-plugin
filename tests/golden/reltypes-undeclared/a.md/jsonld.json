@@ -1,0 +1,17 @@
+{
+  "@context": "https://mif-spec.dev/schema/context.jsonld",
+  "@type": "Concept",
+  "@id": "urn:mif:22222222-3333-4444-5555-666666666001",
+  "conceptType": "semantic",
+  "created": "2026-01-01T00:00:00Z",
+  "namespace": "_semantic/livestock",
+  "title": "A",
+  "relationships": [
+    {
+      "type": "farm:undeclared-type",
+      "target": "/b.md"
+    }
+  ],
+  "timestamp": "2026-01-01T00:00:00Z",
+  "content": "A.\n\n## Relationships\n\n- farm:undeclared-type [B](/b.md)"
+}

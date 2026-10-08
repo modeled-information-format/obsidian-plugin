@@ -244,10 +244,10 @@ export function loadYaml(text: string): unknown {
  * to PyYAML's safe_dump (folding and quote style differ); it is
  * semantically identical, which is what round-trip comparison relies on.
  */
-export function dumpYaml(value: unknown): string {
+export function dumpYaml(value: unknown, opts: { indentSeq?: boolean } = {}): string {
   return stringify(value, {
     ...LOAD_OPTIONS,
-    indentSeq: false,
+    indentSeq: opts.indentSeq ?? false,
     lineWidth: 0,
     defaultStringType: "PLAIN",
   });

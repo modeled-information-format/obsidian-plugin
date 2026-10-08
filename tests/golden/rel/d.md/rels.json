@@ -1,0 +1,17 @@
+{
+  "frontmatter": [
+    [
+      "relates-to",
+      "/a.md"
+    ],
+    [
+      "relates-to",
+      "/a.md"
+    ],
+    [
+      "conflicts-with",
+      "/b.md"
+    ]
+  ],
+  "body": []
+}

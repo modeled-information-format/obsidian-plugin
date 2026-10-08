@@ -120,3 +120,23 @@ describe("updateFrontmatter details", () => {
     expect(updateFrontmatter(toLf(crlf), { type: "episodic" })).toContain("type: episodic");
   });
 });
+
+describe("nested edits keep the file's YAML style", () => {
+  const a = readFileSync(join(ROOT, "tests/fixtures/rel/a.md"), "utf8");
+
+  it("setScalarIn changes exactly one line", async () => {
+    const { setScalarIn } = await import("../src/engine/writer");
+    const out = setScalarIn(a, ["relationships", 0, "target"], "/elsewhere/c.md");
+    expect(addedLines(a, out)).toEqual(["    target: /elsewhere/c.md"]);
+    expect((parseMarkdown(out).frontmatter.relationships as Array<{ target: string }>)[0]!.target).toBe("/elsewhere/c.md");
+  });
+
+  it("rewriting a block keeps indented list items indented", async () => {
+    const { addRelationship } = await import("../src/engine/relationships");
+    const out = addRelationship(a, { type: "implements", target: "/d.md" }, () => "Concept D");
+    const fmLines = out.slice(0, out.indexOf("\n---", 4)).split("\n");
+    expect(fmLines.filter((l) => /^\s*- type:/.test(l)).every((l) => l.startsWith("  - type:"))).toBe(true);
+    // Only the new item and its mirror line are added.
+    expect(addedLines(a, out)).toEqual(["  - type: implements", "    target: /d.md", "- implements [Concept D](/d.md)"]);
+  });
+});

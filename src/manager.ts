@@ -1,50 +1,135 @@
 // The plugin's model of the vault: which files belong to a MIF bundle, the
-// latest analysis of each, and every write the plugin makes. All writes go
-// through the engine's format-preserving writer.
+// latest analysis of each, each bundle's relationship index, and every
+// write the plugin makes. All writes go through the engine's
+// format-preserving writer.
 
-import { Events, Notice, TFile, type App } from "obsidian";
+import { Events, MarkdownView, Notice, TFile, TFolder, Vault, type App, type Editor, type TAbstractFile } from "obsidian";
 
 import {
+  addRelationship,
   analyze,
+  buildIndex,
+  buildRegistry,
+  bundleDiagnostics,
   detectRewrites,
+  frontmatterRelationships,
   isoSeconds,
+  legacySigns,
   loadYaml,
+  malformedMirrorLines,
+  migrateConcept,
+  migratedPath,
+  mirrorDrift,
+  removeRelationship,
   RESERVED_FILENAMES,
+  resolveTarget,
+  retarget,
+  syncMirror,
+  titleForTarget,
+  toBundleConcept,
   toLf,
   updateFrontmatter,
+  updateRelationship,
   validateBundleConfig,
   WriteError,
   type Analysis,
+  type BundleConcept,
+  type BundleIndex,
   type Diagnostic,
   type Fix,
   type Frontmatter,
+  type LegacySigns,
   type Namespaces,
+  type Registry,
+  type RelationshipInput,
 } from "./engine";
+import { textHunks } from "./engine/diff";
 import type { MifSettings } from "./settings";
 
 export interface FileAnalysis extends Analysis {
   path: string;
   root: string;
+  legacy?: LegacySigns;
 }
 
 export interface BundleInfo {
   root: string;
   namespaces?: Namespaces;
+  registry: Registry;
   /** Problems with .mif/config.yaml, if it exists. */
   configIssues: string[];
+  index?: BundleIndex;
 }
 
-/** Fix variant the manager handles itself: forget a reported rewrite. */
-export const DISMISS = "dismiss" as const;
+interface FileState {
+  analysis: Analysis;
+  root: string;
+  concept: BundleConcept | null;
+  legacy: LegacySigns | null;
+}
+
+const RENAME_QUIET_MS = 1500;
+/** Cap on waiting for Obsidian's link updater when it updates links itself. */
+const RENAME_MAX_WAIT_AUTO_MS = 10_000;
+/** Cap when Obsidian may ask first ("Automatically update internal links" not reported as on). */
+const RENAME_MAX_WAIT_PROMPT_MS = 60_000;
+/** Delay before re-checking renamed notes for damage. */
+const RENAME_VERIFY_MS = 3000;
+
+interface RenameBatch {
+  /** Each bundle's index from before the first rename in the burst. */
+  snapshot: Map<string, BundleIndex | undefined>;
+  moves: Array<[string, string]>;
+  timer: number;
+  started: number;
+  /** Vault paths (after the move) that Obsidian's link updater should rewrite. */
+  expected: Set<string>;
+  /** Vault paths written by something other than this plugin since the burst began. */
+  external: Set<string>;
+}
+
+const MD_LINK = /\[[^\]]*\]\(([^)]+)\)/g;
+
+/** Where Obsidian resolves a markdown link: "/x" from the vault root, else from the note's folder. */
+function obsidianLinkPath(target: string, from: string): string | null {
+  let t = target.trim().replace(/^<|>$/g, "").split("#")[0]!;
+  if (!t || /^[a-z][a-z0-9+.-]*:/i.test(t)) return null;
+  try {
+    t = decodeURI(t);
+  } catch {
+    // keep as written
+  }
+  const dir = from.includes("/") ? from.slice(0, from.lastIndexOf("/")) : "";
+  const parts: string[] = [];
+  for (const seg of (t.startsWith("/") ? t : `${dir}/${t}`).split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (!parts.length) return null;
+      parts.pop();
+    } else parts.push(seg);
+  }
+  const path = parts.join("/");
+  return path.endsWith(".md") ? path : `${path}.md`;
+}
+
 type ManagedFix = Fix | (Fix & { dismiss: true; path: Array<string | number> });
 
 const getIn = (obj: unknown, path: Array<string | number>) =>
   path.reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string | number, unknown>)[k] : undefined), obj);
 
+const describeLegacy = (s: LegacySigns) =>
+  [
+    s.memoryExtension && "`.memory.md` file name",
+    s.wikilinkRelationships && `${s.wikilinkRelationships} wiki-link relationship${s.wikilinkRelationships > 1 ? "s" : ""}`,
+    s.snakeCaseFields.length && `0.1 field names in ${s.snakeCaseFields.join(", ")}`,
+    s.slugId && "a slug id",
+  ].filter(Boolean).join(", ");
 
 export class MifManager extends Events {
-  private readonly analyses = new Map<string, FileAnalysis>();
+  private readonly files = new Map<string, FileState>();
   private readonly bundles = new Map<string, BundleInfo>();
+  /** Bundle-wide diagnostics by vault path. */
+  private bundleDiags = new Map<string, Diagnostic[]>();
   /** Values Obsidian rewrote out from under MIF (Spike B), per file. */
   private readonly rewrites = new Map<string, Diagnostic[]>();
   /** Files the user has typed into since their last save (Sync mode). */
@@ -52,24 +137,53 @@ export class MifManager extends Events {
   private readonly stampTimers = new Map<string, number>();
   /** Text of each file the plugin last wrote, to ignore its own modify events. */
   private readonly ownWrites = new Map<string, string>();
+  private indexTimer = 0;
+  private renameBatch?: RenameBatch;
 
   constructor(private readonly app: App, private settings: () => MifSettings) {
     super();
+  }
+
+  /** Rename diagnostics, only with Developer commands on. Written outside the vault index. */
+  private debug(event: string, detail: Record<string, unknown> = {}): void {
+    if (!this.settings().showDevCommands) return;
+    const line = `${new Date().toISOString()} ${event} ${JSON.stringify(detail)}\n`;
+    console.debug("MIF", event, detail);
+    const adapter = this.app.vault.adapter as { append?: (p: string, d: string) => Promise<void> };
+    void adapter.append?.(`${this.app.vault.configDir ?? ".obsidian"}/plugins/mif/rename-debug.log`, line).catch(() => undefined);
+  }
+
+  private mirrorLines(text: string): string[] {
+    const body = text.slice(text.indexOf("\n---", 4) + 4);
+    return body.split("\n").filter((l) => /^-\s+\S+\s+\[/.test(l.trim()));
   }
 
   // --- membership -------------------------------------------------------------
 
   /** The bundle root a file belongs to, or null if it is not MIF territory. */
   rootFor(path: string): string | null {
-    const s = this.settings();
     if (!path.endsWith(".md")) return null;
     if (RESERVED_FILENAMES.has(path.split("/").pop() ?? "")) return null;
+    return this.rootContaining(path);
+  }
+
+  /** Deepest bundle root containing a path, ignoring file type. */
+  private rootContaining(path: string): string | null {
+    const s = this.settings();
     if (s.excludedFolders.some((f) => path === f || path.startsWith(`${f}/`))) return null;
     let best: string | null = null;
     for (const root of s.bundleRoots) {
       if ((root === "" || path.startsWith(`${root}/`)) && (best === null || root.length > best.length)) best = root;
     }
     return best;
+  }
+
+  toBundlePath(root: string, vaultPath: string): string {
+    return root ? vaultPath.slice(root.length + 1) : vaultPath;
+  }
+
+  toVaultPath(root: string, bundlePath: string): string {
+    return root ? `${root}/${bundlePath}` : bundlePath;
   }
 
   bundleInfo(root: string): BundleInfo | undefined {
@@ -80,13 +194,16 @@ export class MifManager extends Events {
     this.bundles.clear();
     for (const root of this.settings().bundleRoots) {
       const configPath = `${root ? `${root}/` : ""}.mif/config.yaml`;
-      const info: BundleInfo = { root, configIssues: [] };
+      const info: BundleInfo = { root, configIssues: [], registry: buildRegistry(null) };
       // .mif/ is a dot-folder Obsidian does not index, so read through the adapter.
       if (await this.app.vault.adapter.exists(configPath)) {
         try {
           const config = loadYaml(await this.app.vault.adapter.read(configPath)) as { namespaces?: Namespaces } | null;
-          info.configIssues = validateBundleConfig(config ?? {}).map((i) => `${configPath}${i.path}: ${i.message}`);
+          info.configIssues = validateBundleConfig(config ?? {}).map((i) => `${configPath}${i.path === "/" ? "" : i.path}: ${i.message}`);
           info.namespaces = config?.namespaces;
+          // Like okf_validate: a malformed config does not opt the bundle in.
+          info.registry = buildRegistry(info.configIssues.length ? null : (config as never));
+          info.configIssues.push(...info.registry.errors);
         } catch (err) {
           info.configIssues = [`${configPath}: ${(err as Error).message}`];
         }
@@ -98,27 +215,45 @@ export class MifManager extends Events {
   // --- analysis ---------------------------------------------------------------
 
   get(path: string): FileAnalysis | undefined {
-    return this.analyses.get(path);
+    const state = this.files.get(path);
+    if (!state) return undefined;
+    const legacy = state.legacy
+      ? [{
+          severity: "warning" as const,
+          code: "legacy-0.1",
+          message: `Looks like MIF 0.1: ${describeLegacy(state.legacy)}.`,
+          path: [],
+          line: 0,
+          fixes: [{ label: state.legacy.memoryExtension ? "Migrate to MIF 1.0 (renames the file)" : "Migrate to MIF 1.0", transform: "migrate" as const }],
+        }]
+      : [];
+    return {
+      ...state.analysis,
+      diagnostics: [...(this.rewrites.get(path) ?? []), ...legacy, ...state.analysis.diagnostics, ...(this.bundleDiags.get(path) ?? [])],
+      path,
+      root: state.root,
+      legacy: state.legacy ?? undefined,
+    };
   }
 
   all(): FileAnalysis[] {
-    return [...this.analyses.values()].sort((a, b) => a.path.localeCompare(b.path));
+    return [...this.files.keys()].sort().map((p) => this.get(p)!);
   }
 
   async scanAll(): Promise<void> {
-    this.analyses.clear();
+    this.files.clear();
     const files = this.app.vault.getMarkdownFiles().filter((f) => this.rootFor(f.path) !== null);
     for (let i = 0; i < files.length; i++) {
       await this.analyzeFile(files[i]!, { quiet: true });
       if (i % 50 === 49) await new Promise((r) => window.setTimeout(r, 0));
     }
-    this.trigger("changed", null);
+    this.rebuildIndexes();
   }
 
   async analyzeFile(file: TFile, opts: { quiet?: boolean } = {}): Promise<FileAnalysis | undefined> {
     const root = this.rootFor(file.path);
     if (root === null) {
-      if (this.analyses.delete(file.path) && !opts.quiet) this.trigger("changed", file.path);
+      if (this.files.delete(file.path) && !opts.quiet) this.scheduleIndex();
       return undefined;
     }
     const text = await this.app.vault.cachedRead(file);
@@ -134,31 +269,64 @@ export class MifManager extends Events {
         diagnostics: [{ severity: "error", code: "internal", message: `MIF could not analyse this file: ${(err as Error).message}`, path: [], fixes: [] }],
       };
     }
-    const previous = this.analyses.get(file.path);
+    const previous = this.files.get(file.path);
     const ownWrite = this.ownWrites.get(file.path) === text;
-    if (previous && analysis.frontmatter && !ownWrite) this.detectRewrites(file.path, previous, analysis.frontmatter);
+    if (previous && analysis.frontmatter && !ownWrite) this.detectRewrites(file.path, previous.analysis, analysis.frontmatter);
     this.reconcileRewrites(file.path, analysis.frontmatter);
 
-    const result: FileAnalysis = {
-      ...analysis,
-      diagnostics: [...(this.rewrites.get(file.path) ?? []), ...analysis.diagnostics],
-      path: file.path,
-      root,
-    };
-    this.analyses.set(file.path, result);
-    if (!opts.quiet) this.trigger("changed", file.path);
-    return result;
+    const concept = analysis.isConcept ? toBundleConcept(this.toBundlePath(root, file.path), text) : null;
+    this.files.set(file.path, { analysis, root, concept, legacy: legacySigns(file.path, text) });
+    if (!opts.quiet) this.scheduleIndex();
+    return this.get(file.path);
   }
 
   forget(path: string): void {
-    this.analyses.delete(path);
+    this.files.delete(path);
     this.rewrites.delete(path);
     this.dirty.delete(path);
     this.ownWrites.delete(path);
-    this.trigger("changed", path);
+    this.scheduleIndex();
   }
 
-  private detectRewrites(path: string, previous: FileAnalysis, now: Frontmatter): void {
+  private scheduleIndex(): void {
+    window.clearTimeout(this.indexTimer);
+    this.indexTimer = window.setTimeout(() => this.rebuildIndexes(), 150);
+  }
+
+  /** Rebuild every bundle's relationship index and its bundle-wide checks. */
+  rebuildIndexes(): void {
+    window.clearTimeout(this.indexTimer);
+    const diags = new Map<string, Diagnostic[]>();
+    const allFiles = this.app.vault.getFiles();
+    for (const info of this.bundles.values()) {
+      const concepts: BundleConcept[] = [];
+      for (const state of this.files.values()) if (state.root === info.root && state.concept) concepts.push(state.concept);
+      // Existence checks see every file under the root, excluded or not,
+      // as okf_validate sees the filesystem.
+      const files = allFiles
+        .filter((f) => info.root === "" || f.path.startsWith(`${info.root}/`))
+        .map((f) => this.toBundlePath(info.root, f.path));
+      info.index = buildIndex(concepts, info.registry, files);
+      for (const [bundlePath, ds] of bundleDiagnostics(info.index)) diags.set(this.toVaultPath(info.root, bundlePath), ds);
+    }
+    this.bundleDiags = diags;
+    this.trigger("changed", null);
+  }
+
+  indexFor(path: string): { info: BundleInfo; index: BundleIndex; bundlePath: string } | undefined {
+    const root = this.rootFor(path);
+    const info = root === null ? undefined : this.bundles.get(root);
+    if (!info?.index) return undefined;
+    return { info, index: info.index, bundlePath: this.toBundlePath(info.root, path) };
+  }
+
+  /** Link-text lookup for mirror lines written from `path`. */
+  private titleFor(path: string): (target: string) => string | undefined {
+    const ctx = this.indexFor(path);
+    return ctx ? titleForTarget(ctx.index, ctx.bundlePath) : () => undefined;
+  }
+
+  private detectRewrites(path: string, previous: Analysis, now: Frontmatter): void {
     const previousAnalysis = { ...previous, diagnostics: previous.diagnostics.filter((d) => d.code !== "rewritten") };
     const found = detectRewrites(previousAnalysis, now).map((d) => ({
       ...d,
@@ -178,9 +346,37 @@ export class MifManager extends Events {
 
   // --- writes -----------------------------------------------------------------
 
-  /** Write through the format-preserving writer; returns false on refusal. */
+  /** The editor of a Markdown view showing this file, if one is open. */
+  private openEditor(file: TFile): Editor | undefined {
+    let editor: Editor | undefined;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (!editor && leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) editor = leaf.view.editor;
+    });
+    return editor;
+  }
+
+  /**
+   * Write through the format-preserving writer; returns false on refusal.
+   * A note open in an editor is changed through that editor as one minimal
+   * edit, so the editor's buffer stays the single source of truth; writing
+   * the file underneath an open editor races its own merge and save.
+   */
   async write(file: TFile, edit: (text: string) => string): Promise<boolean> {
     try {
+      const editor = this.openEditor(file);
+      if (editor) {
+        const before = editor.getValue();
+        const after = edit(before);
+        this.ownWrites.set(file.path, after);
+        const hunks = textHunks(before, after);
+        if (hunks.length) {
+          editor.transaction({
+            changes: hunks.map((h) => ({ from: editor.offsetToPos(h.from), to: editor.offsetToPos(h.to), text: h.text })),
+          }, "mif");
+          this.debug("write-editor", { path: file.path, hunks: hunks.map((h) => [h.from, h.to, h.text]) });
+        }
+        return true;
+      }
       await this.app.vault.process(file, (text) => {
         const out = edit(text);
         this.ownWrites.set(file.path, out);
@@ -188,7 +384,7 @@ export class MifManager extends Events {
       });
       return true;
     } catch (err) {
-      if (err instanceof WriteError) {
+      if (err instanceof WriteError || (err instanceof Error && err.name === "FrontmatterError")) {
         new Notice(`MIF: not saved — ${err.message}`);
         return false;
       }
@@ -204,8 +400,15 @@ export class MifManager extends Events {
       await this.analyzeFile(file);
       return;
     }
+    if (fix.transform === "migrate") {
+      await this.migrate(file);
+      return;
+    }
     const isRestore = (this.rewrites.get(file.path) ?? []).some((d) => d.fixes.includes(fix));
-    const ok = await this.write(file, (text) => (fix.transform === "lf" ? toLf(text) : updateFrontmatter(text, fix.updates ?? {})));
+    const titleFor = this.titleFor(file.path);
+    const ok = await this.write(file, (text) =>
+      fix.transform === "lf" ? toLf(text) : fix.transform === "mirror" ? syncMirror(text, titleFor) : updateFrontmatter(text, fix.updates ?? {}),
+    );
     if (ok && isRestore) {
       const list = (this.rewrites.get(file.path) ?? []).filter((d) => !d.fixes.includes(fix));
       if (list.length) this.rewrites.set(file.path, list);
@@ -214,13 +417,228 @@ export class MifManager extends Events {
     await this.analyzeFile(file);
   }
 
+  // --- relationships ------------------------------------------------------------
+
+  async addRelationship(file: TFile, rel: RelationshipInput): Promise<boolean> {
+    const titleFor = this.titleFor(file.path);
+    const ok = await this.write(file, (text) => addRelationship(text, rel, titleFor));
+    await this.analyzeFile(file);
+    return ok;
+  }
+
+  async updateRelationship(file: TFile, index: number, rel: RelationshipInput): Promise<boolean> {
+    const titleFor = this.titleFor(file.path);
+    const ok = await this.write(file, (text) => updateRelationship(text, index, rel, titleFor));
+    await this.analyzeFile(file);
+    return ok;
+  }
+
+  async removeRelationship(file: TFile, index: number): Promise<boolean> {
+    const titleFor = this.titleFor(file.path);
+    const ok = await this.write(file, (text) => removeRelationship(text, index, titleFor));
+    await this.analyzeFile(file);
+    return ok;
+  }
+
+  // --- migration ----------------------------------------------------------------
+
+  /** Migrate one MIF 0.1 note in place, then drop a `.memory` infix. */
+  async migrate(file: TFile): Promise<boolean> {
+    const ok = await this.write(file, migrateConcept);
+    if (!ok) return false;
+    const target = migratedPath(file.path);
+    if (target !== file.path) {
+      if (this.app.vault.getAbstractFileByPath(target)) {
+        new Notice(`MIF: migrated ${file.path} but did not rename it — ${target} already exists.`);
+      } else {
+        await this.app.fileManager.renameFile(file, target);
+      }
+    }
+    await this.analyzeFile(file);
+    return true;
+  }
+
+  legacyFiles(): TFile[] {
+    return [...this.files.entries()]
+      .filter(([, s]) => s.legacy)
+      .map(([p]) => this.app.vault.getAbstractFileByPath(p))
+      .filter((f): f is TFile => f instanceof TFile);
+  }
+
+  // --- renames ------------------------------------------------------------------
+
+  /**
+   * Record a rename and, once the burst of events settles, rewrite every
+   * relationship target that pointed at a moved concept (and each moved
+   * concept's own relative targets). Uses the index from before the burst.
+   */
+  handleRename(file: TAbstractFile, oldPath: string): void {
+    if (!this.renameBatch) {
+      this.renameBatch = {
+        snapshot: new Map([...this.bundles].map(([root, info]) => [root, info.index])),
+        moves: [],
+        timer: 0,
+        started: Date.now(),
+        expected: new Set(),
+        external: new Set(),
+      };
+    }
+    const batch = this.renameBatch;
+    if (file instanceof TFolder) {
+      Vault.recurseChildren(file, (child) => {
+        if (child instanceof TFile) batch.moves.push([oldPath + child.path.slice(file.path.length), child.path]);
+      });
+    } else {
+      batch.moves.push([oldPath, file.path]);
+      this.forget(oldPath);
+      if (file instanceof TFile) void this.analyzeFile(file);
+    }
+    this.predictLinkUpdates(batch);
+    this.debug("rename", { from: oldPath, to: file.path, expected: [...batch.expected] });
+    this.deferRenames();
+  }
+
+  /**
+   * Notes Obsidian's link updater will rewrite for this burst of moves: each
+   * moved note with relative links, and each note linking to a moved note.
+   * The plugin must not edit these until Obsidian has (its edits use
+   * offsets recorded at move time).
+   */
+  private predictLinkUpdates(batch: RenameBatch): void {
+    const moved = new Map(batch.moves);
+    const newPath = (p: string) => moved.get(p) ?? p;
+    for (const [root, index] of batch.snapshot) {
+      if (!index) continue;
+      for (const c of index.concepts.values()) {
+        const vaultPath = this.toVaultPath(root, c.path);
+        for (const m of c.body.matchAll(MD_LINK)) {
+          const raw = m[1]!.trim();
+          const dest = obsidianLinkPath(raw, vaultPath);
+          if (!dest) continue;
+          const linksToMoved = moved.has(dest);
+          const ownRelativeLink = moved.has(vaultPath) && !raw.startsWith("/");
+          if (linksToMoved || ownRelativeLink) batch.expected.add(newPath(vaultPath));
+        }
+      }
+    }
+  }
+
+  /**
+   * Obsidian's own link updater rewrites links after a move using character
+   * offsets it recorded beforehand. Writing to the same file first shifts
+   * those offsets and Obsidian then splices into the wrong place (seen in
+   * testing: `[Concep[Concept A](a.md)`). So rename edits wait until
+   * the vault has been quiet — no modify or re-index events — for
+   * RENAME_QUIET_MS, capped at RENAME_MAX_WAIT_MS.
+   */
+  async noteActivity(file?: TAbstractFile): Promise<void> {
+    const batch = this.renameBatch;
+    if (!batch) return;
+    if (file instanceof TFile) {
+      const text = await this.app.vault.cachedRead(file);
+      const own = this.ownWrites.get(file.path) === text;
+      if (!own) batch.external.add(file.path);
+      if (batch.expected.has(file.path) || own) this.debug("modify", { path: file.path, own, mirror: this.mirrorLines(text) });
+    }
+    this.deferRenames();
+  }
+
+  /**
+   * Whether Obsidian reports updating links itself. Obsidian 1.13.7 updated
+   * links without asking even with an empty app.json, so
+   * "not true" only means the longer cap applies, not that a dialog appears.
+   */
+  private obsidianAutoUpdatesLinks(): boolean {
+    const vault = this.app.vault as unknown as { getConfig?: (key: string) => unknown };
+    return vault.getConfig?.("alwaysUpdateLinks") === true;
+  }
+
+  private deferRenames(): void {
+    const batch = this.renameBatch;
+    if (!batch) return;
+    window.clearTimeout(batch.timer);
+    const cap = this.obsidianAutoUpdatesLinks() ? RENAME_MAX_WAIT_AUTO_MS : RENAME_MAX_WAIT_PROMPT_MS;
+    const waited = Date.now() - batch.started;
+    const pending = [...batch.expected].filter((p) => !batch.external.has(p));
+    this.debug("defer", { waited, pending, external: [...batch.external] });
+    if (waited >= cap) {
+      batch.timer = window.setTimeout(() => void this.processRenames(), 0);
+    } else if (pending.length) {
+      // Still waiting for Obsidian's own rewrite of these; check again shortly.
+      batch.timer = window.setTimeout(() => this.deferRenames(), Math.min(1000, cap - waited));
+    } else {
+      batch.timer = window.setTimeout(() => void this.processRenames(), Math.min(RENAME_QUIET_MS, cap - waited));
+    }
+  }
+
+  private async processRenames(): Promise<void> {
+    const batch = this.renameBatch;
+    this.renameBatch = undefined;
+    if (!batch) return;
+    let updated = 0;
+    for (const [root, index] of batch.snapshot) {
+      if (!index) continue;
+      const inRoot = (p: string) => (root === "" ? !p.startsWith("/") : p.startsWith(`${root}/`));
+      const moved = new Map<string, string>();
+      for (const [from, to] of batch.moves) {
+        if (inRoot(from) && this.rootContaining(to) === root) moved.set(this.toBundlePath(root, from), this.toBundlePath(root, to));
+      }
+      if (moved.size === 0) continue;
+      for (const concept of index.concepts.values()) {
+        const self = { from: concept.path, to: moved.get(concept.path) ?? concept.path };
+        const affected = frontmatterRelationships(concept.frontmatter).some((r) => {
+          const res = resolveTarget(r.target, self.from);
+          if (res.kind !== "path") return false;
+          return moved.has(res.bundlePath!) || (self.from !== self.to && !r.target.startsWith("/"));
+        });
+        if (!affected) continue;
+        const file = this.app.vault.getAbstractFileByPath(this.toVaultPath(root, self.to));
+        if (!(file instanceof TFile)) continue;
+        let changed = false;
+        const ok = await this.write(file, (text) => {
+          const out = retarget(text, self, moved);
+          changed = out !== text;
+          return out;
+        });
+        if (ok && changed) updated++;
+        this.debug("retarget", { path: file.path, changed, mirror: this.mirrorLines(this.ownWrites.get(file.path) ?? "") });
+        await this.analyzeFile(file, { quiet: true });
+      }
+    }
+    if (updated) new Notice(`MIF: updated relationship targets in ${updated} note${updated > 1 ? "s" : ""}.`);
+    this.rebuildIndexes();
+    const touched = [...new Set([...batch.expected, ...batch.moves.map(([, to]) => to)])];
+    window.setTimeout(() => void this.verifyAfterRename(touched), RENAME_VERIFY_MS);
+  }
+
+  /**
+   * Safety net after a rename: anything that still edited these notes with
+   * stale offsets leaves a damaged mirror line. The frontmatter is
+   * authoritative, so regenerating the mirror repairs it.
+   */
+  private async verifyAfterRename(paths: string[]): Promise<void> {
+    let repaired = 0;
+    for (const path of paths) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile) || this.rootFor(path) === null) continue;
+      const text = await this.app.vault.cachedRead(file);
+      const concept = toBundleConcept(path, text);
+      if (!concept || malformedMirrorLines(concept.body).length === 0) continue;
+      this.debug("repair", { path, mirror: this.mirrorLines(text) });
+      const titleFor = this.titleFor(path);
+      if (await this.write(file, (t) => syncMirror(t, titleFor))) repaired++;
+      await this.analyzeFile(file);
+    }
+    if (repaired) new Notice(`MIF: repaired damaged relationship lines in ${repaired} note${repaired > 1 ? "s" : ""} after the move.`);
+  }
+
   // --- Sync mode --------------------------------------------------------------
 
   markDirty(path: string): void {
     if (this.settings().mode === "sync" && this.rootFor(path) !== null) this.dirty.add(path);
   }
 
-  /** After a user edit is saved, stamp `modified` (debounced). */
+  /** After a user edit is saved, stamp `modified` and resync the mirror (debounced). */
   scheduleStamp(file: TFile): void {
     if (this.settings().mode !== "sync" || !this.dirty.has(file.path)) return;
     window.clearTimeout(this.stampTimers.get(file.path));
@@ -235,17 +653,23 @@ export class MifManager extends Events {
   }
 
   private async stamp(file: TFile): Promise<void> {
-    const analysis = this.analyses.get(file.path);
-    if (!analysis?.isConcept || !analysis.frontmatter?.id) return;
+    const state = this.files.get(file.path);
+    if (!state?.analysis.isConcept || !state.analysis.frontmatter?.id) return;
+    const titleFor = this.titleFor(file.path);
     await this.write(file, (text) => {
       // Skip when the only change since the last stamp is `modified` itself.
       if (this.ownWrites.get(file.path)?.replace(/^modified:.*$/m, "") === text.replace(/^modified:.*$/m, "")) return text;
-      return updateFrontmatter(text, { modified: isoSeconds(new Date()) });
+      let out = updateFrontmatter(text, { modified: isoSeconds(new Date()) });
+      const concept = toBundleConcept(file.path, out);
+      if (concept && mirrorDrift(concept.frontmatter, concept.body)) out = syncMirror(out, titleFor);
+      return out;
     });
   }
 
   dispose(): void {
     for (const t of this.stampTimers.values()) window.clearTimeout(t);
     this.stampTimers.clear();
+    window.clearTimeout(this.indexTimer);
+    if (this.renameBatch) window.clearTimeout(this.renameBatch.timer);
   }
 }

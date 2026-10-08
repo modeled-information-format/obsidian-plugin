@@ -1,0 +1,22 @@
+{
+  "frontmatter": [
+    [
+      "farm:breeds-with",
+      "urn:mif:entity:animal:ewe-007"
+    ],
+    [
+      "relates-to",
+      "/timestamps.md"
+    ]
+  ],
+  "body": [
+    [
+      "farm:breeds-with",
+      "urn:mif:entity:animal:ewe-007"
+    ],
+    [
+      "relates-to",
+      "/timestamps.md"
+    ]
+  ]
+}

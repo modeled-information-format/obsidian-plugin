@@ -1,0 +1,14 @@
+{
+  "frontmatter": [
+    [
+      "farm:contradicts",
+      "/other.md"
+    ]
+  ],
+  "body": [
+    [
+      "farm:contradicts",
+      "/other.md"
+    ]
+  ]
+}

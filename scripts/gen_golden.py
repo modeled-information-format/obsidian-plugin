@@ -31,11 +31,22 @@ MIF_REPO = Path(os.environ.get("MIF_REPO", ROOT.parent / "MIF")).resolve()
 sys.path.insert(0, str(MIF_REPO / "scripts"))
 
 import mif_convert as mc  # noqa: E402
+import migrate_0_1_to_1_0 as mig  # noqa: E402
+import okf_validate as okf  # noqa: E402
 
+FIXTURES = ROOT / "tests" / "fixtures"
 BUNDLES = {
     "test-vault": ROOT / "test-vault",
-    "edge": ROOT / "tests" / "fixtures" / "edge",
+    "edge": FIXTURES / "edge",
+    "rel": FIXTURES / "rel",
+    "legacy": FIXTURES / "mif" / "legacy-0.1-bundle",
+    **{f"reltypes-{p.name}": p for p in sorted((FIXTURES / "mif" / "relationship_types").iterdir()) if p.is_dir()},
 }
+KEBAB_CASES = [
+    "DerivedFrom", "derived-from", "RelatesTo", "relates_to", "Relates To", "farm:BreedsWith",
+    "farm:breeds-with", "MentionedIn", "SupersededBy", "ImplementedBy", "XMLParser", "a",
+]
+UUID5_SLUGS = ["decision-sample", "prior-sample-decision", "dark-mode-preference", "x", ""]
 OUT = ROOT / "tests" / "golden"
 
 
@@ -93,9 +104,29 @@ def scalar_goldens() -> list[dict]:
     return out
 
 
+def hermetic(bundle: Path) -> Path:
+    """A temp copy of the bundle without gitignored files, so local
+    artifacts (test-vault/_fixtures, _spike, .obsidian) never leak into goldens."""
+    import tempfile
+
+    tracked = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", str(bundle.relative_to(ROOT))],
+        capture_output=True, text=True, check=True,
+    ).stdout.split("\0")
+    tmp = Path(tempfile.mkdtemp(prefix="mif-golden-")) / bundle.name
+    for rel in filter(None, tracked):
+        src = ROOT / rel
+        dest = tmp / src.relative_to(bundle)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+    return tmp
+
+
 def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
+    for name in list(BUNDLES):
+        BUNDLES[name] = hermetic(BUNDLES[name])
     count = 0
     for name, bundle in BUNDLES.items():
         namespaces = mc.bundle_namespaces(bundle)
@@ -112,6 +143,12 @@ def main() -> int:
                 count += 1
                 continue
             dump(out / "parse.json", {"frontmatter": fm, "body": body})
+            dump(out / "rels.json", {
+                "frontmatter": okf._frontmatter_relationships(fm),
+                "body": okf._relationships_section(body),
+            })
+            if md_path.name.endswith(".memory.md"):
+                (out / "migrated.md").write_text(mig.migrate_concept(text))
             # Round-trip through JSON text, exactly like roundtrip_file().
             jsonld = json.loads(json.dumps(mc.md_to_jsonld(fm, body, namespaces or None)))
             dump(out / "jsonld.json", jsonld)
@@ -122,6 +159,15 @@ def main() -> int:
             count += 1
 
     dump(OUT / "scalars.json", scalar_goldens())
+    dump(OUT / "kebab.json", {k: okf._kebab(k) for k in KEBAB_CASES})
+    dump(OUT / "uuid5.json", {
+        "namespace": str(mig.MIF_NAMESPACE),
+        "slugs": {s: str(__import__("uuid").uuid5(mig.MIF_NAMESPACE, s)) for s in UUID5_SLUGS},
+    })
+    for name, bundle in BUNDLES.items():
+        errors, warnings, _ = okf.validate_bundle(bundle)
+        strip = lambda m: m.replace(str(bundle.resolve()) + "/", "").replace(str(bundle) + "/", "")  # noqa: E731
+        dump(OUT / name / "okf.json", {"errors": [strip(e) for e in errors], "warnings": [strip(w) for w in warnings]})
 
     commit = subprocess.run(
         ["git", "-C", str(MIF_REPO), "rev-parse", "HEAD"],

@@ -1,0 +1,14 @@
+{
+  "DerivedFrom": "derived-from",
+  "derived-from": "derived-from",
+  "RelatesTo": "relates-to",
+  "relates_to": "relates-to",
+  "Relates To": "relates--to",
+  "farm:BreedsWith": "farm:breeds-with",
+  "farm:breeds-with": "farm:breeds-with",
+  "MentionedIn": "mentioned-in",
+  "SupersededBy": "superseded-by",
+  "ImplementedBy": "implemented-by",
+  "XMLParser": "x-m-l-parser",
+  "a": "a"
+}
