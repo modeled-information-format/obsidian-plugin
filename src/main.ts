@@ -301,6 +301,25 @@ export default class MifPlugin extends Plugin {
       callback: () => new MigrationModal(this.app, this.manager, this.manager.legacyFiles()).open(),
     });
     this.addCommand({ id: "open-report", name: "Open bundle report", callback: () => void this.revealView(REPORT_VIEW) });
+    this.addCommand({
+      id: "rescan",
+      name: "Rescan all bundles",
+      callback: async () => {
+        await this.manager.loadBundles();
+        await this.manager.scanAll();
+        new Notice(`MIF: rescanned ${this.manager.all().length} notes.`);
+      },
+    });
+    this.addCommand({
+      id: "supersede",
+      name: "Supersede this concept with a new one",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const ok = !!file && !!this.manager.get(file.path)?.isConcept && this.manager.rootFor(file.path) !== null;
+        if (ok && !checking) void this.manager.supersede(file);
+        return ok;
+      },
+    });
 
     // JSON-LD, round trip, graph, and the mif-cli bridge.
     this.addCommand({ id: "open-jsonld", name: "Open JSON-LD panel", callback: () => void this.revealView(JSONLD_VIEW) });

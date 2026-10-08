@@ -23,6 +23,7 @@ fails if this list and the source disagree.
 | Compress this concept to its summary | *Concept with a summary.* Body → summary; original kept in `extensions.original_content` |
 | Restore original content of a compressed concept | *Compressed concept.* Undo compression exactly |
 | Migrate version 0.1 notes to 1.0 | Migrate every MIF 0.1 note in the bundles |
+| Supersede this concept with a new one | *Concept.* Create `<name>-revised.md` that supersedes it, end its validity now, and open the new note |
 
 ## Panels
 
@@ -53,6 +54,7 @@ fails if this list and the source disagree.
 |---|---|
 | Download all ontologies from the spec catalog | Download and verify every ontology from mif-spec.dev |
 | Reload bundle configuration | Re-read `.mif/config.yaml`, ontologies, and entities |
+| Rescan all bundles | Re-read every note (the bundle report's **Rescan**) |
 
 ## mif-cli (desktop, when a path is set)
 

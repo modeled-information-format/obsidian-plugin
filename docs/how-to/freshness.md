@@ -36,7 +36,8 @@ Every state has buttons in the freshness panel and the diagnostics panel:
 **Supersede with a new concept** creates `<name>-revised.md` beside the old
 note — same type and namespace, valid from now, with a `supersedes`
 relationship to the old one — ends the old concept's validity now if it was
-still open, and opens the new note for you to write.
+still open, and opens the new note for you to write. It is also a command,
+**MIF: Supersede this concept with a new one**, for any concept.
 
 ## Tune it
 
