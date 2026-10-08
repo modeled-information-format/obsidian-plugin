@@ -140,3 +140,13 @@ describe("nested edits keep the file's YAML style", () => {
     expect(addedLines(a, out)).toEqual(["  - type: implements", "    target: /d.md", "- implements [Concept D](/d.md)"]);
   });
 });
+
+describe("new keys follow the file's key quoting", async () => {
+  const { matchKeyQuotes } = await import("../src/engine/writer");
+  it("single-quotes keys only when the file does and never double-quotes", () => {
+    expect(matchKeyQuotes(`  - "@type": Citation\n    title: T`, `x:\n  - '@type': A`)).toBe(`  - '@type': Citation\n    title: T`);
+    expect(matchKeyQuotes(`  "@type": Citation`, `x:\n  "@type": A\n  '@id': b`)).toBe(`  "@type": Citation`);
+    expect(matchKeyQuotes(`  "@type": Citation`, `x: 1`)).toBe(`  "@type": Citation`);
+    expect(matchKeyQuotes(`  "it's": 1`, `'@type': A`)).toBe(`  "it's": 1`);
+  });
+});

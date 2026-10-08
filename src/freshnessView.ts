@@ -35,7 +35,8 @@ export function renderTimeline(parent: HTMLElement, f: Freshness): void {
   }
   const fr = box.createDiv();
   fr.createSpan({ cls: `mif-fresh mif-fresh-${f.state}`, text: freshnessLabel(f) });
-  fr.createSpan({ cls: "mif-muted", text: ` — ${f.reason}` });
+  // "no decay — no decay model" says it twice; other reasons add something.
+  if (!(f.state === "timeless" && f.reason === "no decay model")) fr.createSpan({ cls: "mif-muted", text: ` — ${f.reason}` });
   if (f.expiresAt && f.state !== "expired") fr.createSpan({ cls: "mif-muted", text: ` · expires ${day(f.expiresAt)}` });
 }
 

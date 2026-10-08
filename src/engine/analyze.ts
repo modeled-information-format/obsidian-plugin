@@ -9,7 +9,11 @@
 
 import { isMap, isSeq, parse as parseYaml12, parseDocument, type Document } from "yaml";
 
+import { citationDiagnostics, citationMirrorDiagnostics } from "./citations";
+import { compressionDiagnostics } from "./compression";
 import { FrontmatterError, mdToJsonLd, parseMarkdown, projectionConflicts, type Frontmatter, type JsonLd, type Namespaces } from "./convert";
+import { provenanceDiagnostics } from "./provenance";
+import { freshness } from "./temporal";
 import { validateJsonLd } from "./validate";
 import { LOAD_OPTIONS } from "./yaml11";
 
@@ -24,9 +28,16 @@ export interface Fix {
    * lf: CRLF → LF; mirror: regenerate the body mirror; mirror-adopt: add
    * body-only relationships to frontmatter; migrate: MIF 0.1 → 1.0;
    * download-ontology: fetch the referenced ontology; create-entity: write the
-   * missing .mif/entities file for the diagnostic's entities[] entry.
+   * missing .mif/entities file for the diagnostic's entities[] entry;
+   * citations-sync / citations-adopt: update the ## Citations section from
+   * frontmatter, or the reverse for body-only entries; citation-note-to-body:
+   * move a long note into the body; compress / decompress (spec §5.6.3).
    */
-  transform?: "lf" | "mirror" | "mirror-adopt" | "migrate" | "download-ontology" | "create-entity";
+  transform?:
+    | "lf" | "mirror" | "mirror-adopt" | "migrate" | "download-ontology" | "create-entity"
+    | "citations-sync" | "citations-adopt" | "citation-note-to-body" | "compress" | "decompress";
+  /** Path-level edits, applied in order with minimal line changes (form.applyEdit). */
+  edits?: Array<{ path: Array<string | number>; value: unknown }>;
   /** Parameters for a transform (e.g. the ontology id, or the entity to create). */
   data?: Record<string, unknown>;
 }
@@ -288,6 +299,26 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
     diagnostics.push({ severity: "error", code: "projection", message: err.message, path: [], line: 1, fixes: [] });
   }
 
+  // Field-level checks with fixes. They cover the schema's errors
+  // on the same paths, which are dropped below.
+  // Body-section lines are counted in the raw body (parseMarkdown drops its leading blank line).
+  const closeAt = text.indexOf("\n---", 4);
+  const rawBodyStart = text.indexOf("\n", closeAt + 1) + 1;
+  const bodyOffset = countNewlines(text.slice(0, rawBodyStart));
+  const fieldDiagnostics = [
+    ...citationDiagnostics(frontmatter).map((d) => ({ ...d, line: locator.line(d.path) })),
+    ...citationMirrorDiagnostics(frontmatter, rawBodyStart > 0 ? text.slice(rawBodyStart) : body).map((d) => ({ ...d, line: d.line === undefined ? undefined : bodyOffset + d.line })),
+    ...provenanceDiagnostics(frontmatter).map((d) => ({ ...d, line: locator.line(d.path) })),
+    ...compressionDiagnostics(frontmatter, body, { now: now(), strength: freshness(frontmatter, now()).strength }).map((d) => ({ ...d, line: d.path.length ? locator.line(d.path) : 1 })),
+  ];
+  // A path is covered when a field diagnostic reports it or one of its fixes writes it (a rename).
+  const covered = new Set(
+    fieldDiagnostics
+      .filter((d) => d.path[0] === "citations" || d.path[0] === "compressed_at")
+      .flatMap((d) => [d.path, ...d.fixes.flatMap((f) => (f.edits ?? []).map((e) => e.path))])
+      .map((p) => p.join(".")),
+  );
+
   let schemaValid = false;
   if (jsonld) {
     const identityCodes = new Set(diagnostics.map((d) => d.path[0]));
@@ -296,6 +327,8 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
     for (const issue of issues) {
       const mapped = frontmatterPath(issue.path);
       const path = mapped === "body" ? [] : mapped;
+      const effective = issue.property ? [...path, issue.property] : path;
+      if (covered.has(effective.join(".")) || (path[0] === "citations" && covered.has(path.join(".")))) continue;
       // `required` errors for id/type/created are already reported above.
       if (issue.keyword === "required" && path.length === 0 && /'(@id|conceptType|memoryType|created)'/.test(issue.message)) continue;
       if (issue.keyword === "anyOf" && path.length === 0 && !present(frontmatter.type)) continue;
@@ -312,6 +345,8 @@ export function analyze(text: string, options: AnalyzeOptions = {}): Analysis {
       });
     }
   }
+
+  diagnostics.push(...fieldDiagnostics);
 
   for (const message of projectionConflicts(frontmatter)) {
     const key = /`([^`]+)`/.exec(message)?.[1] ?? "";

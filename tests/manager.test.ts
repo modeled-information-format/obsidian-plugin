@@ -206,3 +206,61 @@ describe("access tracking", () => {
     expect(temporal.lastAccessed).toMatch(/Z$/);
   });
 });
+
+describe("Citations and compression through the manager", () => {
+  const CIT = join(__dirname, "fixtures", "citations");
+  const cit = (f: string) => readFileSync(join(CIT, f), "utf8");
+
+  afterEach(() => vi.useRealTimers());
+
+  it("Sync mode keeps an existing ## Citations section in step with a frontmatter edit", async () => {
+    vi.useFakeTimers();
+    const v = memoryApp({ "cited.md": cit("cited.md") });
+    const manager = new MifManager(v.app as never, () => ({ ...DEFAULT_SETTINGS, mode: "sync" as const }));
+    await manager.loadBundles();
+    await manager.scanAll();
+    const file = v.files.get("cited.md")!;
+    // The user changes the first citation's role in the editor and saves.
+    v.texts.set("cited.md", v.texts.get("cited.md")!.replace("    citationRole: supports\n", "    citationRole: extends\n"));
+    manager.markDirty("cited.md");
+    await manager.analyzeFile(file as never);
+    manager.scheduleStamp(file as never);
+    await vi.advanceTimersByTimeAsync(2500);
+    const out = v.texts.get("cited.md")!;
+    expect(out).toContain("  - **Role**: extends");
+    expect(out).toContain("- [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)");
+    expect(out).toContain("- [CommonMark](https://spec.commonmark.org/)"); // body-only entry kept
+    expect(out).toMatch(/^modified: /m);
+  });
+
+  it("offers to create the entity file for a citation author", async () => {
+    const { memoryAdapter } = await import("./support/obsidian-stub");
+    const v = memoryApp({ "cited.md": cit("cited.md") });
+    const dotFiles = new Map<string, string>();
+    (v.app.vault as { adapter: unknown }).adapter = memoryAdapter(dotFiles);
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const d = manager.get("cited.md")!.diagnostics.find((x) => x.code === "entity-unresolved")!;
+    expect(d.path).toEqual(["citations", 0, "author"]);
+    await manager.applyFix(v.files.get("cited.md") as never, d.fixes[0]!);
+    expect(dotFiles.get(".mif/entities/person/jane-smith.yaml")).toContain("name: Jane Smith");
+    expect(manager.get("cited.md")!.diagnostics.map((x) => x.code)).not.toContain("entity-unresolved");
+  });
+
+  it("compresses and restores, with a notice each way", async () => {
+    const { notices } = await import("./support/obsidian-stub");
+    const v = memoryApp({ "long.md": cit("long.md"), "cited.md": cit("cited.md") });
+    const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
+    await manager.loadBundles();
+    await manager.scanAll();
+    const file = v.files.get("long.md") as never;
+    const d = manager.get("long.md")!.diagnostics.find((x) => x.code === "compression-candidate")!;
+    await manager.applyFix(file, d.fixes[0]!);
+    expect(manager.get("long.md")!.frontmatter!.compressedAt).toBeDefined();
+    expect(notices.at(-1)).toMatch(/^MIF: compressed\./);
+    await manager.applyFix(file, { label: "Restore", transform: "decompress" });
+    expect(v.texts.get("long.md")).toBe(cit("long.md"));
+    expect(notices.at(-1)).toBe("MIF: original content restored.");
+  });
+});

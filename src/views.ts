@@ -2,7 +2,7 @@
 
 import { ItemView, MarkdownView, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 
-import type { Diagnostic, Level, Severity } from "./engine";
+import { TRUST_LEVELS, trustOf, type Diagnostic, type Level, type Severity } from "./engine";
 import type { FileAnalysis, MifManager } from "./manager";
 
 export const DIAGNOSTICS_VIEW = "mif-diagnostics";
@@ -124,6 +124,8 @@ export class ReportView extends ItemView {
   private query = "";
   private level: "all" | Level | "none" = "all";
   private issuesOnly = false;
+  /** Provenance trust filter (§12.2): "all", a trust level, "at-least:<level>", or "none". */
+  private trust = "all";
 
   constructor(leaf: WorkspaceLeaf, private readonly host: ViewHost) {
     super(leaf);
@@ -172,6 +174,17 @@ export class ReportView extends ItemView {
       this.level = select.value === "all" || select.value === "none" ? select.value : (Number(select.value) as Level);
       this.renderTable();
     };
+    const trust = controls.createEl("select");
+    trust.createEl("option", { value: "all", text: "Any trust" });
+    for (const level of Object.keys(TRUST_LEVELS)) {
+      if (level !== "uncertain") trust.createEl("option", { value: `at-least:${level}`, text: `${level} or better` });
+    }
+    for (const level of Object.keys(TRUST_LEVELS)) trust.createEl("option", { value: level, text: `Only ${level}` });
+    trust.createEl("option", { value: "none", text: "No trust level" });
+    trust.onchange = () => {
+      this.trust = trust.value;
+      this.renderTable();
+    };
     const issues = controls.createEl("label", { cls: "mif-toggle" });
     const box = issues.createEl("input", { type: "checkbox" });
     issues.appendText(" Issues only");
@@ -193,6 +206,16 @@ export class ReportView extends ItemView {
     if (this.level === "none" && a.isConcept) return false;
     if (typeof this.level === "number" && (!a.isConcept || a.level !== this.level)) return false;
     if (this.issuesOnly && a.diagnostics.every((d) => d.severity === "info")) return false;
+    if (this.trust !== "all") {
+      const t = trustOf(a.frontmatter);
+      const order = Object.keys(TRUST_LEVELS);
+      if (this.trust === "none") return a.isConcept && t === undefined;
+      if (this.trust.startsWith("at-least:")) {
+        const rank = t === undefined ? -1 : order.indexOf(t);
+        return rank !== -1 && rank <= order.indexOf(this.trust.slice("at-least:".length));
+      }
+      return t === this.trust;
+    }
     return true;
   }
 
@@ -227,7 +250,7 @@ export class ReportView extends ItemView {
     }
     const table = this.tableEl.createEl("table");
     const head = table.createEl("thead").createEl("tr");
-    for (const h of ["Level", "Note", "Type", "Errors", "Warnings"]) head.createEl("th", { text: h });
+    for (const h of ["Level", "Note", "Type", "Trust", "Errors", "Warnings"]) head.createEl("th", { text: h });
     const body = table.createEl("tbody");
     for (const a of rows) {
       const tr = body.createEl("tr");
@@ -239,6 +262,7 @@ export class ReportView extends ItemView {
         if (file instanceof TFile) void openAtLine(this, file);
       };
       tr.createEl("td", { text: typeof a.frontmatter?.type === "string" ? a.frontmatter.type : "" });
+      tr.createEl("td", { cls: "mif-muted", text: trustOf(a.frontmatter) ?? "" });
       const c = counts(a.diagnostics);
       tr.createEl("td", { cls: c.error ? "mif-error-text" : "", text: String(c.error) });
       tr.createEl("td", { cls: c.warning ? "mif-warning-text" : "", text: String(c.warning) });

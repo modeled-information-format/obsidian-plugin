@@ -76,7 +76,7 @@
 .mif-controls input[type="search"] { flex: 1; min-width: 8em; }
 .mif-report table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-small); }
 .mif-report th, .mif-report td { padding: var(--size-4-1) var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); text-align: left; }
-.mif-report td:nth-child(4), .mif-report td:nth-child(5) { text-align: right; }
+.mif-report td:nth-child(5), .mif-report td:nth-child(6) { text-align: right; }
 .mif-report a { color: var(--mif-machine); word-break: break-all; }
 
 .mif-rel-group { margin: 0 0 var(--size-4-2); }
@@ -126,3 +126,18 @@
 .nav-file-title.mif-explorer-ageing::after { background: var(--mif-human); }
 .nav-file-title.mif-explorer-stale::after, .nav-file-title.mif-explorer-expired::after { background: var(--mif-invalid); }
 .nav-file-title.mif-explorer-not-yet-valid::after { background: var(--text-faint); }
+
+/* Compressed concepts (summary first), section actions. */
+.mif-compressed {
+  margin: var(--size-4-2) 0;
+  padding: var(--size-4-2) var(--size-4-3);
+  border-left: 3px solid var(--mif-machine);
+  background: var(--mif-machine-soft);
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-small);
+}
+.mif-compressed-badge { font-weight: 600; color: var(--mif-machine); }
+.mif-compressed-summary { margin-top: var(--size-4-1); }
+.mif-compressed-original summary { cursor: pointer; color: var(--mif-human); margin-top: var(--size-4-1); }
+.mif-section-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-4-1); margin: var(--size-4-1) 0 var(--size-4-2); font-size: var(--font-ui-smaller); }
+.mif-inline-action { font-size: var(--font-ui-smaller); margin-bottom: var(--size-4-1); }

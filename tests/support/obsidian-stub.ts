@@ -138,7 +138,17 @@ export function memoryAdapter(files: Map<string, string>) {
 
 export function setIcon() {}
 
+/** Records what was rendered; draws the markdown as plain text. */
+export const rendered: string[] = [];
+export const MarkdownRenderer = {
+  async render(_app: unknown, markdown: string, el: HTMLElement) {
+    rendered.push(markdown);
+    el.createEl("p", { text: markdown });
+  },
+};
+
 export class Component {
+  addChild() {}
   register() {}
   registerEvent() {}
   registerDomEvent(el: { addEventListener: (n: string, f: () => void) => void }, name: string, fn: () => void) {

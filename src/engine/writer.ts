@@ -231,6 +231,15 @@ const indentBlock = (block: string, n: number) => block.split("\n").map((l) => (
  *   path ends in an index equal to the sequence length → append
  *   otherwise → add a key that does not exist yet
  */
+/**
+ * New keys follow the file's quoting: when the frontmatter single-quotes
+ * keys (`'@type':`) and never double-quotes them, so does the inserted text.
+ */
+export function matchKeyQuotes(rendered: string, yaml: string): string {
+  if (!/^\s*(?:- )?'[^'\n]*':/m.test(yaml) || /^\s*(?:- )?"[^"\n]*":/m.test(yaml)) return rendered;
+  return rendered.replace(/^(\s*(?:- )?)"([^"\\']*)":/gm, "$1'$2':");
+}
+
 export function editStructure(text: string, path: Array<string | number>, value: unknown): string | null {
   if (path.length < 2) return null;
   const parts = split(text);
@@ -262,7 +271,7 @@ export function editStructure(text: string, path: Array<string | number>, value:
       if (!first || lastEnd === undefined) return null;
       const indent = first[0] - lineStartOf(yaml, first[0]);
       const at = lineEndOf(yaml, lastEnd - 1);
-      const rendered = indentBlock(dumpYaml({ [last]: value }, { indentSeq: false }).trimEnd(), indent);
+      const rendered = matchKeyQuotes(indentBlock(dumpYaml({ [last]: value }, { indentSeq: false }).trimEnd(), indent), yaml);
       const before = yaml.slice(0, at);
       next = before + (before.endsWith("\n") ? "" : "\n") + rendered + (at < yaml.length ? "\n" : "") + yaml.slice(at);
     }
@@ -283,7 +292,7 @@ export function editStructure(text: string, path: Array<string | number>, value:
       const dash = yaml.lastIndexOf("-", firstR[0]);
       const indent = dash - lineStartOf(yaml, dash);
       const at = lineEndOf(yaml, lastR[1] - 1);
-      const rendered = indentBlock(dumpYaml([value]).trimEnd(), indent);
+      const rendered = matchKeyQuotes(indentBlock(dumpYaml([value]).trimEnd(), indent), yaml);
       const before = yaml.slice(0, at);
       next = before + (before.endsWith("\n") ? "" : "\n") + rendered + (at < yaml.length ? "\n" : "") + yaml.slice(at);
     }

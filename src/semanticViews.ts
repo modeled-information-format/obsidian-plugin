@@ -307,12 +307,26 @@ export class NewEntityModal extends Modal {
   }
 }
 
-/** Pick or create an entity, then add an `entities[]` reference to `file`. */
-export function addEntityReference(app: App, manager: MifManager, file: TFile): void {
+/** Pick an entity of `file`'s bundle, or create one, then call `use`. */
+function pickEntity(app: App, manager: MifManager, file: TFile, use: (e: { urn: string; name: string; typeName?: string; role?: string }) => Promise<void>): void {
   const root = manager.rootFor(file.path);
   if (root === null) return;
   const entities = [...(manager.bundleInfo(root)?.entities.values() ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const write = async (e: { urn: string; name: string; typeName?: string; role?: string }) => {
+  new EntityPicker(app, entities, (picked) => {
+    if (picked === "new") {
+      new NewEntityModal(app, async (e) => {
+        await manager.createEntity(root, e.urn, e.name, e.typeName);
+        await use(e);
+      }).open();
+    } else {
+      void use({ urn: picked.urn, name: picked.name, typeName: picked.type });
+    }
+  }).open();
+}
+
+/** Pick or create an entity, then add an `entities[]` reference to `file`. */
+export function addEntityReference(app: App, manager: MifManager, file: TFile): void {
+  pickEntity(app, manager, file, async (e) => {
     const fm = manager.get(file.path)?.frontmatter ?? {};
     const list = Array.isArray(fm.entities) ? [...(fm.entities as unknown[])] : [];
     if (list.some((r) => (r as { entity?: { "@id"?: string } })?.entity?.["@id"] === e.urn)) {
@@ -321,15 +335,28 @@ export function addEntityReference(app: App, manager: MifManager, file: TFile): 
     }
     list.push(entityReference({ urn: e.urn, name: e.name, entityType: e.typeName, role: e.role }));
     await manager.applyFix(file, { label: "entities", updates: { entities: list } });
-  };
-  new EntityPicker(app, entities, (picked) => {
-    if (picked === "new") {
-      new NewEntityModal(app, async (e) => {
-        await manager.createEntity(root, e.urn, e.name, e.typeName);
-        await write(e);
-      }).open();
-    } else {
-      void write({ urn: picked.urn, name: picked.name, typeName: picked.type });
+  });
+}
+
+/**
+ * Pick or create an entity as an author of citation `index` (§5.4.6). Entity
+ * authors are added to any already there; a plain-text author is replaced,
+ * since the schema does not allow text and references together.
+ */
+export function addCitationAuthor(app: App, manager: MifManager, file: TFile, index: number): void {
+  pickEntity(app, manager, file, async (e) => {
+    const fm = manager.get(file.path)?.frontmatter ?? {};
+    const citation = (Array.isArray(fm.citations) ? fm.citations[index] : undefined) as Record<string, unknown> | undefined;
+    if (!citation) return;
+    const ref = { ...entityReference({ urn: e.urn, name: e.name, entityType: e.typeName }) };
+    const current = citation.author;
+    const refs = Array.isArray(current) ? current : current && typeof current === "object" ? [current] : [];
+    if (refs.some((r) => (r as { entity?: { "@id"?: string } })?.entity?.["@id"] === e.urn)) {
+      new Notice("MIF: that entity is already an author.");
+      return;
     }
-  }).open();
+    if (typeof current === "string" && current.trim()) new Notice(`MIF: replaced the plain-text author "${current}".`);
+    const next = refs.length ? [...refs, ref] : ref;
+    await manager.editField(file, ["citations", index, "author"], next);
+  });
 }

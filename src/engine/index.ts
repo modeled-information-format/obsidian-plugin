@@ -66,3 +66,10 @@ export { entityReference, entitySlug, entityUrn, parseEntityFile, referencedEnti
 export { semanticDiagnostics, usefulSuggestions, type SemanticContext, type SemanticReport } from "./semantics";
 export { applyEdit, checkInput, FORM_KEYS, SECTIONS, topLevelModel, type Checked, type FieldKind, type FieldModel } from "./form";
 export { DEFAULT_THRESHOLDS, durationMs, freshness, temporalDiagnostics, urgency, type Freshness, type FreshnessState, type Thresholds } from "./temporal";
+export {
+  adoptCitations, authorText, bodyCitations, citationAuthors, citationDiagnostics, citationMirrorDiagnostics, CITATION_ROLES, CITATION_TYPES,
+  hasCitationSection, moveNoteToBody, syncCitations, type BodyCitation,
+} from "./citations";
+export { compress, compressionDiagnostics, compressionState, contentLines, decompress, type CompressionState } from "./compression";
+export { provenanceDiagnostics, SOURCE_TYPES, TRUST_LEVELS, trustOf, vocabularyLabel } from "./provenance";
+export { applyTextFix, VAULT_TRANSFORMS } from "./fixes";

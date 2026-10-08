@@ -1,10 +1,11 @@
 // MIF for Obsidian — authoring and Level 1 validation.
 
-import { normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownRenderChild, normalizePath, Notice, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
-import { newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
+import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType } from "./engine";
+import { isFirstBodySection, renderCompressed } from "./compressionView";
 import { MifManager } from "./manager";
-import { ConvertModal, NewConceptModal, slugify, type NewConceptInput, type OntologyHints } from "./modals";
+import { ConfirmModal, ConvertModal, NewConceptModal, slugify, type NewConceptInput, type OntologyHints } from "./modals";
 import { DEFAULT_SETTINGS, loadSettings, parseLines, type MifSettings, type SyncMode } from "./settings";
 import { runFidelitySpike } from "./spikes/fidelity";
 import { runLinkSpike } from "./spikes/links";
@@ -286,6 +287,75 @@ export default class MifPlugin extends Plugin {
       callback: () => new MigrationModal(this.app, this.manager, this.manager.legacyFiles()).open(),
     });
     this.addCommand({ id: "open-report", name: "Open bundle report", callback: () => void this.revealView(REPORT_VIEW) });
+
+    // Citations section and compression.
+    const activeConcept = () => {
+      const file = this.app.workspace.getActiveFile();
+      const a = file ? this.manager.get(file.path) : undefined;
+      return file && a?.isConcept && a.frontmatter ? { file, a, fm: a.frontmatter } : undefined;
+    };
+    this.addCommand({
+      id: "sync-citations",
+      name: "Write or update the ## Citations section from frontmatter",
+      checkCallback: (checking) => {
+        const c = activeConcept();
+        const ok = !!c && Array.isArray(c.fm.citations) && c.fm.citations.length > 0;
+        if (ok && !checking) void this.manager.applyFix(c!.file, { label: hasCitationSection(c!.a.body ?? "") ? "Update ## Citations" : "Write ## Citations", transform: "citations-sync" });
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "compress",
+      name: "Compress this concept to its summary",
+      checkCallback: (checking) => {
+        const c = activeConcept();
+        const state = compressionState(c?.fm);
+        const ok = !!c && !state.compressed && !!state.summary;
+        if (ok && !checking) {
+          new ConfirmModal(this.app, "Compress this concept", [
+            "The body is replaced by the summary. The original text is kept in extensions.original_content, and the ## Relationships and ## Citations sections stay.",
+            "“Restore original content” undoes it.",
+          ], "Compress", () => this.manager.applyFix(c!.file, { label: "Compress", transform: "compress" })).open();
+        }
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "decompress",
+      name: "Restore original content of a compressed concept",
+      checkCallback: (checking) => {
+        const c = activeConcept();
+        const ok = !!c && compressionState(c.fm).hasOriginal;
+        if (ok && !checking) void this.manager.applyFix(c!.file, { label: "Restore original content", transform: "decompress" });
+        return ok;
+      },
+    });
+
+    // Reading view: compressed concepts open with their summary / original (§5.6).
+    this.registerMarkdownPostProcessor((el, ctx) => {
+      const a = this.manager.get(ctx.sourcePath);
+      if (!a?.isConcept || !a.frontmatter || !compressionState(a.frontmatter).compressed) return;
+      // Decide once the section is attached: before that, Obsidian usually
+      // has no section info and the element has no siblings to inspect.
+      const child = new MarkdownRenderChild(el);
+      let tries = 0;
+      const place = () => {
+        if (el.querySelector(":scope > .mif-compressed")) return;
+        const first = isFirstBodySection(el, ctx.getSectionInfo(el));
+        if (first === undefined && tries++ < 20) {
+          window.requestAnimationFrame(place);
+          return;
+        }
+        if (!first) return;
+        const banner = createDiv();
+        if (renderCompressed(this.app, banner, a.frontmatter!, a.body ?? "", ctx.sourcePath, child)) {
+          el.prepend(...Array.from(banner.childNodes));
+          this.manager.debug("compressed-banner", { path: ctx.sourcePath, tries });
+        }
+      };
+      child.onload = () => place();
+      ctx.addChild(child);
+    });
 
     const spike = (id: string, name: string, run: (app: App) => Promise<string>) =>
       this.addCommand({

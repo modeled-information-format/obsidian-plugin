@@ -163,3 +163,26 @@ export class ConvertModal extends Modal {
 /** File-name slug for a title: lowercase words joined by hyphens. */
 export const slugify = (title: string) =>
   title.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
+
+/** A yes / no confirmation with an explanation. */
+export class ConfirmModal extends Modal {
+  constructor(app: App, private readonly title: string, private readonly lines: string[], private readonly action: string, private readonly onConfirm: () => Promise<void>) {
+    super(app);
+  }
+  override onOpen() {
+    this.setTitle(this.title);
+    for (const line of this.lines) this.contentEl.createEl("p", { text: line });
+    new Setting(this.contentEl)
+      .addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+      .addButton((b) =>
+        b.setButtonText(this.action).setCta().onClick(async () => {
+          b.setDisabled(true);
+          await this.onConfirm();
+          this.close();
+        }),
+      );
+  }
+  override onClose() {
+    this.contentEl.empty();
+  }
+}

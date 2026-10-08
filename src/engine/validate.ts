@@ -15,13 +15,21 @@ export interface SchemaIssue {
   path: string;
   message: string;
   keyword: string;
+  /** The property named by a `required` or `additionalProperties` error. */
+  property?: string;
 }
 
-const toIssue = (e: ErrorObject): SchemaIssue => ({
-  path: e.instancePath || "/",
-  message: e.message ?? e.keyword,
-  keyword: e.keyword,
-});
+const toIssue = (e: ErrorObject): SchemaIssue => {
+  const params = e.params as { missingProperty?: string; additionalProperty?: string };
+  const property = params.missingProperty ?? params.additionalProperty;
+  const message = e.message ?? e.keyword;
+  return {
+    path: e.instancePath || "/",
+    message: e.keyword === "additionalProperties" && property ? `${message} ('${property}')` : message,
+    keyword: e.keyword,
+    ...(property ? { property } : {}),
+  };
+};
 
 export const ONTOLOGY_SCHEMA_ID = "https://mif-spec.dev/schema/ontology/ontology.schema.json";
 

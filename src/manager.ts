@@ -7,9 +7,12 @@ import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } f
 
 import {
   addRelationship,
-  adoptMirror,
   analyze,
   applyEdit,
+  applyTextFix,
+  citationMirrorDiagnostics,
+  hasCitationSection,
+  syncCitations,
   buildIndex,
   buildRegistry,
   bundleDiagnostics,
@@ -29,7 +32,6 @@ import {
   syncMirror,
   titleForTarget,
   toBundleConcept,
-  toLf,
   updateFrontmatter,
   updateRelationship,
   validateBundleConfig,
@@ -62,6 +64,8 @@ export interface FileAnalysis extends Analysis {
   path: string;
   root: string;
   legacy?: LegacySigns;
+  /** The markdown body, for concepts. */
+  body?: string;
 }
 
 export interface BundleInfo {
@@ -425,6 +429,7 @@ export class MifManager extends Events {
       path,
       root: state.root,
       legacy: state.legacy ?? undefined,
+      body: state.concept?.body,
     };
   }
 
@@ -604,12 +609,9 @@ export class MifManager extends Events {
     }
     const isRestore = (this.rewrites.get(file.path) ?? []).some((d) => d.fixes.includes(fix));
     const titleFor = this.titleFor(file.path);
-    const ok = await this.write(file, (text) =>
-      fix.transform === "lf" ? toLf(text)
-        : fix.transform === "mirror" ? syncMirror(text, titleFor)
-        : fix.transform === "mirror-adopt" ? syncMirror(adoptMirror(text), titleFor)
-        : updateFrontmatter(text, fix.updates ?? {}),
-    );
+    const ok = await this.write(file, (text) => applyTextFix(text, fix, { titleFor }));
+    if (ok && fix.transform === "compress") new Notice("MIF: compressed. The original text is in extensions.original_content; Restore original content undoes it.");
+    if (ok && fix.transform === "decompress") new Notice("MIF: original content restored.");
     if (ok && isRestore) {
       const list = (this.rewrites.get(file.path) ?? []).filter((d) => !d.fixes.includes(fix));
       if (list.length) this.rewrites.set(file.path, list);
@@ -872,6 +874,10 @@ export class MifManager extends Events {
       let out = updateFrontmatter(text, { modified: isoSeconds(new Date()) });
       const concept = toBundleConcept(file.path, out);
       if (concept && mirrorDrift(concept.frontmatter, concept.body)) out = syncMirror(out, titleFor);
+      // An existing ## Citations section follows frontmatter too (never created here).
+      if (concept && hasCitationSection(concept.body) && citationMirrorDiagnostics(concept.frontmatter, concept.body).some((d) => d.code !== "citation-body-only")) {
+        out = syncCitations(out);
+      }
       return out;
     });
   }

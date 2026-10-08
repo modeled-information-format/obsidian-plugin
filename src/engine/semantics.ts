@@ -1,6 +1,7 @@
 // Advisory checks of a concept against its ontology, namespace model, and
 // the bundle's entities.
 
+import { citationAuthors } from "./citations";
 import type { Diagnostic, Fix } from "./analyze";
 import type { Frontmatter } from "./convert";
 import { ENTITY_URN, referencedEntities, type EntityRecord } from "./entities";
@@ -164,6 +165,15 @@ export function semanticDiagnostics(fm: Frontmatter, body: string, path: string,
       out.push(info("entity-urn", `'${r.urn}' is not in the urn:mif:entity:<type>:<slug> form (Appendix C).`, ["entities", r.index]));
     } else if (!ctx.entities.has(r.urn)) {
       out.push(info("entity-unresolved", `No entity file for ${r.urn}.`, ["entities", r.index], [{ label: "Create the entity file", transform: "create-entity", data: { urn: r.urn, name: r.name, entityType: r.entityType } }] ));
+    }
+  }
+
+  // --- citation authors given as entity references (§5.4.6) ---------------------------------
+  for (const a of citationAuthors(fm)) {
+    if (!ENTITY_URN.test(a.urn)) {
+      out.push(info("entity-urn", `Citation author '${a.urn}' is not in the urn:mif:entity:<type>:<slug> form (Appendix C).`, a.path));
+    } else if (!ctx.entities.has(a.urn)) {
+      out.push(info("entity-unresolved", `No entity file for citation author ${a.urn}.`, a.path, [{ label: "Create the entity file", transform: "create-entity", data: { urn: a.urn, name: a.name, entityType: a.entityType } }]));
     }
   }
 

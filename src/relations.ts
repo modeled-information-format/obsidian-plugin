@@ -5,6 +5,7 @@ import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, t
 
 import { incomingLabel, relativeTarget, titleOf, type BundleConcept, type Edge, type RelType } from "./engine";
 import type { MifManager } from "./manager";
+import { renderCompressed } from "./compressionView";
 import { renderTimeline } from "./freshnessView";
 import { openAtLine } from "./views";
 
@@ -65,6 +66,8 @@ export class RelatedView extends ItemView {
     // Bi-temporal timeline and supersede / conflict notices.
     const fresh = this.host.manager.freshnessOf(file.path);
     if (fresh) renderTimeline(el, fresh);
+    // Compressed concepts lead with their summary (§5.6).
+    renderCompressed(this.app, el, concept.frontmatter, this.host.manager.get(file.path)?.body ?? concept.body, file.path, this);
     for (const d of this.host.manager.get(file.path)?.diagnostics ?? []) {
       if (d.code === "superseded" || d.code === "conflict") {
         el.createDiv({ cls: `mif-banner mif-banner-${d.code}`, text: d.message });

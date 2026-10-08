@@ -7,16 +7,21 @@ import { ItemView, Notice, setIcon, type TFile, type WorkspaceLeaf } from "obsid
 import { BUILD_ID } from "./build";
 import {
   checkInput,
+  compressionState,
   dumpYaml,
+  hasCitationSection,
   FORM_KEYS,
   isoSeconds,
   SECTIONS,
   topLevelModel,
   visibleNamespaces,
+  vocabularyLabel,
   type Diagnostic,
   type FieldModel,
 } from "./engine";
 import type { MifManager } from "./manager";
+import { ConfirmModal } from "./modals";
+import { addCitationAuthor } from "./semanticViews";
 
 export const PROPERTIES_VIEW = "mif-properties";
 
@@ -125,6 +130,7 @@ export class PropertiesView extends ItemView {
       const count = section.keys.filter((k) => fm[k] !== undefined).length;
       if (count) summary.createSpan({ cls: "mif-muted", text: ` · ${count}` });
       for (const key of section.keys) this.renderField(details, topLevelModel(key), [key], fm[key], a.diagnostics);
+      this.sectionActions(details, section.title, file, fm, a.body ?? "");
     }
 
     const related = el.createEl("p", { cls: "mif-muted" });
@@ -144,6 +150,34 @@ export class PropertiesView extends ItemView {
     if (this.lastLogged !== file.path) {
       this.lastLogged = file.path;
       this.host.manager.debug("properties-panel", { path: file.path, build: BUILD_ID, sections: SECTIONS.map((sec) => `${sec.title}:${sec.keys.filter((k) => fm[k] !== undefined).length}`) });
+    }
+  }
+
+  /** Section-level actions: the ## Citations section, and compression (§5.6.3). */
+  private sectionActions(parent: HTMLElement, title: string, file: TFile, fm: Record<string, unknown>, body: string) {
+    if (title === "Citations" && Array.isArray(fm.citations) && fm.citations.length) {
+      const row = parent.createDiv({ cls: "mif-section-actions" });
+      const exists = hasCitationSection(body);
+      const b = row.createEl("button", { text: exists ? "Update ## Citations section" : "Write ## Citations section" });
+      b.onclick = () => void this.host.manager.applyFix(file, { label: b.textContent ?? "", transform: "citations-sync" });
+      row.createSpan({ cls: "mif-muted", text: exists ? " Rewrites each entry's link and Type / Role / Relevance / Accessed from frontmatter; annotations stay." : " Optional: a body section for annotations (§5.4.5)." });
+    }
+    if (title === "Compression") {
+      const state = compressionState(fm);
+      const row = parent.createDiv({ cls: "mif-section-actions" });
+      if (state.compressed && state.hasOriginal) {
+        const b = row.createEl("button", { text: "Restore original content" });
+        b.onclick = () => void this.host.manager.applyFix(file, { label: "Restore original content", transform: "decompress" });
+      } else if (!state.compressed) {
+        const b = row.createEl("button", { text: "Compress…" });
+        b.disabled = !state.summary;
+        b.onclick = () =>
+          new ConfirmModal(this.app, "Compress this concept", [
+            "The body is replaced by the summary. The original text is kept in extensions.original_content, and the ## Relationships and ## Citations sections stay.",
+            "Restore original content (here) undoes it.",
+          ], "Compress", () => this.host.manager.applyFix(file, { label: "Compress", transform: "compress" })).open();
+      }
+      row.createSpan({ cls: "mif-muted", text: state.summary ? " The summary is edited under Identity." : " Write a summary (Identity) to compress." });
     }
   }
 
@@ -172,7 +206,7 @@ export class PropertiesView extends ItemView {
       case "enum": {
         const sel = control.createEl("select", { cls: "dropdown" });
         sel.createEl("option", { value: "", text: model.required ? "—" : "(none)" });
-        for (const v of model.enum ?? []) sel.createEl("option", { value: v, text: v });
+        for (const v of model.enum ?? []) sel.createEl("option", { value: v, text: vocabularyLabel(model.key, v) ?? v });
         sel.value = show(value);
         sel.onchange = () => commitInput(sel.value);
         break;
@@ -187,6 +221,11 @@ export class PropertiesView extends ItemView {
       case "strings":
       case "map":
       case "raw": {
+        if (path.length === 3 && path[0] === "citations" && path[2] === "author" && this.file) {
+          const file = this.file;
+          const pick = control.createEl("button", { text: "Add author entity…", cls: "mif-inline-action" });
+          pick.onclick = () => addCitationAuthor(this.app, this.host.manager, file, path[1] as number);
+        }
         const ta = control.createEl("textarea", { cls: "mif-textarea" });
         ta.value = model.kind === "strings" ? (Array.isArray(value) ? value.join("\n") : "") : model.kind === "textarea" ? show(value) : yamlOf(value);
         ta.rows = Math.min(8, Math.max(2, ta.value.split("\n").length));
