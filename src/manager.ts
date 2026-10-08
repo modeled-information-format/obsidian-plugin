@@ -7,7 +7,7 @@ import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } f
 
 import {
   scalarText,
-  revisedPath,
+  conceptPath,
   supersedingConceptText,
   addRelationship,
   exportPath,
@@ -64,6 +64,7 @@ import {
   type OntologyDef,
   type SemanticReport,
 } from "./engine";
+import { TitleModal } from "./modals";
 import type { OntologyStore } from "./ontologyStore";
 import type { MifSettings } from "./settings";
 
@@ -902,19 +903,30 @@ export class MifManager extends Events {
     });
   }
 
+  /** Ask for the new concept's title, then supersede `file` with it. */
+  async supersede(file: TFile): Promise<void> {
+    const fm = this.files.get(file.path)?.analysis.frontmatter;
+    if (!fm) return;
+    const current = typeof fm.title === "string" && fm.title.trim() ? fm.title.trim() : file.basename;
+    new TitleModal(this.app, "Supersede with a new concept", `The new concept supersedes “${current}”: same type and namespace, valid from now. “${current}” stops being valid now.`, current, "Create", async (title) => {
+      await this.createSuperseding(file, title);
+    }).open();
+  }
+
   /**
-   * Create a concept that supersedes `file` (same type and namespace, valid
-   * from now, with a `supersedes` relationship), end the old concept's
-   * validity now if it is still open, and open the new one.
+   * Create a concept titled `title` that supersedes `file` (same type and
+   * namespace, valid from now, with a `supersedes` relationship), in the same
+   * folder; end the old concept's validity now if it is still open; open it.
    */
-  async supersede(file: TFile): Promise<TFile | undefined> {
+  async createSuperseding(file: TFile, title: string): Promise<TFile | undefined> {
     const root = this.rootFor(file.path);
     const fm = this.files.get(file.path)?.analysis.frontmatter;
     if (root === null || !fm) return undefined;
     const now = new Date();
     const oldPath = this.toBundlePath(root, file.path);
-    const nextPath = revisedPath(oldPath, (p) => this.app.vault.getAbstractFileByPath(this.toVaultPath(root, p)) !== null);
-    const text = supersedingConceptText({ path: oldPath, frontmatter: fm }, { path: nextPath, id: crypto.randomUUID(), now });
+    const folder = oldPath.includes("/") ? oldPath.slice(0, oldPath.lastIndexOf("/")) : "";
+    const nextPath = conceptPath(folder, title, (p) => this.app.vault.getAbstractFileByPath(this.toVaultPath(root, p)) !== null);
+    const text = supersedingConceptText({ path: oldPath, frontmatter: fm }, { path: nextPath, id: crypto.randomUUID(), now, title });
     const created = await this.app.vault.create(this.toVaultPath(root, nextPath), text);
     const temporal = fm.temporal && typeof fm.temporal === "object" ? (fm.temporal as Record<string, unknown>) : {};
     const until = typeof temporal.validUntil === "string" ? Date.parse(temporal.validUntil) : NaN;

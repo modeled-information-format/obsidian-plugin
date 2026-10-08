@@ -23,7 +23,7 @@ fails if this list and the source disagree.
 | Compress this concept to its summary | *Concept with a summary.* Body → summary; original kept in `extensions.original_content` |
 | Restore original content of a compressed concept | *Compressed concept.* Undo compression exactly |
 | Migrate version 0.1 notes to 1.0 | Migrate every MIF 0.1 note in the bundles |
-| Supersede this concept with a new one | *Concept.* Create `<name>-revised.md` that supersedes it, end its validity now, and open the new note |
+| Supersede this concept with a new one | *Concept.* Ask for a title, create a concept with it that supersedes this one, end this one's validity now, and open the new note |
 
 ## Panels
 

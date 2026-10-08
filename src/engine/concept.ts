@@ -54,26 +54,31 @@ export function promoteToConcept(text: string, p: Promotion): string {
 }
 
 
-/** A free sibling path for a revision: "x.md" → "x-revised.md", "x-revised-2.md", … */
-export function revisedPath(path: string, exists: (p: string) => boolean): string {
-  const base = path.replace(/\.md$/i, "").replace(/-revised(?:-\d+)?$/, "");
+/** A filename slug for a title: "Dark mode preference" → "dark-mode-preference". */
+export const slugify = (title: string) =>
+  title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
+
+/** A free path for a new concept titled `title` in `folder`: "<slug>.md", then "<slug>-2.md", … */
+export function conceptPath(folder: string, title: string, exists: (p: string) => boolean): string {
+  const base = `${folder ? `${folder}/` : ""}${slugify(title)}`;
   for (let n = 1; ; n++) {
-    const candidate = `${base}-revised${n > 1 ? `-${n}` : ""}.md`;
+    const candidate = `${base}${n > 1 ? `-${n}` : ""}.md`;
     if (!exists(candidate)) return candidate;
   }
 }
 
 /**
- * A new concept that supersedes `old` (spec §8.2 Supersedes): same type and
- * namespace, valid and recorded from `now`, with a `supersedes` relationship
- * (relative target) mirrored in its body. Paths are bundle paths.
+ * A new concept titled `next.title` that supersedes `old` (spec §8.2
+ * Supersedes): same type and namespace, valid and recorded from `now`, with
+ * a `supersedes` relationship (relative target) mirrored in its body.
+ * Paths are bundle paths.
  */
-export function supersedingConceptText(old: { path: string; frontmatter: Frontmatter }, next: { path: string; id: string; now: Date }): string {
+export function supersedingConceptText(old: { path: string; frontmatter: Frontmatter }, next: { path: string; id: string; now: Date; title: string }): string {
   const fm = old.frontmatter;
   const type = (["semantic", "episodic", "procedural"] as const).find((t) => t === fm.type) ?? "semantic";
   const oldTitle = typeof fm.title === "string" && fm.title.trim() ? fm.title.trim() : old.path.split("/").pop()!.replace(/\.md$/, "");
   const stamp = isoSeconds(next.now);
-  let text = newConceptText({ type, title: `${oldTitle} (revised)`, namespace: typeof fm.namespace === "string" ? fm.namespace : undefined, id: next.id, created: next.now });
+  let text = newConceptText({ type, title: next.title, namespace: typeof fm.namespace === "string" ? fm.namespace : undefined, id: next.id, created: next.now });
   text = updateFrontmatter(text, { modified: stamp, temporal: { recordedAt: stamp, validFrom: stamp } });
   return addRelationship(text, { type: "supersedes", target: relativeTarget(next.path, old.path) }, () => oldTitle);
 }

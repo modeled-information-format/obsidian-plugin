@@ -275,12 +275,15 @@ describe("superseding an expired concept", () => {
     await manager.loadBundles();
     await manager.scanAll();
     const d = manager.get("temporal/stale.md")!.diagnostics.find((x) => x.code === "freshness-stale")!;
-    await manager.applyFix(v.files.get("temporal/stale.md") as never, d.fixes.find((f) => f.transform === "supersede")!);
-    const revised = v.texts.get("temporal/stale-revised.md")!;
+    expect(d.fixes.some((f) => f.transform === "supersede")).toBe(true); // opens the title dialog
+    await manager.createSuperseding(v.files.get("temporal/stale.md") as never, "Incident follow-up");
+    expect(v.texts.has("temporal/stale-revised.md")).toBe(false);
+    const revised = v.texts.get("temporal/incident-follow-up.md")!;
+    expect(revised).toContain("title: Incident follow-up");
     expect(revised).toContain("- supersedes [Stale incident note](stale.md)");
-    expect(manager.get("temporal/stale-revised.md")!.level).toBeGreaterThanOrEqual(1);
+    expect(manager.get("temporal/incident-follow-up.md")!.level).toBeGreaterThanOrEqual(1);
     expect(v.texts.get("temporal/stale.md")).toMatch(/validUntil: /);
     expect(manager.get("temporal/stale.md")!.diagnostics.map((x) => x.code)).toContain("superseded");
-    expect(opened).toEqual(["temporal/stale-revised.md"]);
+    expect(opened).toEqual(["temporal/incident-follow-up.md"]);
   });
 });

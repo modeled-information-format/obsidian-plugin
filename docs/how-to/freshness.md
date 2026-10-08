@@ -33,10 +33,11 @@ Every state has buttons in the freshness panel and the diagnostics panel:
 | Invalid temporal data | Repairs where they are clear: `90 days` → `P90D`, swap reversed dates, add a missing `halfLife` or `ttl` |
 | Recorded strength far from the computed one | **Record** the computed value |
 
-**Supersede with a new concept** creates `<name>-revised.md` beside the old
-note — same type and namespace, valid from now, with a `supersedes`
-relationship to the old one — ends the old concept's validity now if it was
-still open, and opens the new note for you to write. It is also a command,
+**Supersede with a new concept** asks for the new concept's title (starting
+from the old one), creates it beside the old note — same type and namespace,
+valid from now, with a `supersedes` relationship to the old one, named after
+the title — ends the old concept's validity now if it was still open, and
+opens the new note for you to write. It is also a command,
 **MIF: Supersede this concept with a new one**, for any concept.
 
 ## Tune it

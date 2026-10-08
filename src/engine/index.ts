@@ -24,7 +24,7 @@ export {
 export { CONFIG_SCHEMA_ID, MIF_SCHEMA_ID, validateAgainst, validateBundleConfig, validateJsonLd, type SchemaIssue } from "./validate";
 export { dumpYaml, loadYaml, pythonIsoTimestamp } from "./yaml11";
 export { analyze, ambiguities, detectRewrites, BASE_TYPES, isoSeconds, L2_FIELDS, levelOf, type Analysis, type AnalyzeOptions, type Diagnostic, type Fix, type Level, type Severity } from "./analyze";
-export { newConceptText, promoteToConcept, revisedPath, supersedingConceptText, type BaseType, type NewConcept, type Promotion } from "./concept";
+export { conceptPath, newConceptText, promoteToConcept, slugify, supersedingConceptText, type BaseType, type NewConcept, type Promotion } from "./concept";
 export { toLf, updateFrontmatter, WriteError } from "./writer";
 export {
   addRelationship,

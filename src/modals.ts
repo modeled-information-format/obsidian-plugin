@@ -161,8 +161,7 @@ export class ConvertModal extends Modal {
 }
 
 /** File-name slug for a title: lowercase words joined by hyphens. */
-export const slugify = (title: string) =>
-  title.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
+export { slugify } from "./engine";
 
 /** A yes / no confirmation with an explanation. */
 export class ConfirmModal extends Modal {
@@ -196,6 +195,41 @@ export class ReportModal extends Modal {
     this.setTitle(this.title);
     for (const line of this.lines) this.contentEl.createEl("p", { text: line });
     new Setting(this.contentEl).addButton((b) => b.setButtonText("Close").setCta().onClick(() => this.close()));
+  }
+  override onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/** Ask for a title (pre-filled), then run `onSubmit` with it. */
+export class TitleModal extends Modal {
+  private value: string;
+  constructor(app: App, private readonly heading: string, private readonly description: string, initial: string, private readonly action: string, private readonly onSubmit: (title: string) => Promise<void>) {
+    super(app);
+    this.value = initial;
+  }
+  override onOpen() {
+    this.setTitle(this.heading);
+    this.contentEl.createEl("p", { text: this.description });
+    const submit = async () => {
+      const title = this.value.trim();
+      if (!title) {
+        new Notice("MIF: enter a title.");
+        return;
+      }
+      this.close();
+      await this.onSubmit(title);
+    };
+    new Setting(this.contentEl).setName("Title").addText((t) => {
+      t.setValue(this.value).onChange((v) => (this.value = v));
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") void submit();
+      });
+      window.setTimeout(() => t.inputEl.select(), 0);
+    });
+    new Setting(this.contentEl)
+      .addButton((b) => b.setButtonText("Cancel").onClick(() => this.close()))
+      .addButton((b) => b.setButtonText(this.action).setCta().onClick(() => void submit()));
   }
   override onClose() {
     this.contentEl.empty();

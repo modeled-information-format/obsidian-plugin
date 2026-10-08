@@ -170,16 +170,17 @@ describe("freshness diagnostics and fixes", async () => {
 });
 
 describe("superseding concept", async () => {
-  const { revisedPath, supersedingConceptText } = await import("../src/engine/concept");
+  const { conceptPath, slugify, supersedingConceptText } = await import("../src/engine/concept");
   const { parseMarkdown } = await import("../src/engine/convert");
   const { mirrorDrift } = await import("../src/engine/relationships");
   it("is a new concept of the same kind that supersedes the old one", () => {
     const now = new Date("2026-10-08T12:00:00Z");
-    const next = revisedPath("temporal/expired-until.md", (p) => p === "temporal/expired-until-revised.md");
-    expect(next).toBe("temporal/expired-until-revised-2.md");
-    const text = supersedingConceptText({ path: "temporal/expired-until.md", frontmatter: { id: "a", type: "semantic", namespace: "_semantic", title: "Expired policy" } }, { path: next, id: "11111111-2222-4333-8444-555555555555", now });
+    expect(slugify("Rate-limit policy 2027 — Ünicode")).toBe("rate-limit-policy-2027-unicode");
+    const next = conceptPath("temporal", "Rate limit policy 2027", (p: string) => p === "temporal/rate-limit-policy-2027.md");
+    expect(next).toBe("temporal/rate-limit-policy-2027-2.md");
+    const text = supersedingConceptText({ path: "temporal/expired-until.md", frontmatter: { id: "a", type: "semantic", namespace: "_semantic", title: "Expired policy" } }, { path: next, id: "11111111-2222-4333-8444-555555555555", now, title: "Rate limit policy 2027" });
     const { frontmatter, body } = parseMarkdown(text);
-    expect(frontmatter).toMatchObject({ type: "semantic", namespace: "_semantic", title: "Expired policy (revised)", relationships: [{ type: "supersedes", target: "expired-until.md" }] });
+    expect(frontmatter).toMatchObject({ type: "semantic", namespace: "_semantic", title: "Rate limit policy 2027", relationships: [{ type: "supersedes", target: "expired-until.md" }] });
     expect((frontmatter.temporal as Record<string, string>).validFrom).toBe("2026-10-08T12:00:00Z");
     expect(body).toContain("- supersedes [Expired policy](expired-until.md)");
     expect(mirrorDrift(frontmatter, body)).toBeNull();
