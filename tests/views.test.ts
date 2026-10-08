@@ -229,3 +229,18 @@ describe("JSON-LD and graph panels", () => {
     expect(JSON.parse(view.contentEl.querySelector("pre.mif-jsonld")!.textContent!)["@id"]).toMatch(/^urn:mif:/);
   });
 });
+
+describe("bundle report", () => {
+  it("Rescan re-reads every note and says so", async () => {
+    const { ReportView } = await import("../src/views");
+    const { notices } = await import("./support/obsidian-stub");
+    const { v, host } = await setup({ "soil.md": soil }, "soil.md");
+    const view = new ReportView({ app: v.app } as never, host as never);
+    await (view as unknown as { open(): Promise<void> }).open();
+    const button = [...(view as unknown as { contentEl: HTMLElement }).contentEl.querySelectorAll("button")].find((b) => b.textContent === "Rescan")!;
+    await (button.onclick as unknown as () => Promise<void>)();
+    expect(notices.at(-1)).toBe("MIF: rescanned 1 note.");
+    expect(button.textContent).toBe("Rescan");
+    expect(button.disabled).toBe(false);
+  });
+});

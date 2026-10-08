@@ -444,6 +444,15 @@ export class MifManager extends Events {
     return [...this.files.keys()].sort().map((p) => this.get(p)!);
   }
 
+  /** Re-read bundle configuration and every note; returns how many notes were read. */
+  async rescan(): Promise<number> {
+    await this.loadBundles();
+    await this.scanAll();
+    void this.ensureOntologies();
+    this.debug("rescan", { notes: this.files.size });
+    return this.files.size;
+  }
+
   async scanAll(): Promise<void> {
     this.files.clear();
     const files = this.app.vault.getMarkdownFiles().filter((f) => this.rootFor(f.path) !== null);

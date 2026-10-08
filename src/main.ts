@@ -305,9 +305,8 @@ export default class MifPlugin extends Plugin {
       id: "rescan",
       name: "Rescan all bundles",
       callback: async () => {
-        await this.manager.loadBundles();
-        await this.manager.scanAll();
-        new Notice(`MIF: rescanned ${this.manager.all().length} notes.`);
+        const n = await this.manager.rescan();
+        new Notice(`MIF: rescanned ${n} note${n === 1 ? "" : "s"}.`);
       },
     });
     this.addCommand({

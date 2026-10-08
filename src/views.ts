@@ -1,6 +1,6 @@
 // Sidebar views: diagnostics for the active note, and the bundle report.
 
-import { ItemView, MarkdownView, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownView, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 
 import { TRUST_LEVELS, trustOf, type Diagnostic, type Level, type Severity } from "./engine";
 import type { FileAnalysis, MifManager } from "./manager";
@@ -194,8 +194,15 @@ export class ReportView extends ItemView {
     };
     const rescan = controls.createEl("button", { text: "Rescan" });
     rescan.onclick = async () => {
-      await this.host.manager.loadBundles();
-      await this.host.manager.scanAll();
+      rescan.disabled = true;
+      rescan.setText("Rescanning…");
+      try {
+        const n = await this.host.manager.rescan();
+        new Notice(`MIF: rescanned ${n} note${n === 1 ? "" : "s"}.`);
+      } finally {
+        rescan.disabled = false;
+        rescan.setText("Rescan");
+      }
     };
     this.tableEl = el.createDiv({ cls: "mif-report" });
     this.renderTable();
