@@ -77,8 +77,9 @@ Security and release verification: [SECURITY.md](SECURITY.md).
 ## Develop
 
 Requires Node 22+; Python 3 with PyYAML to regenerate goldens; Rust and
-`wasm-pack` for the parity oracle. Sibling checkouts are expected at
-`../MIF` and `../mif-rs` (override with `MIF_REPO`).
+`wasm-pack` for the parity oracle. Scripts that read the MIF repository take
+its path from `MIF_REPO` (golden regeneration also needs `ONTOLOGIES_REPO`
+and `MNEMONIC_REPO`).
 
 ```bash
 npm ci && npm run lint:install        # dependencies
@@ -90,14 +91,14 @@ npm run install-vault                 # copy the build into test-vault and stage
 ```
 
 Parity oracle: `(cd spikes/mif-wasm && wasm-pack build --release --target
-nodejs --out-dir pkg-node)`, after which `npm test` also compares the engine
-with mif-rs. Live mif-cli test: `MIF_CLI=/path/to/mif-cli npx vitest run
-tests/live-mif-cli.test.ts`.
+nodejs --out-dir pkg-node)` (fetches the pinned mif-rs crates), after which
+`npm test` also compares the engine with mif-rs. Live mif-cli test:
+`MIF_CLI=/path/to/mif-cli npx vitest run tests/live-mif-cli.test.ts`.
 
 Keeping up with MIF:
 
 ```bash
-npm run mif-align -- origin/main                      # test against a MIF ref
-MIF_REF=origin/main npm run sync-schemas && npm test  # vendor its schemas
-npm run golden                                        # if the reference scripts changed
+MIF_REPO=/path/to/MIF npm run mif-align -- origin/main               # test against a MIF ref
+MIF_REPO=/path/to/MIF MIF_REF=origin/main npm run sync-schemas        # vendor its schemas
+npm run golden                                                        # if the reference scripts changed
 ```

@@ -1,6 +1,6 @@
-# Spike A: mif-rs compiled to WASM for the Obsidian plugin.
-# Depends on the mif-rs working clone by path (read-only); nothing here is
-# meant to merge into mif-rs as-is. See docs/adr/0001-engine-implementation.md.
+# mif-rs compiled to WASM: the plugin's parity oracle (tests/wasm-parity.test.ts).
+# mif-rs crates come from its public repository at a pinned commit; bump the
+# rev deliberately, with the oracle. See docs/adr/0001-engine-implementation.md.
 [package]
 name = "mif-wasm"
 version = "0.0.0"
@@ -11,9 +11,9 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mif-frontmatter = { path = "../../../mif-rs/crates/mif-frontmatter" }
-mif-schema = { path = "../../../mif-rs/crates/mif-schema", optional = true }
-mif-ontology = { path = "../../../mif-rs/crates/mif-ontology", optional = true }
+mif-frontmatter = { git = "https://github.com/modeled-information-format/mif-rs", rev = "4d7296d4744fb8b684847f26d97311bebc8bd075" }
+mif-schema = { git = "https://github.com/modeled-information-format/mif-rs", rev = "4d7296d4744fb8b684847f26d97311bebc8bd075", optional = true }
+mif-ontology = { git = "https://github.com/modeled-information-format/mif-rs", rev = "4d7296d4744fb8b684847f26d97311bebc8bd075", optional = true }
 serde_json = { version = "1", features = ["preserve_order"] }
 wasm-bindgen = "0.2"
 

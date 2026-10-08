@@ -15,7 +15,11 @@ if (!ref) {
   console.error("usage: node scripts/mif-align.mjs <MIF ref>");
   process.exit(2);
 }
-const repo = resolve(process.env.MIF_REPO ?? "../MIF");
+if (!process.env.MIF_REPO) {
+  console.error("set MIF_REPO to the path of a MIF checkout");
+  process.exit(2);
+}
+const repo = resolve(process.env.MIF_REPO);
 const git = (...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", maxBuffer: 64 << 20 });
 const source = JSON.parse(readFileSync("schemas/SOURCE.json", "utf8"));
 const commit = git("rev-parse", "--verify", `${ref}^{commit}`).trim();

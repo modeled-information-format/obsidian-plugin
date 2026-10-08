@@ -5,7 +5,7 @@ The TypeScript engine is tested against these outputs, so the plugin's
 behaviour is pinned to the reference implementation rather than to our
 reading of the spec. Re-run after the MIF repo changes:
 
-    MIF_REPO=../MIF npm run golden
+    MIF_REPO=/path/to/MIF ONTOLOGIES_REPO=/path/to/ontologies MNEMONIC_REPO=/path/to/mnemonic npm run golden
 
 For every bundle in BUNDLES and every concept file in it (the converter's own
 iter_concepts, so reserved filenames are skipped exactly as upstream skips
@@ -27,7 +27,15 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MIF_REPO = Path(os.environ.get("MIF_REPO", ROOT.parent / "MIF")).resolve()
+def checkout(var: str) -> Path:
+    """A sibling checkout named by an environment variable (required)."""
+    value = os.environ.get(var)
+    if not value:
+        sys.exit(f"set {var} to the path of the checkout")
+    return Path(value).resolve()
+
+
+MIF_REPO = checkout("MIF_REPO")
 sys.path.insert(0, str(MIF_REPO / "scripts"))
 
 import mif_convert as mc  # noqa: E402
@@ -145,7 +153,7 @@ def ontology_goldens() -> dict:
       extends closure and subtype_of checks."""
     import tempfile
 
-    ont_repo = Path(os.environ.get("ONTOLOGIES_REPO", ROOT.parent / "ontologies")).resolve()
+    ont_repo = checkout("ONTOLOGIES_REPO")
     ns = _load_script(ont_repo / "scripts" / "validate-namespaces.py", "ont_validate_namespaces")
     vo = _load_script(MIF_REPO / "scripts" / "validate-ontologies.py", "mif_validate_ontologies")
     corpus_dir = FIXTURES / "ontologies" / "corpus"
@@ -180,7 +188,7 @@ def ontology_goldens() -> dict:
 def decay_goldens() -> dict:
     """mnemonic skills/custodian/lib/decay.py: the only existing decay code.
     Its single-step curve (current_strength = 1) and duration parsing."""
-    mn = Path(os.environ.get("MNEMONIC_REPO", ROOT.parent / "mnemonic")).resolve()
+    mn = checkout("MNEMONIC_REPO")
     sys.path.insert(0, str(mn / "skills" / "custodian"))
     from lib import decay as d  # noqa: E402
 

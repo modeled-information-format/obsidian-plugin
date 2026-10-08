@@ -1,14 +1,18 @@
 // Vendor the canonical MIF JSON Schemas into ./schemas so the plugin
 // validates offline (spec §2.4 local-first). Records the source commit in
 // schemas/SOURCE.json; re-run after the MIF repo changes.
-//   MIF_REPO=../MIF npm run sync-schemas                 # the checkout as it is
-//   MIF_REF=origin/main npm run sync-schemas                   # a ref, read with git show
+//   MIF_REPO=/path/to/MIF npm run sync-schemas               # the checkout as it is
+//   MIF_REPO=/path/to/MIF MIF_REF=origin/main npm run sync-schemas  # a ref, read with git show
 // With MIF_REF the MIF checkout is never touched (it may be on another branch).
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const repo = resolve(process.env.MIF_REPO ?? "../MIF");
+if (!process.env.MIF_REPO) {
+  console.error("set MIF_REPO to the path of a MIF checkout");
+  process.exit(2);
+}
+const repo = resolve(process.env.MIF_REPO);
 const ref = process.env.MIF_REF;
 const src = join(repo, "schema");
 const dest = resolve("schemas");

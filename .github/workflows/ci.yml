@@ -88,23 +88,10 @@ jobs:
   parity:
     name: Parity with mif-rs (WASM)
     runs-on: ubuntu-latest
-    env:
-      # mif-rs main @ 4d7296d (2026-10-08); bump deliberately, with the oracle.
-      MIF_RS_REF: 4d7296d4744fb8b684847f26d97311bebc8bd075
     steps:
       - name: Checkout repository
         # v7.0.0
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          path: plugin
-
-      - name: Checkout mif-rs at the pinned ref
-        # v7.0.0
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          repository: modeled-information-format/mif-rs
-          ref: ${{ env.MIF_RS_REF }}
-          path: mif-rs
 
       - name: Set up Node
         # v6.4.0
@@ -112,10 +99,10 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: plugin/package-lock.json
 
+      # mif-rs crates are pinned by rev in spikes/mif-wasm/Cargo.toml.
       - name: Build the WASM oracle
-        working-directory: plugin/spikes/mif-wasm
+        working-directory: spikes/mif-wasm
         run: |
           set -euo pipefail
           rustup target add wasm32-unknown-unknown
@@ -123,7 +110,6 @@ jobs:
           wasm-pack build --release --target nodejs --out-dir pkg-node
 
       - name: Compare
-        working-directory: plugin
         run: |
           npm ci --no-audit --no-fund
           npm run -s validators

@@ -1,6 +1,6 @@
 // The mif-cli bridge against the real binary. Skipped unless
 // MIF_CLI points at mif-rs's mif-cli:
-//   MIF_CLI=../mif-rs/target/release/mif-cli npx vitest run tests/live-mif-cli.test.ts
+//   MIF_CLI=/path/to/mif-cli npx vitest run tests/live-mif-cli.test.ts
 // The first ingest downloads the embedding model from Hugging Face.
 
 import { execFile } from "node:child_process";
