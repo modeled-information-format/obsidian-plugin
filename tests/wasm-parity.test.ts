@@ -3,7 +3,7 @@
 // been built:
 //   (cd spikes/mif-wasm && wasm-pack build --release --target nodejs --out-dir pkg-node)
 // CI builds it from a pinned mif-rs ref. Any difference must be listed in
-// KNOWN_GAPS with the spec finding that explains it; an unlisted difference,
+// KNOWN_GAPS with the spec gap that explains it; an unlisted difference,
 // or a listed gap that no longer occurs, fails.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -19,10 +19,10 @@ const available = existsSync(PKG);
 
 type Wasm = { parseMarkdown(md: string): string; toJsonLd(md: string): string; roundtripDrift(md: string): string | undefined };
 
-/** file → which comparison may differ, and why. */
+/** file → which comparison may differ, and why (a known spec gap). */
 const KNOWN_GAPS: Record<string, { parts: Array<"frontmatter" | "jsonld" | "drift" | "error">; why: string }> = {
-  "tests/fixtures/edge/timestamps.md": { parts: ["frontmatter", "jsonld"], why: "F11: YAML 1.1 timestamps (PyYAML, the plugin) vs YAML 1.2 strings (mif-rs)" },
-  "tests/fixtures/edge/yaml11-scalars.md": { parts: ["frontmatter", "jsonld", "drift"], why: "F11: yes/no/octal/sexagesimal/.inf resolve differently under YAML 1.1 and 1.2" },
+  "tests/fixtures/edge/timestamps.md": { parts: ["frontmatter", "jsonld"], why: "YAML 1.1 timestamps (PyYAML, the plugin) vs YAML 1.2 strings (mif-rs)" },
+  "tests/fixtures/edge/yaml11-scalars.md": { parts: ["frontmatter", "jsonld", "drift"], why: "yes/no/octal/sexagesimal/.inf resolve differently under YAML 1.1 and 1.2" },
 };
 
 const SETS = ["test-vault", "tests/fixtures/edge", "tests/fixtures/rel", "tests/fixtures/citations", "tests/fixtures/temporal", "tests/fixtures/memories"];

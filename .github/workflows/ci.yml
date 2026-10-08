@@ -83,7 +83,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Parity oracle (ADR-0001, D5): mif-rs compiled to WASM from a pinned ref,
   # compared with the plugin's engine over every fixture. Differences must be
-  # listed in tests/wasm-parity.test.ts with the spec finding that explains them.
+  # listed in tests/wasm-parity.test.ts with the spec gap that explains them.
   # ---------------------------------------------------------------------------
   parity:
     name: Parity with mif-rs (WASM)

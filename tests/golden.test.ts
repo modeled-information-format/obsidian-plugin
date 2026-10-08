@@ -106,7 +106,7 @@ describe("golden parity with mif_convert.py", () => {
       it("exports byte-identical JSON-LD to mif_convert emit-jsonld", () => {
         const ours = mdToJsonLd(frontmatter, body, namespaces);
         const theirs = readFileSync(golden("jsonld.json"), "utf8");
-        // Keys the reference drops (F10) and its non-finite floats cannot match byte for byte.
+        // Keys the reference drops and its non-finite floats cannot match byte for byte.
         const extra = Object.keys(ours).some((k) => !(k in readJson(golden("jsonld.json"))));
         if (extra || key in DIVERGENCES) return;
         // The one unavoidable difference: Python prints an integral float as 1.0, JavaScript as 1.

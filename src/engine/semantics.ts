@@ -1,5 +1,6 @@
 // Advisory checks of a concept against its ontology, namespace model, and
-// the bundle's entities.
+// the bundle's entities. Advisory only: these never change the conformance
+// level, because no MIF tool enforces them.
 
 import { citationAuthors } from "./citations";
 import type { Diagnostic, Fix } from "./analyze";

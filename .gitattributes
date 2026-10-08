@@ -1,2 +1,2 @@
-# Line endings are the point of this fixture.
+# Line endings are the point of this fixture: MIF tools reject CRLF.
 tests/fixtures/edge/crlf.md -text

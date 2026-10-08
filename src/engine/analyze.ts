@@ -157,7 +157,7 @@ interface Ambiguity {
 /**
  * Scalars that MIF's reference reading (PyYAML, YAML 1.1) and Obsidian /
  * mif-rs (YAML 1.2) resolve differently — e.g. `yes`, `010`, `1e3`,
- * `2026-01-15 10:30:00`. Obsidian's Properties panel
+ * `2026-01-15 10:30:00`; the spec does not name a YAML version. Obsidian's Properties panel
  * rewrites these on any edit (Spike B), so they are flagged up front.
  */
 export function ambiguities(frontmatter: Frontmatter, yamlText: string): Ambiguity[] {

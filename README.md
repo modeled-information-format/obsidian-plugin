@@ -3,7 +3,7 @@
 # MIF for Obsidian
 
 An Obsidian plugin for authoring, validating, and syncing
-[MIF](https://mif-spec.dev) bundles. Status: in development.
+[MIF](https://mif-spec.dev) bundles. Status: pre-release (unpublished).
 
 ## Conformance
 

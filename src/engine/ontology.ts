@@ -7,8 +7,7 @@
 //   checkNamespaces     (_flatten_namespaces, ancestor_namespaces, check_corpus)
 //   visibleTypes,       MIF scripts/validate-ontologies.py
 //   checkSubtypeOf      (visible_types, check_subtype_of)
-// composeTraits implements §10.8.6, which no reference tool implements yet
-//.
+// composeTraits implements §10.8.6, which no reference tool implements yet.
 
 import { scalarText } from "./convert";
 import { loadYaml } from "./yaml11";

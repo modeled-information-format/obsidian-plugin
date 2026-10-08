@@ -8,7 +8,8 @@
 // PyYAML's exact implicit-resolver regexes. tests/golden pins the behaviour.
 //
 // Note: mif-rs (serde_norway) resolves YAML closer to 1.2 and keeps
-// timestamps verbatim, so it disagrees with this module on those scalars.
+// timestamps verbatim, so it disagrees with this module on those scalars
+// (the spec does not name a YAML version).
 
 import { isScalar, parseDocument, stringify, visit, type ScalarTag, type Tags } from "yaml";
 import { stringifyNumber } from "yaml/util";

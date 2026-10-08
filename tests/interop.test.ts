@@ -63,7 +63,7 @@ describe("JSON-LD export", () => {
 
 describe("round-trip report (Invariant 4)", () => {
   it("is clean for the relationship fixtures and finds a lossy concept", async () => {
-    const lossy = fixture("edge", "unicode-long.md"); // `description` beside `summary` (F12)
+    const lossy = fixture("edge", "unicode-long.md"); // `description` beside `summary` is lost in the projection
     const { manager } = await vault({ ...relFiles(), "lossy.md": lossy });
     const report = await manager.roundtripReport();
     expect(report.map((r) => r.path)).toEqual(["lossy.md"]);

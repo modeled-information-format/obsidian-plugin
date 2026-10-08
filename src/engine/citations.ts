@@ -1,11 +1,11 @@
 // Citations (spec §5.4): validation (§5.4.7) and the optional `## Citations`
 // body section (§5.4.5). Frontmatter `citations[]` is authoritative (§15.4);
 // the body section carries annotations, and every entry in it must have a
-// frontmatter counterpart, matched here by URL.
+// frontmatter counterpart, matched here by URL (the spec names no key).
 //
 // The schema rejects what §5.4.7 says to accept with a fallback (unknown
 // type → "other", unknown role → "background", relevance clamped, odd dates
-// as text; F38). The schema decides the level, as everywhere in the plugin,
+// as text). The schema decides the level, as everywhere in the plugin,
 // so these stay errors, and the spec's fallbacks are offered as fixes.
 
 import type { Diagnostic, Fix } from "./analyze";
@@ -88,7 +88,7 @@ export const nearestType = (v: unknown) => nearest(v, CITATION_TYPES, TYPE_SYNON
 export const nearestRole = (v: unknown) => nearest(v, CITATION_ROLES, ROLE_SYNONYMS);
 
 const ALLOWED_KEYS = new Set(["@type", "citationType", "citationRole", "title", "url", "author", "date", "accessed", "relevance", "note"]);
-/** Older or snake_case spellings, and the names §5.4.7's error table uses (F39). */
+/** Older or snake_case spellings, and the names §5.4.7's error table uses. */
 const RENAMES: Record<string, string> = {
   type: "citationType", role: "citationRole", citation_type: "citationType", citation_role: "citationRole",
   link: "url", href: "url", uri: "url", name: "title", authors: "author", published: "date", accessed_at: "accessed",

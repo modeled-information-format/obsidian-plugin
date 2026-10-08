@@ -1,6 +1,5 @@
 // Temporal model and freshness (spec §9). Computed live, never written back
-// automatically. Choices where the spec is silent or self-contradictory are
-// recorded in the spec gaps
+// automatically. Choices where the spec is silent or self-contradictory:
 //   - exponential uses a true half-life, 0.5^(t/halfLife) (the field's name
 //     and mnemonic's decay.py), not §9.2's e^(-t/halfLife);
 //   - t runs from the latest of decay.lastReinforced, temporal.lastAccessed,

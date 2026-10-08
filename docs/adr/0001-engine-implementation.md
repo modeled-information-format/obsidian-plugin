@@ -29,10 +29,10 @@ Two implementations already exist: the reference converter `mif_convert.py`
 (named by spec Invariant 4) and the Rust library mif-rs (behind the `mif` CLI
 and MCP server). They do not agree:
 
-- They read YAML differently: version 1.1 versus 1.2 rules (F11).
-- They pass different frontmatter keys through to JSON-LD (F10, F14).
+- They read YAML differently: version 1.1 versus 1.2 rules.
+- They pass different frontmatter keys through to JSON-LD.
 - mif-rs validates against an outdated schema and does not enforce `format`
-  rules such as `date-time`, while MIF's own CI does (F15, F16).
+  rules such as `date-time`, while MIF's own CI does.
 
 Obsidian itself reads frontmatter as YAML 1.2, agreeing with mif-rs. The spec
 does not yet say which behaviour is normative.
@@ -42,15 +42,15 @@ does not yet say which behaviour is normative.
 1. Agree with what MIF's conformance tooling accepts and rejects today.
 2. Keep the plugin small enough to load quickly on mobile.
 3. Avoid a second implementation drifting silently from mif-rs.
-4. Be able to adopt the spec's answer to F11 without a rewrite.
+4. Be able to adopt the spec's eventual YAML version without a rewrite.
 
 ## Options considered
 
 | | A. mif-rs as WebAssembly | B. TypeScript engine | C. mif-rs parsing + TypeScript validation |
 |---|---|---|---|
 | Added plugin size | ≈ 2.8 MB | none (whole plugin ≈ 280 KB) | ≈ 350 KB |
-| Matches the reference converter | No (F11) | Yes | No (F11) |
-| Matches MIF CI's schema validation | No (F15, F16) | Yes | Yes |
+| Matches the reference converter | No (YAML 1.2) | Yes | No (YAML 1.2) |
+| Matches MIF CI's schema validation | No | Yes | Yes |
 | Same behaviour as `mif` CLI and MCP | Yes | Where tests pin it | Parsing only |
 | Implementations to maintain | One | Two | One and a half |
 
@@ -64,7 +64,7 @@ millisecond either way.
 - It matches the reference converter's reading of YAML, enforced by golden
   tests generated from `mif_convert.py`.
 - It passes every frontmatter key through to JSON-LD, as mif-rs does,
-  because dropping user properties (F10) is not acceptable in Obsidian.
+  because dropping user properties is not acceptable in Obsidian.
 - It validates with the same validator and format rules as MIF's CI.
 
 mif-rs is kept as a **parity oracle**: CI builds its parsing layer as
@@ -78,7 +78,7 @@ not a recorded spec gap.
   mobile.
 - **Negative:** two implementations of MIF parsing exist. The parity oracle
   makes drift visible, but each spec change has to be made in both.
-- **Tension with Obsidian:** until F11 is settled, the plugin reads some
+- **Tension with Obsidian:** until the YAML version is settled, the plugin reads some
   values (`yes`, `010`, unquoted timestamps) differently from Obsidian's
   Properties panel. The plugin flags these values rather than hiding the
   difference.
@@ -88,6 +88,6 @@ not a recorded spec gap.
 
 ## Follow-ups
 
-- Propose YAML 1.2 upstream to resolve F11.
-- Fix F15 and F16 in mif-rs so the CLI and MCP server validate like MIF's CI.
+- Propose YAML 1.2 upstream.
+- Update mif-rs's embedded schema and format checks so the CLI and MCP server validate like MIF's CI.
 - Generate schema validators at build time instead of at runtime.

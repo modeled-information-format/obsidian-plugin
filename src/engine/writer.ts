@@ -207,7 +207,7 @@ function setPath(root: Frontmatter, path: Array<string | number>, value: unknown
   return clone;
 }
 
-/** Replace CRLF line endings with LF. */
+/** Replace CRLF line endings with LF (MIF tools reject CRLF). */
 export const toLf = (text: string) => text.replace(/\r\n/g, "\n");
 
 // --- line-level structural edits ------------------------------------------------

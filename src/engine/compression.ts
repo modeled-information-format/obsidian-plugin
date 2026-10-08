@@ -3,7 +3,7 @@
 // summary and keeps the original in `extensions.original_content` (§5.6.3),
 // but never removes the `## Relationships` or `## Citations` sections: the
 // relationship mirror is required (Invariant 3), which §5.6.3 does not
-// account for (F43).
+// account for.
 
 import type { Diagnostic, Fix } from "./analyze";
 import { parseMarkdown, type Frontmatter } from "./convert";
