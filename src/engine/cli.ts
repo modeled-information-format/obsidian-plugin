@@ -16,11 +16,21 @@ export function parseScored(stdout: string): ScoredId[] {
   return out;
 }
 
-/** `path: lint=ok validate=ok roundtrip=lossless embedding_dim=384 stored=true (id=…, db=…)` */
+/** What `mif-cli` embedded with: `model=… model_version=… embedding_dim=… normalized=…` in the ingest line. */
+export interface EmbeddingInfo {
+  model: string;
+  modelVersion?: string;
+  dimensions: number;
+  normalized: boolean;
+}
+
+/** `path: lint=ok validate=ok roundtrip=lossless embedding_dim=384 model=… model_version=… normalized=true stored=true (id=…, db=…)` */
 export interface IngestResult {
   checks: Record<string, string>;
   id?: string;
   stored: boolean;
+  /** Present when the CLI reported its model (mif-rs ≥ the ingest-embedding-reference change). */
+  embedding?: EmbeddingInfo;
 }
 
 export function parseIngest(stdout: string): IngestResult | undefined {
@@ -28,7 +38,31 @@ export function parseIngest(stdout: string): IngestResult | undefined {
   if (!line) return undefined;
   const checks: Record<string, string> = {};
   for (const m of line.matchAll(/(\w+)=([^\s,()]+)/g)) checks[m[1]!] = m[2]!;
-  return { checks, id: checks.id, stored: checks.stored === "true" };
+  const dimensions = Number(checks.embedding_dim);
+  const embedding: EmbeddingInfo | undefined =
+    checks.model && Number.isInteger(dimensions) && dimensions > 0
+      ? { model: checks.model, ...(checks.model_version ? { modelVersion: checks.model_version } : {}), dimensions, normalized: checks.normalized === "true" }
+      : undefined;
+  return { checks, id: checks.id, stored: checks.stored === "true", ...(embedding ? { embedding } : {}) };
+}
+
+/**
+ * The `embedding` frontmatter block for a concept `mif-cli` just stored: an
+ * EmbeddingReference per the MIF embeddings section — model, version,
+ * dimensions, normalization, and the vector's address. The vector itself
+ * stays in the bundle's store, keyed by the concept's id, so `vectorUri` is
+ * `urn:mif:vector:<id>`. No `sourceText`: the embedded text is the concept's
+ * content, which the document already holds.
+ */
+export function embeddingReference(info: EmbeddingInfo, id: string): Record<string, unknown> {
+  return {
+    "@type": "EmbeddingReference",
+    model: info.model,
+    ...(info.modelVersion ? { modelVersion: info.modelVersion } : {}),
+    dimensions: info.dimensions,
+    vectorUri: `urn:mif:vector:${idFromUrn(id)}`,
+    normalized: info.normalized,
+  };
 }
 
 /** `count=6 dim=384 db=…` from `corpus-stats`. */

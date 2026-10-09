@@ -948,6 +948,18 @@ export class MifManager extends Events {
     }, { background: true });
   }
 
+  /**
+   * Record a successful ingest in the concept's frontmatter: the
+   * EmbeddingReference `mif-cli` reported (model, version, dimensions,
+   * normalization, vector address). Metadata only; the vector stays in the
+   * bundle's store.
+   */
+  async recordEmbedding(file: TFile, embedding: Record<string, unknown>): Promise<boolean> {
+    const ok = await this.write(file, (text) => updateFrontmatter(text, { embedding }), { background: true });
+    if (ok) await this.analyzeFile(file);
+    return ok;
+  }
+
   /** Ask for the new concept's title, then supersede `file` with it. */
   async supersede(file: TFile): Promise<void> {
     const fm = this.files.get(file.path)?.analysis.frontmatter;

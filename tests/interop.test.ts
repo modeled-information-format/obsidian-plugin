@@ -10,7 +10,7 @@ vi.mock("obsidian", () => import("./support/obsidian-stub"));
 
 import { MifApi } from "../src/api";
 import { MifCli } from "../src/cliBridge";
-import { exportPath, graphOf, layout, parseIngest, parseProblem, parseScored, parseStats, serializeJsonLd, staleExports } from "../src/engine";
+import { embeddingReference, exportPath, graphOf, layout, parseIngest, parseProblem, parseScored, parseStats, serializeJsonLd, staleExports } from "../src/engine";
 import { MifManager } from "../src/manager";
 import { DEFAULT_SETTINGS } from "../src/settings";
 import { memoryApp } from "./support/obsidian-stub";
@@ -119,9 +119,26 @@ const REAL = {
   search: "0.1052  urn:mif:c0000000-0000-4000-8000-000000000001\n0.0499  urn:mif:c0000000-0000-4000-8000-000000000003\n",
   stats: "count=6 dim=384 db=/tmp/v.db\n",
   problem: '{"type":"https://modeled-information-format.github.io/mif-rs/references/errors/invalid-document/v1","title":"Document failed schema validation","status":422,"detail":"MIF document failed schema validation: \\"citationType\\" is a required property"}',
+  // From mif-rs feat/ingest-embedding-reference, 2026-10-09: the model, its hub revision, and normalization.
+  ingestWithModel:
+    "citations/cited.md: lint=ok validate=ok roundtrip=lossless embedding_dim=384 model=sentence-transformers/all-MiniLM-L6-v2 model_version=c9745ed1d9f207416be6d2e6f8de32d1f16199bf normalized=true stored=true (id=urn:mif:c0000000-0000-4000-8000-000000000001, db=/tmp/v.db)\n",
 };
 
 describe("mif-cli output", () => {
+  it("reads the embedding model from an ingest line and builds the EmbeddingReference", () => {
+    const r = parseIngest(REAL.ingestWithModel)!;
+    expect(r.embedding).toEqual({ model: "sentence-transformers/all-MiniLM-L6-v2", modelVersion: "c9745ed1d9f207416be6d2e6f8de32d1f16199bf", dimensions: 384, normalized: true });
+    expect(embeddingReference(r.embedding!, r.id!)).toEqual({
+      "@type": "EmbeddingReference",
+      model: "sentence-transformers/all-MiniLM-L6-v2",
+      modelVersion: "c9745ed1d9f207416be6d2e6f8de32d1f16199bf",
+      dimensions: 384,
+      vectorUri: "urn:mif:vector:c0000000-0000-4000-8000-000000000001",
+      normalized: true,
+    });
+    expect(parseIngest(REAL.ingest)!.embedding).toBeUndefined();
+  });
+
   it("parses ingest, search, stats, and problem documents", () => {
     expect(parseIngest(REAL.ingest)).toEqual({
       checks: { lint: "ok", validate: "ok", roundtrip: "lossless", embedding_dim: "384", stored: "true", id: "urn:mif:c0000000-0000-4000-8000-000000000001", db: "/tmp/v.db" },

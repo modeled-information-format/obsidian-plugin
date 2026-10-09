@@ -47,6 +47,13 @@ Embeddings go to the bundle's `.mif/vectors.db`. The first ingest downloads
 the embedding model `all-MiniLM-L6-v2` from Hugging Face and caches it.
 Re-ingest notes after editing them.
 
+A stored ingest also writes an `embedding` block into the note's frontmatter,
+the MIF EmbeddingReference: `model`, `modelVersion` (the model's hub
+revision), `dimensions`, `normalized`, and `vectorUri: urn:mif:vector:<id>`,
+the vector's address in the store. The vector itself is not written to the
+note. Older `mif-cli` builds that do not report the model leave the block
+unwritten.
+
 ## 3. Search
 
 - **MIF: Semantic search** — type a query and press Enter; results are ranked
