@@ -94,8 +94,14 @@ export default class MifPlugin extends Plugin {
     this.registerEvent(workspace.on("file-open", (file) => {
       this.refreshStatus();
       if (file) void this.manager.trackAccess(file);
+      void this.manager.flushPendingStamps();
     }));
-    this.registerEvent(workspace.on("layout-change", () => this.scheduleExplorer()));
+    // Sync mode stamps a note once you have left it (see MifManager.scheduleStamp).
+    this.registerEvent(workspace.on("active-leaf-change", () => void this.manager.flushPendingStamps()));
+    this.registerEvent(workspace.on("layout-change", () => {
+      this.scheduleExplorer();
+      void this.manager.flushPendingStamps();
+    }));
     // Freshness moves with the clock: refresh badges every ten minutes.
     this.registerInterval(window.setInterval(() => {
       this.refreshStatus();
@@ -590,7 +596,7 @@ class MifSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Mode")
-      .setDesc("Observe validates and offers fixes. Sync also updates `modified`, the ## Relationships mirror, and an existing ## Citations section after you edit a concept.")
+      .setDesc("Observe validates and offers fixes. Sync also updates `modified`, the ## Relationships mirror, and an existing ## Citations section of a concept you edited, once you leave it.")
       .addDropdown((d) =>
         d.addOptions({ observe: "Observe", sync: "Sync" }).setValue(s.mode).onChange(async (value) => {
           s.mode = value as SyncMode;

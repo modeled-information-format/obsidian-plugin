@@ -3,7 +3,7 @@
 // write the plugin makes. All writes go through the engine's
 // format-preserving writer.
 
-import { Events, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } from "obsidian";
+import { Events, MarkdownView, Notice, TFile, TFolder, Vault, type App, type TAbstractFile } from "obsidian";
 
 import {
   scalarText,
@@ -167,6 +167,8 @@ export class MifManager extends Events {
   /** Files the user has typed into since their last save (Sync mode). */
   private readonly dirty = new Set<string>();
   private readonly stampTimers = new Map<string, number>();
+  /** Files whose stamp waits until the user stops editing them (Sync mode). */
+  private readonly pendingStamps = new Set<string>();
   /** Text of each file the plugin last wrote, to ignore its own modify events. */
   private readonly ownWrites = new Map<string, string>();
   private indexTimer = 0;
@@ -500,6 +502,7 @@ export class MifManager extends Events {
     this.files.delete(path);
     this.rewrites.delete(path);
     this.dirty.delete(path);
+    this.pendingStamps.delete(path);
     this.ownWrites.delete(path);
     this.scheduleIndex();
   }
@@ -567,9 +570,11 @@ export class MifManager extends Events {
    * Always via Vault.process — the route Obsidian's own Properties panel uses
    * for open notes; the open editor picks the change up. (Editing through
    * the Editor API dropped some changes in testing.) Every write is
-   * read back: a mismatch is reported, never silent.
+   * read back: a mismatch is reported, never silent. A background write
+   * (Sync mode's stamp) reports refusals and mismatches to the debug log
+   * only, and its caller retries; a write the user started shows a notice.
    */
-  async write(file: TFile, edit: (text: string) => string): Promise<boolean> {
+  async write(file: TFile, edit: (text: string) => string, opts: { background?: boolean } = {}): Promise<boolean> {
     let expected: string | undefined;
     try {
       await this.app.vault.process(file, (text) => {
@@ -580,8 +585,8 @@ export class MifManager extends Events {
       });
     } catch (err) {
       if (err instanceof WriteError || (err instanceof Error && err.name === "FrontmatterError")) {
-        new Notice(`MIF: not saved — ${err.message}`);
-        this.debug("write-refused", { path: file.path, message: err.message });
+        if (!opts.background) new Notice(`MIF: not saved — ${err.message}`);
+        this.debug("write-refused", { path: file.path, message: err.message, background: !!opts.background });
         return false;
       }
       this.debug("write-error", { path: file.path, message: (err as Error).message });
@@ -589,8 +594,8 @@ export class MifManager extends Events {
     }
     const actual = await this.app.vault.read(file);
     if (expected !== undefined && actual !== expected) {
-      this.debug("write-mismatch", { path: file.path, expectedLength: expected.length, actualLength: actual.length });
-      new Notice(`MIF: ${file.basename} changed while saving; check the note.`);
+      this.debug("write-mismatch", { path: file.path, expectedLength: expected.length, actualLength: actual.length, background: !!opts.background });
+      if (!opts.background) new Notice(`MIF: ${file.basename} changed while saving; check the note.`);
       return false;
     }
     this.debug("write", { path: file.path, bytes: actual.length });
@@ -871,7 +876,13 @@ export class MifManager extends Events {
     if (this.settings().mode === "sync" && this.rootFor(path) !== null) this.dirty.add(path);
   }
 
-  /** After a user edit is saved, stamp `modified` and resync the mirror (debounced). */
+  /**
+   * After a user edit is saved, stamp `modified` and resync the mirror. The
+   * stamp never writes into a note while it is being edited: Obsidian saves
+   * while you type, and a plugin write landing between keystrokes races the
+   * editor. It waits until the note is no longer the active editor and no
+   * open editor holds unsaved text for it, then runs (flushPendingStamps).
+   */
   scheduleStamp(file: TFile): void {
     if (this.settings().mode !== "sync" || !this.dirty.has(file.path)) return;
     window.clearTimeout(this.stampTimers.get(file.path));
@@ -880,16 +891,50 @@ export class MifManager extends Events {
       window.setTimeout(() => {
         this.stampTimers.delete(file.path);
         this.dirty.delete(file.path);
-        void this.stamp(file);
+        this.pendingStamps.add(file.path);
+        void this.flushPendingStamps();
       }, 2000),
     );
   }
 
-  private async stamp(file: TFile): Promise<void> {
+  /** Run every waiting stamp whose note is no longer being edited. Called when the active note or layout changes. */
+  async flushPendingStamps(): Promise<void> {
+    for (const path of [...this.pendingStamps]) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile)) {
+        this.pendingStamps.delete(path);
+        continue;
+      }
+      if (this.dirty.has(path) || this.stampTimers.has(path) || (await this.isBeingEdited(file))) continue;
+      this.pendingStamps.delete(path);
+      try {
+        if (!(await this.stamp(file))) this.pendingStamps.add(path);
+      } catch (err) {
+        this.debug("stamp-error", { path, message: (err as Error).message });
+      }
+    }
+  }
+
+  /** True while the note is the active editor, or an open editor holds text not yet saved to disk. */
+  private async isBeingEdited(file: TFile): Promise<boolean> {
+    const workspace = this.app.workspace;
+    if (workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path) return true;
+    const buffers: string[] = [];
+    workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.file?.path === file.path) buffers.push(view.editor.getValue());
+    });
+    if (!buffers.length) return false;
+    const disk = await this.app.vault.read(file);
+    return buffers.some((b) => b !== disk);
+  }
+
+  /** Stamp one note; false when the write did not stick and should be retried. */
+  private async stamp(file: TFile): Promise<boolean> {
     const state = this.files.get(file.path);
-    if (!state?.analysis.isConcept || !state.analysis.frontmatter?.id) return;
+    if (!state?.analysis.isConcept || !state.analysis.frontmatter?.id) return true;
     const titleFor = this.titleFor(file.path);
-    await this.write(file, (text) => {
+    return this.write(file, (text) => {
       // Skip when the only change since the last stamp is `modified` itself.
       if (this.ownWrites.get(file.path)?.replace(/^modified:.*$/m, "") === text.replace(/^modified:.*$/m, "")) return text;
       let out = updateFrontmatter(text, { modified: isoSeconds(new Date()) });
@@ -900,7 +945,7 @@ export class MifManager extends Events {
         out = syncCitations(out);
       }
       return out;
-    });
+    }, { background: true });
   }
 
   /** Ask for the new concept's title, then supersede `file` with it. */

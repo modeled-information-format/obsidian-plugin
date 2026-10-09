@@ -38,8 +38,8 @@ configuration** after editing the file.
 If the body and frontmatter disagree, the diagnostics panel reports
 `mirror-drift` with two fixes: regenerate the body from frontmatter, or add
 body-only lines to frontmatter. **MIF: Regenerate body relationships from
-frontmatter** does the first for the open note. In Sync mode it happens after
-every edit.
+frontmatter** does the first for the open note. In Sync mode it happens when
+you leave a note you edited.
 
 ## Move and rename notes
 

@@ -132,6 +132,93 @@ describe("writes to open notes", () => {
   });
 });
 
+describe("Sync mode stamping", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  async function syncSetup() {
+    const v = memoryApp(relFixtures());
+    const manager = new MifManager(v.app as never, () => ({ ...DEFAULT_SETTINGS, mode: "sync" as const }));
+    await manager.loadBundles();
+    await manager.scanAll();
+    const { MarkdownView, notices } = await import("./support/obsidian-stub");
+    const file = v.files.get("a.md")!;
+    /** What Obsidian does as you type and it autosaves: editor-change, then save, then modify. */
+    const typeAndSave = async (insert: string) => {
+      manager.markDirty("a.md");
+      v.texts.set("a.md", v.texts.get("a.md")!.replace("# ", `# ${insert}`));
+      await manager.analyzeFile(file as never);
+      manager.scheduleStamp(file as never);
+    };
+    return { v, manager, file, MarkdownView, notices, typeAndSave };
+  }
+  const modified = (text: string) => /^modified: (.*)$/m.exec(text)?.[1];
+
+  it("never writes into the note being edited, and stamps it once you leave", async () => {
+    const { v, manager, file, MarkdownView, notices, typeAndSave } = await syncSetup();
+    const process = vi.spyOn(v.app.vault, "process");
+    const view = new MarkdownView(file, v.texts.get("a.md")!);
+    v.app.workspace.views = [view];
+    v.app.workspace.active = view;
+    const before = notices.length;
+    for (const ch of ["x", "y", "z"]) {
+      await typeAndSave(ch);
+      await vi.advanceTimersByTimeAsync(2500); // past the debounce, still editing
+    }
+    expect(process).not.toHaveBeenCalled();
+    expect(modified(v.texts.get("a.md")!)).toBeUndefined();
+
+    v.app.workspace.active = null; // the user opens another note
+    v.app.workspace.views = [new MarkdownView(file, v.texts.get("a.md")!)];
+    await manager.flushPendingStamps();
+    expect(process).toHaveBeenCalledTimes(1);
+    expect(modified(v.texts.get("a.md")!)).toBeDefined();
+    expect(notices.length).toBe(before);
+  });
+
+  it("waits while an open editor holds unsaved text for the note", async () => {
+    const { v, manager, file, MarkdownView, typeAndSave } = await syncSetup();
+    await typeAndSave("x");
+    v.app.workspace.views = [new MarkdownView(file, "unsaved keystrokes")];
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(modified(v.texts.get("a.md")!)).toBeUndefined();
+    v.app.workspace.views = [new MarkdownView(file, v.texts.get("a.md")!)]; // saved
+    await manager.flushPendingStamps();
+    expect(modified(v.texts.get("a.md")!)).toBeDefined();
+  });
+
+  it("does not notify about its own background writes, and retries one that did not stick", async () => {
+    const { v, manager, notices, typeAndSave } = await syncSetup();
+    const real = v.app.vault.process;
+    let clobber = true;
+    v.app.vault.process = async (f: Parameters<typeof real>[0], fn: (t: string) => string) => {
+      const out = await real(f, fn);
+      if (clobber) v.texts.set("a.md", v.texts.get("a.md")!.replace(/^modified:.*\n/m, "")); // the editor's save lands on top
+      return out;
+    };
+    const before = notices.length;
+    await typeAndSave("x");
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(modified(v.texts.get("a.md")!)).toBeUndefined();
+    expect(notices.slice(before)).toEqual([]);
+    clobber = false;
+    await manager.flushPendingStamps();
+    expect(modified(v.texts.get("a.md")!)).toBeDefined();
+    expect(notices.length).toBe(before);
+  });
+
+  it("stays quiet while the frontmatter is mid-edit and cannot be written", async () => {
+    const { v, manager, file, notices } = await syncSetup();
+    const before = notices.length;
+    manager.markDirty("a.md");
+    v.texts.set("a.md", v.texts.get("a.md")!.replace("title: Concept A", "title: [unclosed"));
+    await manager.analyzeFile(file as never);
+    manager.scheduleStamp(file as never);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(notices.length).toBe(before);
+  });
+});
+
 describe("entities", () => {
   it("creates a missing entity file from the diagnostic's fix, which then resolves", async () => {
     const { memoryAdapter } = await import("./support/obsidian-stub");

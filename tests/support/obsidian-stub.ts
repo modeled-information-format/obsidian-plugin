@@ -44,7 +44,15 @@ export class TFolder extends TAbstractFile {
   }
 }
 
-export class MarkdownView {}
+/** Tests build open editors with `new MarkdownView(file, text)`. */
+export class MarkdownView {
+  file: TFile | null;
+  editor: { getValue: () => string };
+  constructor(file: TFile | null = null, text = "") {
+    this.file = file;
+    this.editor = { getValue: () => text };
+  }
+}
 
 export class Vault {
   static recurseChildren() {}
@@ -103,7 +111,17 @@ export function memoryApp(initial: Record<string, string>, config: Record<string
         trashed.push(f.path);
       },
     },
-    workspace: { iterateAllLeaves: () => {} },
+    workspace: {
+      /** Open editors: set by tests to simulate notes open in Obsidian. */
+      views: [] as MarkdownView[],
+      active: null as MarkdownView | null,
+      iterateAllLeaves(fn: (leaf: { view: unknown }) => void) {
+        this.views.forEach((view) => fn({ view }));
+      },
+      getActiveViewOfType(type: unknown) {
+        return type === MarkdownView ? this.active : null;
+      },
+    },
   };
   const move = (from: string, to: string) => {
     const f = files.get(from)!;

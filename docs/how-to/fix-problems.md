@@ -46,5 +46,7 @@ Common ones:
 **Settings → MIF → Mode**:
 
 - **Observe** (default): the plugin validates and fixes only when you click.
-- **Sync**: after you edit a concept, it also sets `modified`, regenerates the
-  `## Relationships` mirror, and updates an existing `## Citations` section.
+- **Sync**: once you leave a concept you edited, it also sets `modified`,
+  regenerates the `## Relationships` mirror, and updates an existing
+  `## Citations` section. It never writes into a note while you are typing
+  in it, and these automatic updates raise no notices.

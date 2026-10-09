@@ -10,7 +10,7 @@ description: Every setting in Settings → MIF, with its default.
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Mode | `mode` | Observe | Observe validates and fixes on request; Sync also updates `modified`, the `## Relationships` mirror, and an existing `## Citations` section after you edit a concept |
+| Mode | `mode` | Observe | Observe validates and fixes on request; Sync also updates `modified`, the `## Relationships` mirror, and an existing `## Citations` section of a concept you edited, once you leave it (never while you are typing in it) |
 | Bundle roots | `bundleRoots` | the whole vault | Folders that are MIF bundles, one per line; an empty line is the vault root; a note belongs to the deepest matching root |
 | Excluded folders | `excludedFolders` | `_spike`, `templates` | Folders never treated as MIF |
 | Download ontologies from mif-spec.dev | `downloadOntologies` | on | Fetch declared ontologies (and their `extends`), verified by sha256, cached in the plugin folder; the trash button clears the cache |
