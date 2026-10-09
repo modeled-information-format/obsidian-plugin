@@ -3,7 +3,7 @@
   "name": "MIF",
   "version": "0.0.1",
   "minAppVersion": "1.10.0",
-  "description": "Author, validate, and sync MIF (Modeled Information Format) knowledge bundles.",
+  "description": "Author, validate, and sync MIF (Modeled Information Format) notes: live diagnostics with quick fixes, typed relationships, ontologies, freshness, citations, and JSON-LD export.",
   "author": "Modeled Information Format",
   "authorUrl": "https://mif-spec.dev",
   "isDesktopOnly": false
