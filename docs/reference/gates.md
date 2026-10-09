@@ -2,7 +2,7 @@
 id: 4d5ee6fc-c46f-59d5-8abd-a81495163371
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:18:08Z
+modified: 2026-10-09T11:29:16Z
 namespace: _semantic/reference
 title: Quality gates and workflows
 tags:
@@ -19,6 +19,9 @@ provenance:
   trustLevel: high_confidence
   agent: claude-code
   sourceRef: Written by an AI agent from the plugin source; command, setting, and diagnostic names are checked against the source by scripts/check-docs.mjs
+relationships:
+- type: relates-to
+  target: ../../SECURITY.md
 citations:
 - "@type": Citation
   citationType: specification
@@ -40,123 +43,87 @@ ontology:
 entity:
   name: Quality gates and workflows
   entity_type: reference-document
-description: Reference listing for every workflow this template ships — triggers, jobs, gate verdicts, predicate types, and attestation subjects.
+description: Reference for this repository's workflows, their triggers, jobs, gates, attestation predicates, and signers.
 diataxis_type: reference
 ---
 
 # Quality gates and workflows
 
-This page lists every workflow in `.github/workflows/` exactly as shipped.
+The workflows in `.github/workflows/`, as they are in this repository.
 Predicate types, job names, and signing identities are normative.
 
 ---
 
-## `ci.yml` — Continuous integration
+## `ci.yml`: continuous integration
 
-Trigger: every push and pull request to `main`; `workflow_dispatch`.
+Trigger: push and pull request to `main`; `workflow_dispatch`.
 
-| Job | Purpose |
+| Job | What it does |
 |---|---|
-| `pin-check` | Thin caller of `pin-check.yml`; fails closed if any `uses:` references an action by tag or branch instead of a full 40-char SHA |
-| `lint` | Counts TODO/FIXME/HACK/XXX markers in YAML, shell, and Markdown (informational; never fails) |
-| `validate-workflows` | Thin caller of `reusable-actionlint.yml`; validates workflow YAML syntax |
+| `pin-check` | Calls `pin-check.yml`; fails if any `uses:` names an action by tag or branch instead of a full commit SHA |
+| `validate-workflows` | Calls `reusable-actionlint.yml`; validates the workflow files |
+| `plugin` | Installs dependencies, then runs `lint`, `typecheck`, `test`, `build`, `check:mobile`, and `check:docs` |
+| `parity` | Builds mif-rs as WebAssembly from a pinned commit and compares it with the plugin's engine over every fixture |
 
 ---
 
-## `quality-gates.yml` — Merge-time gates
+## `quality-gates.yml`: merge-time gates
 
-Trigger: push and pull request to `main`; weekly schedule (`37 6 * * 1`); `workflow_dispatch`.
+Trigger: push and pull request to `main`; weekly schedule (`37 6 * * 1`);
+`workflow_dispatch`.
 
-Each job is a thin caller of the corresponding central reusable, pinned by the `.github` repo's commit SHA. All gates normalize on SARIF and surface in the repository Security tab.
+Each job calls the matching reusable workflow in the organization's `.github`
+repository, pinned by commit SHA, and reports SARIF to GitHub code scanning.
 
-| Job | Central reusable | Gate type | SARIF upload |
-|---|---|---|---|
-| `sast` | `reusable-sast-codeql.yml` | SAST (CodeQL), `languages: actions` | yes |
-| `sca` | `reusable-sca-osv.yml` | SCA (OSV-Scanner); fails on severity `high` or above | yes |
-| `posture` | `reusable-scorecard.yml` | OpenSSF Scorecard posture; push/schedule only | yes |
-| `trivy` | `reusable-trivy.yml` | IaC/license (Trivy filesystem scan) | yes |
-
-`posture` is a repo-level signal; it does not produce an artifact-bound attestation.
-
----
-
-## `release.yml` — Attested release pipeline
-
-Trigger: tag push matching `v*.*.*`; `workflow_dispatch` (dry-run — `publish` is tag-gated).
-
-The invariant: `build → attest-provenance → generate+attest-SBOM → fail-closed-verify → [tag-gated] publish`.
-
-| Job | Depends on | Key permissions | What it produces |
-|---|---|---|---|
-| `meta` | — | `contents: read` | Artifact name and version outputs |
-| `build` | `meta` | `id-token: write`, `attestations: write` | Tarball in `dist/`; SLSA build provenance attestation; subject digest output |
-| `sbom` | `meta`, `build` | `id-token: write`, `attestations: write` | CycloneDX SBOM (Syft via `anchore/sbom-action`); SBOM attestation bound to `dist/*` |
-| `gate-sast` | `meta` | `security-events: write` | CodeQL SARIF for `languages: actions` |
-| `attest-sast` | `meta`, `build`, `gate-sast` | `attestations: write` | Seam-signed attestation, predicate `sast/v1`, bound to subject digest |
-| `gate-sca` | `meta` | `security-events: write` | OSV-Scanner SARIF |
-| `attest-sca` | `meta`, `build`, `gate-sca` | `attestations: write` | Seam-signed attestation, predicate `sca/v1`, bound to subject digest |
-| `gate-trivy` | `meta` | `security-events: write` | Trivy IaC/license SARIF |
-| `attest-iac-license` | `meta`, `build`, `gate-trivy` | `attestations: write` | Seam-signed attestation, predicate `iac-license/v1`, bound to subject digest |
-| `vex` | `meta`, `build` | `id-token: write`, `attestations: write` | OpenVEX disposition, self-signed by `reusable-vex.yml`, predicate `openvex.dev/ns/v0.2.0`, bound to subject digest |
-| `verify` | `meta`, `build`, `sbom`, `attest-sast`, `attest-sca`, `attest-iac-license`, `vex` | `attestations: read` | Fail-closed `gh attestation verify` for all six predicates; job failure blocks `publish` |
-| `publish` | `meta`, `verify` (tag-gated) | `contents: write` | GitHub Release with checksums; skipped on `workflow_dispatch` |
-
-### Predicate types produced by `release.yml`
-
-| Predicate | Signing identity | URI |
+| Job | Reusable workflow | Gate |
 |---|---|---|
-| SLSA build provenance | This repo's `release.yml` | `https://slsa.dev/provenance/v1` |
-| CycloneDX SBOM | This repo's `release.yml` | `https://cyclonedx.org/bom` |
-| SAST verdict | `reusable-attest-scan.yml` (seam) | `https://modeled-information-format.github.io/attestations/sast/v1` |
-| SCA verdict | `reusable-attest-scan.yml` (seam) | `https://modeled-information-format.github.io/attestations/sca/v1` |
-| IaC/license verdict | `reusable-attest-scan.yml` (seam) | `https://modeled-information-format.github.io/attestations/iac-license/v1` |
-| VEX disposition | `reusable-vex.yml` (self-signed) | `https://openvex.dev/ns/v0.2.0` |
+| `sast` | `reusable-sast-codeql.yml` | CodeQL, languages `actions` and `javascript-typescript` |
+| `sca` | `reusable-sca-osv.yml` | OSV-Scanner over `package-lock.json` and `tools/lint/package-lock.json`; fails at severity `high` |
+| `posture` | `reusable-scorecard.yml` | OpenSSF Scorecard; push and schedule only |
+| `trivy` | `reusable-trivy.yml` | Trivy IaC and license scan |
 
-`verify` checks all six predicates before `publish` is allowed to execute.
+Code scanning needs GitHub Advanced Security on a private repository, so every
+gate job is skipped while the repository is private
+(`if: !github.event.repository.private`) and runs once it is public.
 
 ---
 
-## `dast.yml` — Attested DAST
+## `release.yml`: attested release
 
-Trigger: `workflow_dispatch` only. Requires a running target URL (`target` input; defaults to `https://modeled-information-format.github.io`).
+Trigger: a tag that is a bare version (`1.2.3` or `1.2.3-beta.1`, no `v`), as
+Obsidian requires; `workflow_dispatch` for a dry run that builds, tests, and
+scans but signs and publishes nothing.
 
-| Job | Depends on | What it produces |
+| Job | Needs | What it produces |
 |---|---|---|
-| `meta` | — | Name and version outputs |
-| `subject` | `meta` | Source snapshot tarball; SLSA build provenance attestation; subject digest output |
-| `gate-dast` | `meta` | ZAP JSON report via `reusable-zap.yml` (`fail-action: false` — verdict signed regardless of findings) |
-| `attest-dast` | `meta`, `subject`, `gate-dast` | Seam-signed attestation, predicate `dast/v1`, bound to subject digest |
-| `verify` | `meta`, `subject`, `attest-dast` | Fail-closed verify of provenance + `dast/v1`; workflow halts on failure |
+| `meta` | | Version; refuses a tag that disagrees with `manifest.json` or `versions.json` |
+| `test` | | `lint`, `typecheck`, and `test` |
+| `build` | `meta`, `test` | `main.js`, `manifest.json`, `styles.css`, each with SLSA build provenance |
+| `source` | `meta` | A source snapshot tarball with SLSA build provenance; the subject of the gate verdicts |
+| `sbom` | `meta`, `build` | A CycloneDX SBOM, attested on each of the three plugin files |
+| `gate-sast`, `gate-sca`, `gate-trivy` | `meta` | CodeQL, OSV-Scanner, and Trivy scans, as in `quality-gates.yml` |
+| `attest-sast`, `attest-sca`, `attest-iac-license` | `meta`, `source`, the gate | A verdict attestation on the source snapshot, signed by the organization's `reusable-attest-scan.yml`; tags only |
+| `vex` | `meta`, `source` | An OpenVEX disposition on the source snapshot, signed by `reusable-vex.yml`; tags only |
+| `verify` | all of the above | Fails closed unless every attestation below verifies; tags only |
+| `release` | `meta`, `verify` | The GitHub Release with the three plugin files; tags only |
 
-Predicate: `https://modeled-information-format.github.io/attestations/dast/v1` (seam-signed).
+The release gates also report to code scanning, so a tagged release cannot
+pass while the repository is private without Advanced Security.
 
-Requires `zaproxy/action-full-scan@*` (or its pinned SHA) on the org Actions allow-list.
+### Attestations
 
----
+| Subject | Predicate | Signer |
+|---|---|---|
+| `main.js`, `manifest.json`, `styles.css` | `https://slsa.dev/provenance/v1` | This repository's `release.yml` |
+| `main.js`, `manifest.json`, `styles.css` | `https://cyclonedx.org/bom` | This repository's `release.yml` |
+| Source snapshot | `https://slsa.dev/provenance/v1` | This repository's `release.yml` |
+| Source snapshot | `https://modeled-information-format.github.io/attestations/sast/v1` | `reusable-attest-scan.yml` |
+| Source snapshot | `https://modeled-information-format.github.io/attestations/sca/v1` | `reusable-attest-scan.yml` |
+| Source snapshot | `https://modeled-information-format.github.io/attestations/iac-license/v1` | `reusable-attest-scan.yml` |
+| Source snapshot | `https://openvex.dev/ns/v0.2.0` | `reusable-vex.yml` |
 
-## Verification commands
+[SECURITY.md](../../SECURITY.md) has the commands to verify a release.
 
-See `SECURITY.md` for the full consumer verification guide. The commands below apply to seam-signed predicates (SLSA L3 — signer is the central reusable, not the caller repo):
+## Relationships
 
-```bash
-# Seam-signed gate verdicts (sast, sca, iac-license, dast)
-gh attestation verify "$ARTIFACT" \
-  --owner modeled-information-format \
-  --signer-workflow modeled-information-format/.github/.github/workflows/reusable-attest-scan.yml \
-  --predicate-type "https://modeled-information-format.github.io/attestations/<gate>/v1"
-
-# VEX (self-signed by reusable-vex.yml)
-gh attestation verify "$ARTIFACT" \
-  --owner modeled-information-format \
-  --signer-workflow modeled-information-format/.github/.github/workflows/reusable-vex.yml \
-  --predicate-type "https://openvex.dev/ns/v0.2.0"
-
-# Provenance and SBOM (signed by this repo's release.yml)
-gh attestation verify "$ARTIFACT" \
-  --repo modeled-information-format/attested-pipeline-template \
-  --predicate-type "https://slsa.dev/provenance/v1"
-
-gh attestation verify "$ARTIFACT" \
-  --repo modeled-information-format/attested-pipeline-template \
-  --predicate-type "https://cyclonedx.org/bom"
-```
+- relates-to [Security Policy](../../SECURITY.md)
