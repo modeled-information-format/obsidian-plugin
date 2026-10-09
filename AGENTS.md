@@ -1,3 +1,32 @@
+---
+id: 2211dd05-d9d0-5038-816c-d8134303bdc3
+type: procedural
+created: 2026-10-09T09:55:09Z
+modified: 2026-10-09T11:00:24Z
+namespace: _procedural/learning
+title: AGENTS.md
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-09T09:55:09Z
+  recordedAt: 2026-10-09T09:55:09Z
+  ttl: P1Y
+relationships:
+- type: relates-to
+  target: docs/README.md
+- type: relates-to
+  target: README.md
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: AGENTS.md
+  entity_type: how-to-guide
+---
 # AGENTS.md
 
 Guidance for coding agents working in this repository: an Obsidian plugin
@@ -70,6 +99,15 @@ Do not report "lint clean" without running `npm run lint`.
   other way round. Adding any of these means documenting it in the same
   change.
 - Docs follow Diátaxis: tutorial, how-to, reference, explanation.
+- Every doc, including `README.md`, `SECURITY.md`, and this file, is a MIF
+  record typed by the `mif-docs` ontology (`entity_type` how-to-guide,
+  tutorial, reference-document, explanation, or decision-record). Write a
+  new doc with the matching mif-docs genre skill; keep its `id` when you
+  edit it, update `modified`, and keep the `## Relationships` section in step
+  with its frontmatter. How-tos and the tutorial stop at Level 2; reference,
+  explanation, and the ADR carry provenance and reach Level 3.
+- Validate a changed doc with the mif-docs validator,
+  `mif-validate <file> --level 2|3`, and in Obsidian with this plugin.
 - Code comments describe the code. They do not mention development phases,
   plans, or where in a local workspace a file came from.
 
@@ -98,3 +136,8 @@ Do not report "lint clean" without running `npm run lint`.
   working records, and ask before adding any new non-code document.
 - Pin every GitHub Action to a full commit SHA, and verify the SHA exists
   before writing it.
+
+## Relationships
+
+- relates-to [Documentation](docs/README.md)
+- relates-to [MIF for Obsidian](README.md)

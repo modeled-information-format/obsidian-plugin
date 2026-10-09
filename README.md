@@ -1,3 +1,47 @@
+---
+id: 75a481d5-5f49-5c27-be88-56b4025e8af8
+type: semantic
+created: 2026-10-07T23:48:49Z
+modified: 2026-10-08T15:33:05Z
+namespace: _semantic/reference
+title: MIF for Obsidian
+tags:
+- reference
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-07T23:48:49Z
+  recordedAt: 2026-10-07T23:48:49Z
+  ttl: P1Y
+provenance:
+  "@type": Provenance
+  sourceType: agent_inferred
+  trustLevel: moderate_confidence
+  agent: claude-code
+  sourceRef: Written by an AI agent from the plugin source
+relationships:
+- type: relates-to
+  target: docs/README.md
+- type: relates-to
+  target: docs/tutorial/getting-started.md
+- type: relates-to
+  target: SECURITY.md
+citations:
+- "@type": Citation
+  citationType: specification
+  citationRole: source
+  title: "MIF: Modeled Information Format specification"
+  url: https://mif-spec.dev/
+  accessed: 2026-10-09
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: MIF for Obsidian
+  entity_type: reference-document
+---
 <!-- diataxis_type: how-to -->
 
 # MIF for Obsidian
@@ -102,3 +146,9 @@ MIF_REPO=/path/to/MIF npm run mif-align -- origin/main               # test agai
 MIF_REPO=/path/to/MIF MIF_REF=origin/main npm run sync-schemas        # vendor its schemas
 npm run golden                                                        # if the reference scripts changed
 ```
+
+## Relationships
+
+- relates-to [Documentation](docs/README.md)
+- relates-to [Getting started with MIF in Obsidian](docs/tutorial/getting-started.md)
+- relates-to [Security Policy](SECURITY.md)

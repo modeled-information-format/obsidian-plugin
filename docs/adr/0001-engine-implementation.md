@@ -7,8 +7,27 @@ namespace: _semantic/decisions
 title: "ADR-0001: MIF engine implementation for the Obsidian plugin"
 summary: The plugin implements MIF parsing, projection, round-trip, and validation in TypeScript, held to the reference converter by tests and cross-checked against mif-rs, rather than embedding mif-rs as WebAssembly.
 tags:
-  - adr
-  - engine
+- adr
+- engine
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-07T18:38:46Z
+  recordedAt: 2026-10-07T18:38:46Z
+provenance:
+  "@type": Provenance
+  sourceType: agent_inferred
+  trustLevel: moderate_confidence
+  agent: claude-code
+  sourceRef: Written by an AI agent from the plugin's engine design and its test suites
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: "ADR-0001: MIF engine implementation for the Obsidian plugin"
+  entity_type: decision-record
 ---
 
 # ADR-0001: MIF engine implementation

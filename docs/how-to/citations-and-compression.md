@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: 21147fa4-0aed-516d-8eab-481685e2ef96
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _procedural/learning
 title: Cite sources and compress long concepts
-description: Validate citations, keep a ## Citations section, record provenance, and compress a concept to its summary.
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Cite sources and compress long concepts
+  entity_type: how-to-guide
+description: Validate citations, keep a
+diataxis_type: how-to
 ---
 
 # Cite sources and compress long concepts

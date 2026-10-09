@@ -1,7 +1,35 @@
 ---
-diataxis_type: tutorial
+id: 90491a3b-3bce-5632-bcd4-4f5ccb5636ae
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _procedural/learning
 title: Getting started with MIF in Obsidian
+tags:
+- tutorial
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P6M
+relationships:
+- type: relates-to
+  target: ../how-to/fix-problems.md
+- type: relates-to
+  target: ../how-to/relationships.md
+- type: relates-to
+  target: ../explanation/how-the-plugin-reads-mif.md
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Getting started with MIF in Obsidian
+  entity_type: tutorial
 description: Install the plugin, create your first MIF concept, link it to another, and bring it to Level 3.
+diataxis_type: tutorial
 ---
 
 # Getting started with MIF in Obsidian
@@ -54,7 +82,9 @@ The plugin writes the relationship to frontmatter and mirrors it in the body:
 ```markdown
 ## Relationships
 
-- derived-from [Dark mode preference](/semantic/dark-mode-preference.md)
+- relates-to [Fix what the diagnostics report](../how-to/fix-problems.md)
+- relates-to [Work with relationships](../how-to/relationships.md)
+- relates-to [How the plugin reads MIF](../explanation/how-the-plugin-reads-mif.md)
 ```
 
 Open **MIF: Open related panel**: *Dark mode preference* is listed under
