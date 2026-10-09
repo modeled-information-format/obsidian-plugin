@@ -1,3 +1,43 @@
+---
+id: ebcf822a-e84d-5071-9044-535129a1b97e
+type: semantic
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _semantic/reference
+title: Security Policy
+tags:
+- reference
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+provenance:
+  "@type": Provenance
+  sourceType: agent_inferred
+  trustLevel: moderate_confidence
+  agent: claude-code
+  sourceRef: Written by an AI agent from the repository's release workflows
+relationships:
+- type: relates-to
+  target: docs/explanation/attested-pipeline.md
+citations:
+- "@type": Citation
+  citationType: specification
+  citationRole: source
+  title: "MIF: Modeled Information Format specification"
+  url: https://mif-spec.dev/
+  accessed: 2026-10-09
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Security Policy
+  entity_type: reference-document
+---
 # Security Policy
 
 ## Reporting a vulnerability
@@ -84,3 +124,7 @@ release.
   (`cargo install --locked --version`), never piped to a shell. The pipeline
   comes from [mif-repo-template](https://github.com/modeled-information-format/mif-repo-template); see
   [docs/explanation/attested-pipeline.md](docs/explanation/attested-pipeline.md).
+
+## Relationships
+
+- relates-to [The attested pipeline model](docs/explanation/attested-pipeline.md)

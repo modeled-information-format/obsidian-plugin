@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: f069aae6-9344-56a7-9071-877176a455d6
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _procedural/learning
 title: Search concepts by meaning with mif-cli
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Search concepts by meaning with mif-cli
+  entity_type: how-to-guide
 description: Connect mif-rs's mif-cli, ingest concepts, and run semantic search and find-similar (desktop only).
+diataxis_type: how-to
 ---
 
 # Search concepts by meaning with mif-cli

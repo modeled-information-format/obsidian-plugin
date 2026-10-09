@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: 2a3e788e-9e4f-5a93-bae8-c945c14e2c33
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _procedural/learning
 title: Use ontologies, namespaces, and entities
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Use ontologies, namespaces, and entities
+  entity_type: how-to-guide
 description: Declare an ontology, get namespace and entity-type hints, and keep entity references resolvable.
+diataxis_type: how-to
 ---
 
 # Use ontologies, namespaces, and entities

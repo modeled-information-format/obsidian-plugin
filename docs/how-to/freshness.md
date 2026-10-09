@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: 4df67b8b-b376-55ec-beb8-9a306ab4029c
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:47:42Z
+namespace: _procedural/learning
 title: Track freshness and validity
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Track freshness and validity
+  entity_type: how-to-guide
 description: See which concepts are expired, stale, or not yet valid, renew or review them, and tune the thresholds.
+diataxis_type: how-to
 ---
 
 # Track freshness and validity

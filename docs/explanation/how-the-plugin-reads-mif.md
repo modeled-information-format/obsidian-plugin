@@ -1,7 +1,47 @@
 ---
-diataxis_type: explanation
+id: 655d8ae7-596f-508d-9419-4153042b4db3
+type: semantic
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _semantic/architecture
 title: How the plugin reads MIF
+tags:
+- explanation
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+provenance:
+  "@type": Provenance
+  sourceType: agent_inferred
+  trustLevel: moderate_confidence
+  agent: claude-code
+  sourceRef: Written by an AI agent from the plugin source and the MIF specification
+citations:
+- "@type": Citation
+  citationType: specification
+  citationRole: source
+  title: "MIF: Modeled Information Format specification"
+  url: https://mif-spec.dev/
+  accessed: 2026-10-09
+- "@type": Citation
+  citationType: specification
+  citationRole: methodology
+  title: "Diátaxis: Explanation"
+  url: https://diataxis.fr/explanation/
+  accessed: 2026-10-09
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: How the plugin reads MIF
+  entity_type: explanation
 description: Why markdown stays canonical, how levels are decided, why some checks are advisory, and where the plugin interprets an open spec.
+diataxis_type: explanation
 ---
 
 # How the plugin reads MIF

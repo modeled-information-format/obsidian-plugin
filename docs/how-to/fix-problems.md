@@ -1,7 +1,31 @@
 ---
-diataxis_type: how-to
+id: eba26493-70d0-5176-926f-23dd9113fc34
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-09T10:47:10Z
+namespace: _procedural/learning
 title: Fix what the diagnostics report
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+relationships:
+- type: relates-to
+  target: ../reference/diagnostics.md
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Fix what the diagnostics report
+  entity_type: how-to-guide
 description: Find problems in one note or a whole bundle, apply quick fixes, and choose between Observe and Sync mode.
+diataxis_type: how-to
 ---
 
 # Fix what the diagnostics report
@@ -50,3 +74,7 @@ Common ones:
   regenerates the `## Relationships` mirror, and updates an existing
   `## Citations` section. It never writes into a note while you are typing
   in it, and these automatic updates raise no notices.
+
+## Relationships
+
+- relates-to [Diagnostic codes](../reference/diagnostics.md)

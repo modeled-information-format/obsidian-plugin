@@ -1,7 +1,52 @@
 ---
-diataxis_type: explanation
+id: a036283c-a4fe-5eaf-84db-89e4e6ebd600
+type: semantic
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _semantic/architecture
 title: The attested pipeline model
+tags:
+- explanation
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+provenance:
+  "@type": Provenance
+  sourceType: agent_inferred
+  trustLevel: moderate_confidence
+  agent: claude-code
+  sourceRef: Written by an AI agent from the plugin source and the MIF specification
+relationships:
+- type: relates-to
+  target: ../how-to/instantiate-with-copier.md
+- type: relates-to
+  target: ../reference/gates.md
+citations:
+- "@type": Citation
+  citationType: specification
+  citationRole: source
+  title: "MIF: Modeled Information Format specification"
+  url: https://mif-spec.dev/
+  accessed: 2026-10-09
+- "@type": Citation
+  citationType: specification
+  citationRole: methodology
+  title: "Diátaxis: Explanation"
+  url: https://diataxis.fr/explanation/
+  accessed: 2026-10-09
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: The attested pipeline model
+  entity_type: explanation
 description: Why attested-pipeline-template exists, what the build→attest→verify→publish model means, and how the pieces fit together.
+diataxis_type: explanation
 ---
 
 # The attested pipeline model
@@ -164,3 +209,8 @@ to benefit from update propagation.
 For a deeper treatment of the attestation model and the org-wide toolchain this
 template is part of, see the
 [modeled-information-format docs](https://modeled-information-format.github.io/docs/).
+
+## Relationships
+
+- relates-to [Instantiate this template with Copier](../how-to/instantiate-with-copier.md)
+- relates-to [Quality gates and workflows](../reference/gates.md)

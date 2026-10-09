@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: 9e4df4ce-4d74-542c-89b4-dc7f97ffe1bf
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-08T15:18:08Z
+namespace: _procedural/learning
 title: Instantiate this template with Copier
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Instantiate this template with Copier
+  entity_type: how-to-guide
 description: How to stand up a new project from attested-pipeline-template using Copier and pull future template improvements.
+diataxis_type: how-to
 ---
 
 # Instantiate this template with Copier

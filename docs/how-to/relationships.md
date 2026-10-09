@@ -1,7 +1,28 @@
 ---
-diataxis_type: how-to
+id: 190c9f2f-286d-5cce-9da3-13ea38b4f27e
+type: procedural
+created: 2026-10-08T15:18:08Z
+modified: 2026-10-09T10:47:10Z
+namespace: _procedural/learning
 title: Work with relationships
+tags:
+- how-to
+- mif-obsidian-plugin
+temporal:
+  "@type": TemporalMetadata
+  validFrom: 2026-10-08T15:18:08Z
+  recordedAt: 2026-10-08T15:18:08Z
+  ttl: P1Y
+ontology:
+  "@type": OntologyReference
+  id: mif-docs
+  version: 1.0.0
+  uri: https://mif-spec.dev/ontologies/mif-docs
+entity:
+  name: Work with relationships
+  entity_type: how-to-guide
 description: Add, edit, and remove typed relationships, keep the body mirror in step, move notes safely, and browse the typed graph.
+diataxis_type: how-to
 ---
 
 # Work with relationships
