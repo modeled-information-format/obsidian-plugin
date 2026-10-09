@@ -6,7 +6,7 @@ import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, t
 
 import {
   scalarText,
-  chainTraits,
+  loadedTraits,
   composeTraits,
   entityReference,
   entitySlug,
@@ -113,7 +113,7 @@ export class OntologyView extends ItemView {
       } else {
         el.createEl("p", { text: `${entityType} — ${def.base}, from ${def.ontology}` });
         if (def.description) el.createEl("p", { cls: "mif-muted", text: def.description });
-        const composed = composeTraits(def, chainTraits(report.chain));
+        const composed = composeTraits(def, loadedTraits(report.chain, info.corpus));
         if (composed.fields.size) {
           const table = el.createEl("table", { cls: "mif-fields" });
           const head = table.createEl("tr");

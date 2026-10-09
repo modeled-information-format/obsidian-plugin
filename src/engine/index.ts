@@ -52,6 +52,7 @@ export { buildIndex, bundleDiagnostics, titleForTarget, titleOf, toBundleConcept
 export { legacySigns, migrateConcept, migratedPath, type LegacySigns } from "./migrate";
 export {
   chainTraits,
+  loadedTraits,
   composeTraits,
   discover,
   parseOntology,

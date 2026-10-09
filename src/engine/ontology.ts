@@ -328,6 +328,23 @@ export function chainTraits(chain: OntologyDef[]): Map<string, TraitDef & { onto
   return traits;
 }
 
+/**
+ * Traits an entity type can draw on: those of every loaded ontology, with the
+ * declared chain's own definitions taking precedence. MIF does not say that a
+ * trait must come through the declared ontology's `extends` chain (§10.8.3
+ * names traits; §10.8.5 loads ontologies from several sources), so a trait
+ * defined by any loaded ontology, such as shared-traits, counts as resolved.
+ */
+export function loadedTraits(chain: OntologyDef[], corpus: Corpus): Map<string, TraitDef & { ontology: string }> {
+  const traits = new Map<string, TraitDef & { ontology: string }>();
+  for (const id of [...corpus.keys()].sort()) {
+    const def = corpus.get(id)!;
+    for (const [name, t] of Object.entries(def.traits)) if (isObj(t) && !traits.has(name)) traits.set(name, { ...t, ontology: def.id });
+  }
+  for (const [name, t] of chainTraits(chain)) traits.set(name, t);
+  return traits;
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
