@@ -2,7 +2,7 @@
   "name": "obsidian-mif",
   "version": "0.0.1",
   "private": true,
-  "description": "Author, validate, and sync MIF (Modeled Information Format) bundles in Obsidian.",
+  "description": "Author, validate, and sync MIF (Modeled Information Format) notes: live diagnostics with quick fixes, typed relationships, ontologies, freshness, citations, and JSON-LD export.",
   "type": "module",
   "main": "main.js",
   "scripts": {
