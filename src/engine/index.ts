@@ -77,5 +77,5 @@ export { compress, compressionDiagnostics, compressionState, contentLines, decom
 export { provenanceDiagnostics, SOURCE_TYPES, TRUST_LEVELS, trustOf, vocabularyLabel } from "./provenance";
 export { applyTextFix, VAULT_TRANSFORMS } from "./fixes";
 export { exportPath, serializeJsonLd, staleExports } from "./export";
-export { idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type IngestResult, type Problem, type ScoredId } from "./cli";
+export { embeddingReference, idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type EmbeddingInfo, type IngestResult, type Problem, type ScoredId } from "./cli";
 export { graphOf, layout, type Graph, type GraphEdge, type GraphNode } from "./graph";

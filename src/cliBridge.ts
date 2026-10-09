@@ -6,7 +6,7 @@
 
 import { FileSystemAdapter, Modal, Notice, Platform, Setting, TFile, type App } from "obsidian";
 
-import { idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type IngestResult, type Problem, type ScoredId } from "./engine";
+import { embeddingReference, idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type IngestResult, type Problem, type ScoredId } from "./engine";
 import type { MifManager } from "./manager";
 import type { MifSettings } from "./settings";
 
@@ -73,7 +73,13 @@ export class MifCli {
     const root = this.manager.rootFor(file.path);
     if (root === null) return { title: "Not in a MIF bundle" };
     const r = await this.run(["ingest", this.abs(file.path), "--db-path", this.abs(this.dbPath(root))]);
-    if (r.code === 0) return parseIngest(r.stdout) ?? { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
+    if (r.code === 0) {
+      const result = parseIngest(r.stdout);
+      if (!result) return { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
+      // The store knows the vector; the concept records what it was embedded with.
+      if (result.stored && result.embedding && result.id) await this.manager.recordEmbedding(file, embeddingReference(result.embedding, result.id));
+      return result;
+    }
     return parseProblem(r.stderr) ?? { title: `mif-cli exited ${r.code}`, detail: r.stderr.trim().slice(0, 300) };
   }
 
