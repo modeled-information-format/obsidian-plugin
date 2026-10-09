@@ -31,7 +31,10 @@ permissions:
   contents: read
 
 jobs:
+  # Every gate reports to GitHub code scanning, which needs Advanced Security
+  # on a private repository. The gates run once the repository is public.
   sast:
+    if: ${{ !github.event.repository.private }}
     permissions:
       security-events: write
       contents: read
@@ -45,6 +48,7 @@ jobs:
       build-mode: none
 
   sca:
+    if: ${{ !github.event.repository.private }}
     permissions:
       actions: read
       contents: read
@@ -60,7 +64,7 @@ jobs:
         --lockfile=tools/lint/package-lock.json
 
   posture:
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    if: ${{ !github.event.repository.private && (github.event_name == 'push' || github.event_name == 'schedule') }}
     permissions:
       security-events: write
       id-token: write
@@ -77,6 +81,7 @@ jobs:
       app-private-key: ${{ secrets.CI_CLIENT_APP_PRIVATE_KEY }}
 
   trivy:
+    if: ${{ !github.event.repository.private }}
     permissions:
       contents: read
       security-events: write
