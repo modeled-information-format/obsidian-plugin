@@ -77,11 +77,20 @@ describe("namespace checks", () => {
 });
 
 describe("entity type checks", () => {
-  it("report unresolvable traits on a mif-docs decision record", () => {
-    const r = run({ ontology: { id: "mif-docs" }, entity: { name: "ADR-1", entity_type: "decision-record" } });
-    expect(r.diagnostics.filter((d) => d.code === "trait-unresolved").map((d) => d.message)).toEqual([
-      expect.stringContaining("'versioned'"), expect.stringContaining("'documented'"),
+  const adr = { ontology: { id: "mif-docs" }, entity: { name: "ADR-1", entity_type: "decision-record" } };
+  const unresolved = (c: SemanticContext) => run(adr, c).diagnostics.filter((d) => d.code === "trait-unresolved");
+  const withoutSharedTraits = new Map([...corpus].filter(([id]) => id === "mif-base" || id === "mif-docs"));
+  it("resolve a mif-docs record's traits from any loaded ontology (shared-traits)", () => {
+    expect(unresolved(ctx())).toEqual([]);
+  });
+  it("note traits no loaded ontology defines as info while catalog ontologies remain to download", () => {
+    const d = unresolved(ctx({ corpus: withoutSharedTraits, downloadable: new Set(["shared-traits"]) }));
+    expect(d.map((x) => [x.severity, x.message])).toEqual([
+      ["info", expect.stringContaining("'versioned'")], ["info", expect.stringContaining("'documented'")],
     ]);
+  });
+  it("warn about traits no loaded ontology defines once nothing is left to download", () => {
+    expect(unresolved(ctx({ corpus: withoutSharedTraits })).map((x) => x.severity)).toEqual(["warning", "warning"]);
   });
   it("report an unknown entity type and a base mismatch", () => {
     expect(run({ ontology: { id: "mif-base" }, entity: { name: "x", entity_type: "nope" } }).diagnostics.map((d) => d.code)).toContain("entity-type-unknown");

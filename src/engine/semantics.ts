@@ -7,7 +7,7 @@ import type { Diagnostic, Fix } from "./analyze";
 import type { Frontmatter } from "./convert";
 import { ENTITY_URN, referencedEntities, type EntityRecord } from "./entities";
 import {
-  chainTraits,
+  loadedTraits,
   composeTraits,
   discover,
   resolveChain,
@@ -147,8 +147,13 @@ export function semanticDiagnostics(fm: Frontmatter, body: string, path: string,
       // mif-rh's check: the `entity` object against the type's schema.required.
       const missing = (def.schema?.required ?? []).filter((f) => !(f in entity!));
       if (missing.length) out.push(warn("entity-fields", `'${entityType}' requires ${missing.join(", ")} in \`entity\`.`, ["entity"]));
-      const composed = composeTraits(def, chainTraits(chain));
-      for (const t of composed.unresolved) out.push(warn("trait-unresolved", `'${entityType}' uses trait '${t}', which ${ontologyId}'s chain does not define.`, ["entity", "entity_type"]));
+      const composed = composeTraits(def, loadedTraits(chain, ctx.corpus));
+      for (const t of composed.unresolved) {
+        // While catalog ontologies remain undownloaded, the trait may be defined by one of them.
+        out.push(ctx.downloadable.size
+          ? info("trait-unresolved", `'${entityType}' uses trait '${t}', which no loaded ontology defines; it may be in one not downloaded yet (MIF: Download all ontologies from the spec catalog).`, ["entity", "entity_type"])
+          : warn("trait-unresolved", `'${entityType}' uses trait '${t}', which no loaded ontology defines.`, ["entity", "entity_type"]));
+      }
       for (const c of composed.cycles) out.push(warn("trait-cycle", `Trait cycle: ${c}.`, ["entity", "entity_type"]));
       for (const c of composed.conflicts) {
         out.push(warn("trait-conflict", `'${entityType}' gets '${c.field}' from ${c.definitions.map((d) => d.origin).join(" and ")} with different definitions; the ontology must override it in the entity schema (§10.8.6).`, ["entity", "entity_type"]));

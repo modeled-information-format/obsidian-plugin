@@ -17,6 +17,7 @@ import {
   discover,
   flattenNamespaces,
   globToRegExp,
+  loadedTraits,
   parseOntology,
   resolveChain,
   visibleTypes,
@@ -175,10 +176,13 @@ entity_types:
     expect(compose("looping").cycles).toEqual(["loop_a -> loop_b -> loop_a"]);
   });
 
-  it("finds the corpus's unresolvable mif-docs traits", () => {
-    const docTraits = chainTraits(resolveChain("mif-docs", corpus));
-    const adr = composeTraits(visibleTypes("mif-docs", corpus).get("decision-record")!, docTraits);
-    expect(adr.unresolved.sort()).toEqual(["documented", "versioned"]);
+  it("finds mif-docs traits outside its extends chain, in shared-traits", () => {
+    const type = visibleTypes("mif-docs", corpus).get("decision-record")!;
+    const chainOnly = composeTraits(type, chainTraits(resolveChain("mif-docs", corpus)));
+    expect(chainOnly.unresolved.sort()).toEqual(["documented", "versioned"]);
+    const loaded = composeTraits(type, loadedTraits(resolveChain("mif-docs", corpus), corpus));
+    expect(loaded.unresolved).toEqual([]);
+    expect(loaded.fields.has("documentation_url")).toBe(true);
   });
 });
 

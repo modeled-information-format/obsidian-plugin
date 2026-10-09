@@ -2,7 +2,7 @@
 id: ee631d51-96bf-5747-9235-6fb5ea59fd19
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:38:01Z
+modified: 2026-10-09T11:09:35Z
 namespace: _semantic/reference
 title: Diagnostic codes
 tags:
@@ -100,7 +100,7 @@ disagree.
 | `entity-type-base` | warning | The entity type belongs to another base type | Set `type` |
 | `entity-fields` | warning | The entity lacks fields its type requires | — |
 | `entity-type-no-ontology` | info | An entity type on a concept with no declared ontology | — |
-| `trait-unresolved` | warning | A trait the ontology chain does not define | — |
+| `trait-unresolved` | warning, or info while catalog ontologies are not yet downloaded | A trait no loaded ontology defines; traits resolve from every loaded ontology, the declared chain first | — |
 | `trait-cycle` | warning | Traits include each other in a cycle | — |
 | `trait-conflict` | warning | Two traits define the same field differently (§10.8.6) | — |
 | `trait-requires` | info | The entity type's traits expect fields on the concept | — |
