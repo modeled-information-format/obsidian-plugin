@@ -2,7 +2,7 @@
 id: 2211dd05-d9d0-5038-816c-d8134303bdc3
 type: procedural
 created: 2026-10-09T09:55:09Z
-modified: 2026-10-09T11:00:24Z
+modified: 2026-10-12T13:12:00Z
 namespace: _procedural/learning
 title: AGENTS.md
 tags:
@@ -42,7 +42,15 @@ tree.
   behind the same surface (see `docs/adr/0001-engine-implementation.md`).
   Anything that needs the app, the vault, or the DOM lives in `src/*.ts`.
 - `src/manager.ts` owns the vault model: bundles, per-file analysis, the
-  relationship index, and every write to a note.
+  relationship index, and every write to a note. All writes go through
+  `MifManager.write`, which uses `Vault.process` and reads the result back.
+- Never write into a note while the user is editing it. Sync mode's
+  automatic stamp (`modified`, the `## Relationships` mirror, an existing
+  `## Citations` section) waits until the note is no longer the active
+  editor and no open editor holds unsaved text for it
+  (`scheduleStamp`, `flushPendingStamps`). Automatic writes pass
+  `{ background: true }`: they log refusals and mismatches to the debug log
+  and retry, and raise no notice. Notices are for actions the user starts.
 - Writes are format-preserving. Edit frontmatter through the writer
   (`updateFrontmatter`, `setScalarIn`, `editStructure`) or `applyEdit`,
   never by re-serializing YAML, so untouched lines keep their exact text.
@@ -58,6 +66,27 @@ tree.
   lists those the manager performs against the vault.
 - `src/engine/generated/` is built by `npm run validators` from `schemas/`.
   It is gitignored; never edit it by hand.
+- The desktop-only mif-cli bridge (`src/cliBridge.ts`) ingests notes into
+  the bundle's vector store and, after a stored ingest, writes an
+  `EmbeddingReference` into the concept's `embedding` block
+  (`embeddingReference`, `MifManager.recordEmbedding`). A mif-cli that
+  reports no model leaves the block unwritten.
+
+## Where the spec is silent
+
+The plugin interprets MIF where the specification does not decide. Keep these
+consistent, and document any new interpretation in the user docs:
+
+- A concept without `temporal.decay` uses the `none` model: it is timeless
+  until `ttl` or `validUntil` passes, then expired. The file explorer draws
+  no freshness dot for timeless notes.
+- An entity type's traits resolve from every loaded ontology, the declared
+  chain's definitions first (`loadedTraits`). An undefined trait is info
+  while catalog ontologies remain undownloaded, and a warning after.
+- A warning from this plugin is not evidence of a defect in the spec, the
+  ontologies, or mif-rs. Before saying so, check the specification's text and
+  whether those projects' own validators check the same thing, and quote the
+  evidence.
 
 ## Commands
 
@@ -78,7 +107,9 @@ npm run install-vault            # copy the build into test-vault for manual tes
 
 Before calling a change done, run lint, typecheck, the full test suite,
 build, `check:mobile`, and `check:docs`, and report their actual results.
-Do not report "lint clean" without running `npm run lint`.
+Do not report "lint clean" without running `npm run lint`. Lint has three
+known warnings in `src/main.ts` (the settings tab's declarative-settings API);
+report any others.
 
 - ESLint lives in `tools/lint/` with its own TypeScript 5, because the
   build uses TypeScript 7, which has no JavaScript API for ESLint to load.
@@ -87,6 +118,11 @@ Do not report "lint clean" without running `npm run lint`.
   --release --target nodejs --out-dir pkg-node)`. A difference must be
   listed in `KNOWN_GAPS` in `tests/wasm-parity.test.ts` with the spec gap
   that explains it.
+- CI (`ci.yml`) runs `pin-check`, `validate-workflows` (actionlint), the
+  `plugin` job (every command above), and `parity`. The code-scanning gates
+  in `quality-gates.yml` are skipped while the repository is private, because
+  code scanning needs GitHub Advanced Security there; `docs/reference/gates.md`
+  describes every workflow.
 - Scripts that read other repositories take their paths from the
   environment: `MIF_REPO` (`mif-align`, `sync-schemas`, `golden`), plus
   `ONTOLOGIES_REPO` and `MNEMONIC_REPO` for `golden`, and `MIF_CLI` for
@@ -130,6 +166,9 @@ Do not report "lint clean" without running `npm run lint`.
 
 - Work on a branch, then merge it into `main` locally. Do not push, tag,
   release, or open pull requests or issues unless the owner asks.
+- Sign every commit and merge commit (GPG, with `commit.gpgsign` on in the
+  owner's git configuration). Never pass `--no-gpg-sign` or `-c commit.gpgsign=false`; if signing
+  fails, stop and report it.
 - Check `git status` and the staged file list before every commit. Commit
   only product content: code, tests, and user-facing docs. Never commit
   planning notes, findings, spike reports, alignment notes, or other
