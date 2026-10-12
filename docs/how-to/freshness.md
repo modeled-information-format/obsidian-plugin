@@ -2,7 +2,7 @@
 id: 4df67b8b-b376-55ec-beb8-9a306ab4029c
 type: procedural
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-12T13:42:37Z
+modified: 2026-10-12T13:49:40Z
 namespace: _procedural/learning
 title: Track freshness and validity
 tags:
@@ -59,8 +59,8 @@ panel** or in the frontmatter, with what the model needs:
 
 ```yaml
 temporal:
-  recordedAt: '2026-10-01T09:00:00Z'
-  ttl: P3M
+  recordedAt: '2026-01-15T10:30:00Z'
+  ttl: P90D
   decay:
     model: step
 ```
