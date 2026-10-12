@@ -2,7 +2,7 @@
 id: 4df67b8b-b376-55ec-beb8-9a306ab4029c
 type: procedural
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:47:42Z
+modified: 2026-10-12T13:42:37Z
 namespace: _procedural/learning
 title: Track freshness and validity
 tags:
@@ -39,6 +39,31 @@ Freshness is computed live from `temporal` (decay model, `validFrom`,
   not yet valid, most urgent first. Switch to **All concepts** to see the rest.
 - **Related panel:** the valid-time range, recorded date, and freshness at
   the top, and a banner when another concept supersedes or conflicts with it.
+
+## Give a note a freshness state
+
+A concept with no `temporal.decay` is *timeless*: the plugin applies the
+`none` model, since MIF leaves the default open. A timeless concept has no
+freshness in the status bar, no dot in the file explorer, and appears in the
+freshness panel only under **All concepts**, as "no decay", until its `ttl` or
+`validUntil` passes and it becomes *expired*.
+
+To give it a state, add `temporal.decay.model` in **MIF: Open properties
+panel** or in the frontmatter, with what the model needs:
+
+| `decay.model` | Needs | Reads as |
+|---|---|---|
+| `step` | `ttl` | Fresh until `ttl` has passed since `recordedAt`, then expired |
+| `linear` | `ttl` | Strength falls from 1 to 0 across the `ttl` |
+| `exponential` | `decay.halfLife` | Strength halves every `halfLife` |
+
+```yaml
+temporal:
+  recordedAt: '2026-10-01T09:00:00Z'
+  ttl: P3M
+  decay:
+    model: step
+```
 
 ## Act on it
 
