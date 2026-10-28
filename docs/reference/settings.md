@@ -2,7 +2,7 @@
 id: a566da52-b775-5391-9701-f4efd7b5231e
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-09T10:47:10Z
+modified: 2026-10-28T18:45:23Z
 namespace: _semantic/reference
 title: Settings
 tags:
@@ -60,5 +60,5 @@ diataxis_type: reference
 | Freshness dots in the file explorer | `explorerBadges` | on | Colour concepts in the file explorer by freshness |
 | Track access | `accessTracking` | off | Update `accessCount` / `lastAccessed` on open, at most hourly per note |
 | JSON-LD export folder | `exportFolder` | `dist/jsonld` | Where JSON-LD exports go |
-| mif-cli path (desktop) | `mifCliPath` | empty (off) | Absolute path to mif-rs's `mif-cli`; **Test** runs it |
+| mif-cli path (desktop) | `mifCliPath` | empty (search) | Absolute path to mif-rs's `mif-cli`, used as given. Empty: the first `mif-cli` found on `PATH`, then in `~/.cargo/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` (Windows: `mif-cli.exe` on `PATH`, then `~\.cargo\bin`); relative `PATH` entries are skipped. **Test** runs it and shows which binary |
 | Developer commands | `showDevCommands` | off | Show the spike commands and write a developer log to the plugin folder |

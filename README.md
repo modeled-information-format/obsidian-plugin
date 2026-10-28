@@ -2,7 +2,7 @@
 id: 75a481d5-5f49-5c27-be88-56b4025e8af8
 type: semantic
 created: 2026-10-07T23:48:49Z
-modified: 2026-10-08T15:33:05Z
+modified: 2026-10-28T18:45:23Z
 namespace: _semantic/reference
 title: MIF for Obsidian
 tags:
@@ -73,8 +73,9 @@ plugin folder. Nothing about your vault is sent. Turn the setting off to
 never contact the network; ontologies in a bundle's `.mif/ontologies/`
 folder always work offline.
 
-The optional **mif-cli bridge** (desktop only, off until **Settings → MIF →
-mif-cli path** is set) runs mif-rs's `mif-cli` on your machine. The plugin
+The optional **mif-cli bridge** (desktop only, off until `mif-cli` is found
+on `PATH`, in a usual install folder, or at **Settings → MIF → mif-cli
+path**) runs mif-rs's `mif-cli` on your machine. The plugin
 itself sends nothing; `mif-cli ingest` downloads its embedding model
 (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face the first time
 and caches it. Embeddings are stored in each bundle's `.mif/vectors.db`.

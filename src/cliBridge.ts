@@ -1,5 +1,6 @@
-// Optional bridge to mif-rs's `mif-cli` (desktop only, off until a
-// binary path is set). `ingest` embeds a concept into the bundle's
+// Optional bridge to mif-rs's `mif-cli` (desktop only; the binary comes from
+// the mif-cli path setting, else from PATH and the usual install folders, see
+// `findMifCli`). `ingest` embeds a concept into the bundle's
 // `.mif/vectors.db` (the CLI downloads its embedding model from Hugging Face
 // on first use); `search` and `find-similar` rank ingested concepts. The
 // binary runs with an argument list, never through a shell.
@@ -18,6 +19,76 @@ interface Run {
 
 type ExecFile = (file: string, args: string[], opts: { cwd?: string; timeout: number; maxBuffer: number }, cb: (err: (Error & { code?: number | string }) | null, stdout: string, stderr: string) => void) => void;
 
+/** What `findMifCli` needs from the machine. */
+export interface LookupEnv {
+  /** The PATH environment variable. */
+  path: string;
+  home: string;
+  windows: boolean;
+  /** Whether a path is an executable file. */
+  isExecutable: (file: string) => boolean;
+}
+
+/** The binary to run, or every folder searched without finding one. */
+export type CliLookup = { bin: string } | { searched: string[] };
+
+/**
+ * Resolve the mif-cli binary. A non-empty setting wins and is used as given,
+ * without consulting the machine.
+ * Otherwise the PATH entries are searched, then the usual install folders:
+ * Obsidian started from the macOS Dock or Finder gets launchd's minimal PATH,
+ * not the login shell's, so a cargo or Homebrew install would not be on it.
+ * The folders are listed rather than asking the login shell for its PATH,
+ * because that runs the user's shell startup files, takes hundreds of
+ * milliseconds, and is asynchronous, while `unavailable` must answer
+ * synchronously for command palette checks. Relative PATH entries are
+ * skipped: mif-cli runs with the vault as its working directory, so `.` would
+ * resolve inside the vault.
+ */
+export function findMifCli(setting: string, machine: () => LookupEnv): CliLookup {
+  const configured = setting.trim();
+  if (configured) return { bin: configured };
+  const env = machine();
+  const sep = env.windows ? "\\" : "/";
+  const absolute = env.windows ? /^(?:[A-Za-z]:)?[\\/]/ : /^\//;
+  const usual = env.windows
+    ? [env.home && `${env.home}\\.cargo\\bin`]
+    : [env.home && `${env.home}/.cargo/bin`, "/opt/homebrew/bin", "/usr/local/bin"];
+  const dirs = [...env.path.split(env.windows ? ";" : ":"), ...usual]
+    .map((d) => (d ?? "").replace(/[\\/]+$/, ""))
+    .filter((d, i, all) => d && absolute.test(d) && all.indexOf(d) === i);
+  const name = env.windows ? "mif-cli.exe" : "mif-cli";
+  for (const dir of dirs) {
+    const bin = `${dir}${sep}${name}`;
+    if (env.isExecutable(bin)) return { bin };
+  }
+  return { searched: dirs };
+}
+
+export const notFoundText = (searched: string[]) =>
+  `mif-cli was not found on PATH or in the usual install folders (looked in ${searched.join(", ") || "no folders"}). Set its path in Settings → MIF → mif-cli path.`;
+
+/** The real machine, through Electron's Node. Desktop only. */
+function systemEnv(): LookupEnv {
+  const fs = window.require("fs") as typeof import("fs");
+  const os = window.require("os") as typeof import("os");
+  const proc = window.require("process") as typeof import("process");
+  return {
+    path: proc.env.PATH ?? "",
+    home: os.homedir(),
+    windows: Platform.isWin,
+    isExecutable: (file) => {
+      try {
+        if (!fs.statSync(file).isFile()) return false;
+        if (!Platform.isWin) fs.accessSync(file, fs.constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
 export interface Hit extends ScoredId {
   /** Vault path of the concept, when it is in the vault. */
   path?: string;
@@ -25,13 +96,19 @@ export interface Hit extends ScoredId {
 }
 
 export class MifCli {
-  constructor(private readonly app: App, private readonly manager: MifManager, private readonly settings: () => MifSettings, private readonly exec?: ExecFile) {}
+  constructor(private readonly app: App, private readonly manager: MifManager, private readonly settings: () => MifSettings, private readonly exec?: ExecFile, private readonly env?: () => LookupEnv) {}
+
+  /** The binary to run; looked up on each call so a later install is found without a restart. */
+  lookup(): CliLookup {
+    return findMifCli(this.settings().mifCliPath, this.env ?? systemEnv);
+  }
 
   /** Why the bridge cannot run, or undefined when it can. */
   unavailable(): string | undefined {
     if (!this.exec && !Platform.isDesktopApp) return "The mif-cli bridge is desktop only.";
-    if (!this.settings().mifCliPath.trim()) return "Set the path to mif-cli in Settings → MIF.";
-    if (!(this.app.vault.adapter instanceof FileSystemAdapter) && !this.exec) return "The vault is not on the local file system.";
+    if (!this.exec && !(this.app.vault.adapter instanceof FileSystemAdapter)) return "The vault is not on the local file system.";
+    const found = this.lookup();
+    if ("searched" in found) return notFoundText(found.searched);
     return undefined;
   }
 
@@ -47,9 +124,10 @@ export class MifCli {
   }
 
   private run(args: string[]): Promise<Run> {
-    const bin = this.settings().mifCliPath.trim();
+    const found = this.lookup();
+    if ("searched" in found) return Promise.resolve({ code: -1, stdout: "", stderr: notFoundText(found.searched) });
     return new Promise((resolve) => {
-      this.execFile()(bin, ["--format", "json", ...args], { cwd: this.abs(""), timeout: 10 * 60_000, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
+      this.execFile()(found.bin, ["--format", "json", ...args], { cwd: this.abs(""), timeout: 10 * 60_000, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
         const code = err ? (typeof err.code === "number" ? err.code : -1) : 0;
         if (err && typeof err.code !== "number") stderr = `${stderr}\n${err.message}`;
         this.manager.debug("mif-cli", { args, code, stderr: stderr.slice(0, 300) });
