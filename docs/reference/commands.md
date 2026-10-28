@@ -2,7 +2,7 @@
 id: e83f6fe9-76b3-58e6-a111-48a712280afe
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:47:42Z
+modified: 2026-10-28T18:45:23Z
 namespace: _semantic/reference
 title: Commands
 tags:
@@ -96,7 +96,7 @@ fails if this list and the source disagree.
 | Reload bundle configuration | Re-read `.mif/config.yaml`, ontologies, and entities |
 | Rescan all bundles | Re-read every note (the bundle report's **Rescan**) |
 
-## mif-cli (desktop, when a path is set)
+## mif-cli (desktop, when mif-cli is found)
 
 | Command | What it does |
 |---|---|

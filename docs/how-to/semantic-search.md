@@ -2,7 +2,7 @@
 id: f069aae6-9344-56a7-9071-877176a455d6
 type: procedural
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:18:08Z
+modified: 2026-10-28T18:45:23Z
 namespace: _procedural/learning
 title: Search concepts by meaning with mif-cli
 tags:
@@ -32,9 +32,12 @@ Desktop only. Uses [mif-rs](https://github.com/modeled-information-format/mif-rs
 
 ## 1. Connect the binary
 
-1. Build or download `mif-cli` (`cargo build --release -p mif-cli` in mif-rs).
-2. **Settings → MIF → mif-cli path:** the absolute path to the binary, then
-   **Test** — a notice shows its version.
+1. Install `mif-cli` (`cargo install mif-cli`), or build it
+   (`cargo build --release -p mif-cli` in mif-rs).
+2. **Settings → MIF → mif-cli path:** leave it empty if `mif-cli` is on your
+   `PATH` or in `~/.cargo/bin`, `/opt/homebrew/bin`, or `/usr/local/bin`;
+   otherwise enter the absolute path to the binary. Then **Test** — a notice
+   shows its version and the binary it ran.
 
 ## 2. Ingest
 

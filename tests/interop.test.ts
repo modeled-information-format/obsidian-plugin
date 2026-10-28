@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("obsidian", () => import("./support/obsidian-stub"));
 
 import { MifApi } from "../src/api";
-import { MifCli } from "../src/cliBridge";
+import { findMifCli, MifCli, type LookupEnv } from "../src/cliBridge";
 import { embeddingReference, exportPath, graphOf, layout, parseIngest, parseProblem, parseScored, parseStats, serializeJsonLd, staleExports } from "../src/engine";
 import { MifManager } from "../src/manager";
 import { DEFAULT_SETTINGS } from "../src/settings";
@@ -156,10 +156,43 @@ describe("mif-cli output", () => {
   });
 });
 
+/** A machine where only `executables` exist. */
+function machine(executables: string[], path = "/usr/bin:/bin", windows = false): LookupEnv {
+  return { path, home: windows ? "C:\\Users\\me" : "/home/me", windows, isExecutable: (f) => executables.includes(f) };
+}
+
+describe("findMifCli", () => {
+  it("uses a set path as given, without looking for it", () => {
+    const looked = () => {
+      throw new Error("looked");
+    };
+    expect(findMifCli("  /opt/mif/mif-cli ", looked)).toEqual({ bin: "/opt/mif/mif-cli" });
+  });
+
+  it("prefers PATH, in order, to the usual install folders", () => {
+    const everywhere = ["/a/mif-cli", "/b/mif-cli", "/home/me/.cargo/bin/mif-cli", "/opt/homebrew/bin/mif-cli"];
+    expect(findMifCli("", () => machine(everywhere, "/b:/a"))).toEqual({ bin: "/b/mif-cli" });
+    expect(findMifCli("", () => machine(everywhere.slice(2), "/b:/a"))).toEqual({ bin: "/home/me/.cargo/bin/mif-cli" });
+    expect(findMifCli("", () => machine(["/opt/homebrew/bin/mif-cli", "/usr/local/bin/mif-cli"], "/usr/bin"))).toEqual({ bin: "/opt/homebrew/bin/mif-cli" });
+    expect(findMifCli("", () => machine(["/usr/local/bin/mif-cli"], ""))).toEqual({ bin: "/usr/local/bin/mif-cli" });
+  });
+
+  it("skips relative and empty PATH entries and searches each folder once", () => {
+    const r = findMifCli("", () => machine(["./mif-cli", "bin/mif-cli"], ".::bin:/usr/local/bin/:/usr/bin"));
+    expect(r).toEqual({ searched: ["/usr/local/bin", "/usr/bin", "/home/me/.cargo/bin", "/opt/homebrew/bin"] });
+  });
+
+  it("looks for mif-cli.exe on Windows", () => {
+    const env = machine(["C:\\Users\\me\\.cargo\\bin\\mif-cli.exe"], "C:\\Windows;relative", true);
+    expect(findMifCli("", () => env)).toEqual({ bin: "C:\\Users\\me\\.cargo\\bin\\mif-cli.exe" });
+    expect(findMifCli("", () => machine([], "C:\\Windows", true))).toEqual({ searched: ["C:\\Windows", "C:\\Users\\me\\.cargo\\bin"] });
+  });
+});
+
 describe("mif-cli bridge (fake executable)", () => {
   const files = { "cited.md": fixture("citations", "cited.md"), "uncited.md": fixture("citations", "uncited.md") };
 
-  async function bridge(answer: (args: string[]) => { code: number; stdout?: string; stderr?: string }, path = "/bin/mif-cli") {
+  async function bridge(answer: (args: string[]) => { code: number; stdout?: string; stderr?: string }, path = "/bin/mif-cli", env: LookupEnv = machine([])) {
     const { v, manager } = await vault(files);
     const calls: Array<{ file: string; args: string[] }> = [];
     const exec = (file: string, args: string[], _o: unknown, cb: (e: (Error & { code?: number }) | null, out: string, err: string) => void) => {
@@ -167,13 +200,24 @@ describe("mif-cli bridge (fake executable)", () => {
       const a = answer(args);
       cb(a.code ? Object.assign(new Error("exit"), { code: a.code }) : null, a.stdout ?? "", a.stderr ?? "");
     };
-    const cli = new MifCli(v.app as never, manager, () => ({ ...DEFAULT_SETTINGS, mifCliPath: path }), exec as never);
+    const cli = new MifCli(v.app as never, manager, () => ({ ...DEFAULT_SETTINGS, mifCliPath: path }), exec as never, () => env);
     return { v, manager, cli, calls };
   }
 
-  it("is off until a path is set", async () => {
-    const { cli } = await bridge(() => ({ code: 0 }), "");
-    expect(cli.unavailable()).toMatch(/Set the path/);
+  it("is off when the path is empty and mif-cli is nowhere, saying where it looked", async () => {
+    const { cli, calls } = await bridge(() => ({ code: 0 }), "", machine([], "/usr/bin:/bin"));
+    const why = cli.unavailable();
+    expect(why).toContain("/usr/bin, /bin, /home/me/.cargo/bin, /opt/homebrew/bin, /usr/local/bin");
+    expect(why).toMatch(/Set its path in Settings → MIF → mif-cli path/);
+    await expect(cli.version()).rejects.toThrow(/was not found/);
+    expect(calls).toEqual([]);
+  });
+
+  it("runs the mif-cli found on PATH when the path is empty", async () => {
+    const { cli, calls } = await bridge(() => ({ code: 0, stdout: "mif-cli 0.4.0\n" }), "", machine(["/home/me/.cargo/bin/mif-cli"]));
+    expect(cli.unavailable()).toBeUndefined();
+    expect(await cli.version()).toBe("mif-cli 0.4.0");
+    expect(calls[0]!.file).toBe("/home/me/.cargo/bin/mif-cli");
   });
 
   it("ingests with an argument list (no shell) into the bundle's store", async () => {

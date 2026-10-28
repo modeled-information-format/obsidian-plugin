@@ -723,9 +723,9 @@ class MifSettingTab extends PluginSettingTab {
       );
     const cliSetting = new Setting(containerEl)
       .setName("mif-cli path (desktop)")
-      .setDesc("Optional. Absolute path to mif-rs's mif-cli, for ingest, semantic search, and find-similar. Empty turns this off. On first ingest mif-cli downloads its embedding model (all-MiniLM-L6-v2) from Hugging Face.")
+      .setDesc("Optional. Absolute path to mif-rs's mif-cli, for ingest, semantic search, and find-similar. When empty, the plugin looks for mif-cli on the system search path, then in ~/.cargo/bin, /opt/homebrew/bin, and /usr/local/bin, and the mif-cli commands stay hidden until it is found. Test shows which binary is used. On first ingest mif-cli downloads its embedding model (all-MiniLM-L6-v2) from Hugging Face.")
       .addText((t) =>
-        t.setPlaceholder("/path/to/mif-cli").setValue(s.mifCliPath).onChange(async (v) => {
+        t.setPlaceholder("Empty: look it up").setValue(s.mifCliPath).onChange(async (v) => {
           s.mifCliPath = v.trim();
           await this.plugin.saveSettings();
         }),
@@ -738,7 +738,8 @@ class MifSettingTab extends PluginSettingTab {
             return;
           }
           try {
-            new Notice(`MIF: found ${await this.plugin.cli.version()}.`);
+            const found = this.plugin.cli.lookup();
+            new Notice(`MIF: found ${await this.plugin.cli.version()}${"bin" in found ? ` at ${found.bin}` : ""}.`);
           } catch (err) {
             new Notice(`MIF: mif-cli did not run — ${(err as Error).message}`, 10_000);
           }
