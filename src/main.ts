@@ -86,8 +86,13 @@ export default class MifPlugin extends Plugin {
       void this.manager.ensureOntologies();
       this.registerVaultEvents();
       this.refreshStatus();
-      // Learn the mif-cli version once, so its commands can say when it is too old.
-      if (Platform.isDesktopApp && "bin" in this.cli.lookup()) void this.cli.checkVersion();
+      // Learn the mif-cli version once, so its commands can say when it is too old;
+      // then catch up on what was added or changed while the plugin was not running.
+      if (Platform.isDesktopApp && "bin" in this.cli.lookup()) {
+        void this.cli.checkVersion().then(() => {
+          if (this.settings.backgroundIngest) return this.cli.reconcile();
+        });
+      }
     });
   }
 
@@ -127,13 +132,16 @@ export default class MifPlugin extends Plugin {
         if (file.path.endsWith(".mif/config.yaml")) return this.reloadBundles();
         const a = await this.manager.analyzeFile(file);
         this.manager.scheduleStamp(file);
-        // Sync mode keeps an existing vector store in step with the note; the note itself is not written.
-        if (this.settings.mode === "sync" && a?.isConcept) this.cli.scheduleIngest(file);
+        // Keeps an existing vector store in step with the note; the note itself is not written.
+        if (this.settings.backgroundIngest && a?.isConcept) this.cli.scheduleIngest(file);
       }),
     );
     this.registerEvent(
-      vault.on("create", (file) => {
-        if (file instanceof TFile) void this.manager.analyzeFile(file);
+      vault.on("create", async (file) => {
+        if (!(file instanceof TFile)) return;
+        const a = await this.manager.analyzeFile(file);
+        // A note that arrives whole (copied in, written by another tool) gets no later edit to trigger on.
+        if (this.settings.backgroundIngest && a?.isConcept) this.cli.scheduleIngest(file);
       }),
     );
     this.registerEvent(vault.on("delete", (file) => this.manager.forget(file.path)));
@@ -830,8 +838,18 @@ class MifSettingTab extends PluginSettingTab {
       );
     if (!Platform.isDesktopApp) cliSetting.setDisabled(true);
     new Setting(containerEl)
+      .setName("Background ingest")
+      .setDesc("Keep a bundle's existing vector store current: ingest a concept a few seconds after it is added or changed, and catch up when Obsidian starts. It updates the store only and never writes to a note. It does not start a store: ingest the bundle once first.")
+      .addToggle((t) =>
+        t.setValue(s.backgroundIngest).onChange(async (v) => {
+          s.backgroundIngest = v;
+          await this.plugin.saveSettings();
+          if (v) void this.plugin.cli.reconcile();
+        }),
+      );
+    new Setting(containerEl)
       .setName("Write the embedding reference into notes")
-      .setDesc("After an ingest you start, record the model, its version, the dimensions, and the vector's address in the note's `embedding` block. Off leaves notes untouched; the vector store is the same either way. Background ingest in Sync mode never writes it.")
+      .setDesc("After an ingest you start, record the model, its version, the dimensions, and the vector's address in the note's `embedding` block, once you have left the note. Off leaves notes untouched; the vector store is the same either way. Background ingest never writes it.")
       .addToggle((t) =>
         t.setValue(s.writeEmbeddingReference).onChange(async (v) => {
           s.writeEmbeddingReference = v;

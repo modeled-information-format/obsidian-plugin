@@ -200,6 +200,7 @@ export class ReportView extends ItemView {
       };
       flag(n("changed"), "changed since ingest");
       flag(n("never"), "never ingested");
+      flag(cli.refusals(root).length, "refused");
       flag(s.prunable.length, "to prune");
       flag(s.stats?.withoutText ?? 0, "need re-ingest for snippets");
       const actions = p.createSpan({ cls: "mif-row-actions" });

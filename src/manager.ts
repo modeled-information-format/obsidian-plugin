@@ -169,6 +169,8 @@ export class MifManager extends Events {
   private readonly stampTimers = new Map<string, number>();
   /** Files whose stamp waits until the user stops editing them (Sync mode). */
   private readonly pendingStamps = new Set<string>();
+  /** EmbeddingReferences waiting for their note to stop being edited, by path. */
+  private readonly pendingEmbeddings = new Map<string, Record<string, unknown>>();
   /** Text of each file the plugin last wrote, to ignore its own modify events. */
   private readonly ownWrites = new Map<string, string>();
   private indexTimer = 0;
@@ -499,6 +501,7 @@ export class MifManager extends Events {
   }
 
   forget(path: string): void {
+    this.pendingEmbeddings.delete(path);
     this.files.delete(path);
     this.rewrites.delete(path);
     this.dirty.delete(path);
@@ -913,12 +916,23 @@ export class MifManager extends Events {
         this.debug("stamp-error", { path, message: (err as Error).message });
       }
     }
+    for (const [path, embedding] of [...this.pendingEmbeddings]) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile && (await this.isBeingEdited(file))) continue;
+      this.pendingEmbeddings.delete(path);
+      if (file instanceof TFile) await this.writeEmbedding(file, embedding);
+    }
   }
 
   /** True while the note is the active editor, or an open editor holds text not yet saved to disk. */
   private async isBeingEdited(file: TFile): Promise<boolean> {
+    if (this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path) return true;
+    return this.hasUnsavedText(file);
+  }
+
+  /** True while an open editor holds text for the note that is not on disk yet. */
+  async hasUnsavedText(file: TFile): Promise<boolean> {
     const workspace = this.app.workspace;
-    if (workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path) return true;
     const buffers: string[] = [];
     workspace.iterateAllLeaves((leaf) => {
       const view = leaf.view;
@@ -967,6 +981,15 @@ export class MifManager extends Events {
    * bundle's store.
    */
   async recordEmbedding(file: TFile, embedding: Record<string, unknown>): Promise<boolean> {
+    // Like the stamp, this never lands in a note that is being edited: it waits until you leave it.
+    if (await this.isBeingEdited(file)) {
+      this.pendingEmbeddings.set(file.path, embedding);
+      return true;
+    }
+    return this.writeEmbedding(file, embedding);
+  }
+
+  private async writeEmbedding(file: TFile, embedding: Record<string, unknown>): Promise<boolean> {
     const ok = await this.write(file, (text) => updateFrontmatter(text, { embedding }), { background: true });
     if (ok) await this.analyzeFile(file);
     return ok;

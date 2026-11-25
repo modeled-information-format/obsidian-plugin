@@ -2,7 +2,7 @@
 id: a566da52-b775-5391-9701-f4efd7b5231e
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-11-25T18:26:34Z
+modified: 2026-11-25T18:53:07Z
 namespace: _semantic/reference
 title: Settings
 tags:
@@ -50,7 +50,7 @@ diataxis_type: reference
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Mode | `mode` | Observe | Observe validates and fixes on request; Sync also updates `modified`, the `## Relationships` mirror, and an existing `## Citations` section of a concept you edited, once you leave it (never while you are typing in it). With mif-cli and an existing vector store, Sync also ingests a concept a few seconds after it changes, without writing to the note |
+| Mode | `mode` | Observe | Observe validates and fixes on request; Sync also updates `modified`, the `## Relationships` mirror, and an existing `## Citations` section of a concept you edited, once you leave it (never while you are typing in it) |
 | Bundle roots | `bundleRoots` | the whole vault | Folders that are MIF bundles, one per line; an empty line is the vault root; a note belongs to the deepest matching root |
 | Excluded folders | `excludedFolders` | `_spike`, `templates` | Folders never treated as MIF |
 | Download ontologies from mif-spec.dev | `downloadOntologies` | on | Fetch declared ontologies (and their `extends`), verified by sha256, cached in the plugin folder; the trash button clears the cache |
@@ -61,7 +61,8 @@ diataxis_type: reference
 | Track access | `accessTracking` | off | Update `accessCount` / `lastAccessed` on open, at most hourly per note |
 | JSON-LD export folder | `exportFolder` | `dist/jsonld` | Where JSON-LD exports go |
 | mif-cli path (desktop) | `mifCliPath` | empty (search) | Absolute path to mif-rs's `mif-cli` (0.13.0 or later), used as given. Empty: the first `mif-cli` found on `PATH`, then in `~/.cargo/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` (Windows: `mif-cli.exe` on `PATH`, then `~\.cargo\bin`); relative `PATH` entries are skipped. **Test** runs it and shows which binary |
-| Write the embedding reference into notes | `writeEmbeddingReference` | on | After an ingest you start, write the `embedding` block (model, version, dimensions, vector address) into the note. Off leaves notes untouched. Background ingest never writes it. Blocks already written are left as they are |
+| Background ingest | `backgroundIngest` | off | Desktop, with mif-cli and an existing vector store: ingest a concept a few seconds after it is added or changed, and catch up on everything new or changed when Obsidian starts. Updates the store only; never writes a note and never starts a store |
+| Write the embedding reference into notes | `writeEmbeddingReference` | on | After an ingest you start, write the `embedding` block (model, version, dimensions, vector address) into the note, once you have left it. Off leaves notes untouched. Background ingest never writes it. Blocks already written are left as they are |
 | Duplicate threshold | `duplicateThreshold` | 0.55 | Cosine similarity at or above which a new concept is reported as a likely duplicate |
 | Similar threshold | `similarThreshold` | 0.55 | Cosine similarity at or above which two unrelated concepts are a relationship gap |
 | Mislink threshold | `mislinkThreshold` | 0.1 | Cosine similarity at or below which a typed relationship is reported as a possible mislink |

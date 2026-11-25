@@ -140,6 +140,12 @@ export class MifCli {
   private readonly versions = new Map<string, [number, number, number] | null>();
   private readonly ledgers = new Map<string, Ledger>();
   private readonly timers = new Map<string, number>();
+  /** The last command queued for each store, so only one mif-cli touches a store at a time. */
+  private readonly queues = new Map<string, Promise<unknown>>();
+  /** Notes with a background ingest queued or running, by path. */
+  private readonly ingesting = new Set<string>();
+  /** Notes mif-cli refused on their last ingest, by bundle root then vault path. */
+  private readonly refused = new Map<string, Map<string, Problem>>();
   private readonly listeners = new Set<() => void>();
   /** Bumped whenever the store or the ledger changes, so views know to refresh. */
   revision = 0;
@@ -210,11 +216,27 @@ export class MifCli {
     });
   }
 
-  /** Run a command, refusing a binary older than the bridge supports. */
+  /**
+   * Run a command, refusing a binary older than the bridge supports.
+   * Commands against one store run one at a time, in the order asked: the
+   * store is a SQLite file with no busy timeout, so two mif-cli processes
+   * at once can fail with "database is locked".
+   */
   private async run(args: string[]): Promise<Run> {
     const why = await this.checkVersion();
     if (why) return { code: -1, stdout: "", stderr: why };
-    return this.spawn((this.lookup() as { bin: string }).bin, args);
+    const db = args.indexOf("--db-path");
+    const store = db === -1 ? "" : (args[db + 1] ?? "");
+    const next = (this.queues.get(store) ?? Promise.resolve()).then(() => {
+      const found = this.lookup();
+      return "bin" in found ? this.spawn(found.bin, args) : { code: -1, stdout: "", stderr: notFoundText(found.searched) };
+    });
+    const settled = next.catch(() => undefined);
+    this.queues.set(store, settled);
+    void settled.then(() => {
+      if (this.queues.get(store) === settled) this.queues.delete(store);
+    });
+    return next;
   }
 
   private fail(r: Run): Problem {
@@ -280,15 +302,37 @@ export class MifCli {
     return out;
   }
 
-  /** Note that `file` is in the store as it stands now; true when it was not in the ledger before. */
-  private async record(root: string, file: TFile, id: string): Promise<boolean> {
+  /** The hash of a note's content as the plugin last read it. */
+  private hashOf(file: TFile): string | undefined {
     const a = this.manager.get(file.path);
-    if (!a?.frontmatter) return false;
+    return a?.frontmatter ? conceptHash(a.frontmatter, a.body ?? "") : undefined;
+  }
+
+  /**
+   * Note that the store holds `file` with the content that hashed to `hash`.
+   * The hash is taken before mif-cli starts, never after: a note edited
+   * while mif-cli runs must still read as changed. True when the concept
+   * was not in the ledger before.
+   */
+  private async record(root: string, file: TFile, id: string, hash: string | undefined): Promise<boolean> {
+    if (!hash) return false;
     const ledger = await this.ledger(root);
     const key = idFromUrn(id).toLowerCase();
     const first = !ledger[key];
-    ledger[key] = { path: this.manager.toBundlePath(root, file.path), hash: conceptHash(a.frontmatter, a.body ?? ""), at: new Date().toISOString() };
+    ledger[key] = { path: this.manager.toBundlePath(root, file.path), hash, at: new Date().toISOString() };
     return first;
+  }
+
+  private refuse(root: string, path: string, problem: Problem | undefined): void {
+    const map = this.refused.get(root) ?? new Map<string, Problem>();
+    if (problem) map.set(path, problem);
+    else map.delete(path);
+    this.refused.set(root, map);
+  }
+
+  /** Notes of a bundle that mif-cli refused the last time they were ingested, with why. */
+  refusals(root: string): Array<{ path: string; problem: Problem }> {
+    return [...(this.refused.get(root) ?? [])].map(([path, problem]) => ({ path, problem })).sort((a, b) => a.path.localeCompare(b.path));
   }
 
   /** Which concepts of a bundle are ingested, changed since, or never ingested. */
@@ -305,24 +349,32 @@ export class MifCli {
   async ingest(file: TFile, opts: { background?: boolean } = {}): Promise<IngestResult | Problem> {
     const root = this.manager.rootFor(file.path);
     if (root === null) return { title: "Not in a MIF bundle" };
+    const hash = this.hashOf(file);
     const r = await this.run(["ingest", this.abs(file.path), "--db-path", this.abs(this.dbPath(root)), ...(opts.background ? ["--changed-only"] : [])]);
-    if (r.code !== 0) return this.fail(r);
+    if (r.code !== 0) {
+      const problem = this.fail(r);
+      // A refusal is about the note; a CLI that did not run is not.
+      if (r.code !== -1) this.refuse(root, file.path, problem);
+      this.changed();
+      return problem;
+    }
     const result = parseIngest(r.stdout);
     if (!result) return { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
-    await this.afterIngest(root, [[file, result]], !!opts.background);
+    this.refuse(root, file.path, undefined);
+    await this.afterIngest(root, [[file, result, hash]], !!opts.background);
     return result;
   }
 
   /** Record results in the note (when asked to) and the ledger, then warn about likely duplicates among new concepts. */
-  private async afterIngest(root: string, results: Array<[TFile, IngestResult]>, background: boolean): Promise<void> {
+  private async afterIngest(root: string, results: Array<[TFile, IngestResult, string | undefined]>, background: boolean): Promise<void> {
     const fresh: TFile[] = [];
-    for (const [file, result] of results) {
+    for (const [file, result, hash] of results) {
       if (!result.id || (!result.stored && !result.unchanged)) continue;
       // The store knows the vector; the concept records what it was embedded with.
       if (result.stored && result.embedding && !background && this.settings().writeEmbeddingReference) {
         await this.manager.recordEmbedding(file, embeddingReference(result.embedding, result.id));
       }
-      if ((await this.record(root, file, result.id)) && result.stored) fresh.push(file);
+      if ((await this.record(root, file, result.id, hash)) && result.stored) fresh.push(file);
     }
     await this.saveLedger(root);
     this.changed();
@@ -330,15 +382,19 @@ export class MifCli {
     if (fresh.length <= 3) for (const file of fresh) await this.warnIfDuplicate(file);
   }
 
-  /** Ingest every new or changed concept of a bundle in one run of the CLI per batch. */
-  async ingestBundle(root: string, progress?: (done: number, total: number) => void): Promise<BundleIngest> {
+  /**
+   * Ingest every new or changed concept of a bundle in one run of the CLI
+   * per batch. A background run never writes to a note.
+   */
+  async ingestBundle(root: string, progress?: (done: number, total: number) => void, opts: { background?: boolean } = {}): Promise<BundleIngest> {
     const files = this.manager.all().filter((a) => a.root === root && a.isConcept).map((a) => this.app.vault.getAbstractFileByPath(a.path)).filter((f): f is TFile => f instanceof TFile);
     const out: BundleIngest = { stored: 0, unchanged: 0, failed: [] };
-    const done: Array<[TFile, IngestResult]> = [];
+    const done: Array<[TFile, IngestResult, string | undefined]> = [];
     const BATCH = 40;
     for (let i = 0; i < files.length; i += BATCH) {
       const batch = files.slice(i, i + BATCH);
       const paths = batch.map((f) => this.abs(f.path));
+      const hashes = batch.map((f) => this.hashOf(f));
       const r = await this.run(["ingest", ...paths, "--db-path", this.abs(this.dbPath(root)), "--changed-only"]);
       const results = parseIngestBatch(r.stdout, r.stderr, paths);
       // With one file a refusal is the file's own problem document, not a stderr line.
@@ -349,39 +405,75 @@ export class MifCli {
           if (res.stored) out.stored++;
           else if (res.unchanged) out.unchanged++;
           else out.failed.push({ path: file.path, problem: { title: "Not stored" } });
-          done.push([file, res]);
-        } else out.failed.push({ path: file.path, problem: res });
+          done.push([file, res, hashes[n]]);
+          this.refuse(root, file.path, undefined);
+        } else {
+          out.failed.push({ path: file.path, problem: res });
+          if (r.code !== -1) this.refuse(root, file.path, res);
+        }
       });
       progress?.(Math.min(i + BATCH, files.length), files.length);
       if (r.code === -1) break;
     }
-    await this.afterIngest(root, done, false);
+    await this.afterIngest(root, done, !!opts.background);
     return out;
+  }
+
+  /**
+   * Bring every existing store up to date with its bundle: what was added
+   * or changed while the plugin was not running, or by another tool. Never
+   * starts a store and never writes a note.
+   */
+  async reconcile(): Promise<void> {
+    if (this.unavailable() || (await this.checkVersion())) return;
+    for (const root of this.manager.bundleRoots()) {
+      if (!(await this.hasStore(root))) continue;
+      const r = await this.ingestBundle(root, undefined, { background: true });
+      this.manager.debug("reconcile", { root, stored: r.stored, unchanged: r.unchanged, failed: r.failed.length });
+    }
   }
 
   /**
    * Ingest a concept a few seconds after its last change, into a store that
    * already exists (a first ingest downloads the model, so it stays a
-   * command). The store is updated and the note is left alone.
+   * command). The store is updated and the note is left alone. Requests for
+   * one note collapse: a new one restarts the wait, and while an ingest of
+   * the note is queued or running no second one starts.
    */
   scheduleIngest(file: TFile, delay = 5000): void {
     if (this.unavailable()) return;
     window.clearTimeout(this.timers.get(file.path));
     this.timers.set(file.path, window.setTimeout(() => {
       this.timers.delete(file.path);
-      void this.backgroundIngest(file);
+      void this.backgroundIngest(file, delay);
     }, delay));
   }
 
-  private async backgroundIngest(file: TFile): Promise<void> {
+  private async backgroundIngest(file: TFile, delay: number): Promise<void> {
     const root = this.manager.rootFor(file.path);
     const a = this.manager.get(file.path);
     if (root === null || !a?.isConcept || !a.frontmatter || typeof a.frontmatter.id !== "string") return;
-    if (!(await this.hasStore(root))) return;
-    const entry = (await this.ledger(root))[a.frontmatter.id.toLowerCase()];
-    if (entry?.hash === conceptHash(a.frontmatter, a.body ?? "")) return;
-    const r = await this.ingest(file, { background: true });
-    this.manager.debug("background-ingest", { path: file.path, result: "checks" in r ? (r.stored ? "stored" : "unchanged") : r.title });
+    // The running ingest checks for later changes when it ends, and asks again itself.
+    if (this.ingesting.has(file.path)) return;
+    this.ingesting.add(file.path);
+    let started: string | undefined;
+    try {
+      if (!(await this.hasStore(root))) return;
+      // mif-cli reads the file on disk: wait until an open editor has saved what it holds.
+      if (await this.manager.hasUnsavedText(file)) {
+        this.scheduleIngest(file, delay);
+        return;
+      }
+      started = this.hashOf(file);
+      const entry = (await this.ledger(root))[a.frontmatter.id.toLowerCase()];
+      if (entry?.hash === started) return;
+      const r = await this.ingest(file, { background: true });
+      this.manager.debug("background-ingest", { path: file.path, result: "checks" in r ? (r.stored ? "stored" : "unchanged") : r.title });
+    } finally {
+      this.ingesting.delete(file.path);
+    }
+    // Edited while mif-cli ran: the store holds the earlier text, so go again.
+    if (started !== undefined && this.hashOf(file) !== started) this.scheduleIngest(file, delay);
   }
 
   /** Stop pending background ingests (the plugin is unloading). */
