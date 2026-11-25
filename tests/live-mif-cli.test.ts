@@ -53,7 +53,8 @@ describe.skipIf(!BIN)("mif-cli bridge, live", () => {
     const { cli } = await setup();
     const r = await cli.ingestBundle("");
     expect(r.stored).toBe(3);
-    expect(r.failed.map((f) => [f.path, f.problem.status])).toEqual([["broken.md", 422]]);
+    expect(r.failed.map((f) => f.path)).toEqual(["broken.md"]);
+    expect(r.failed[0]!.problem.detail).toContain("failed schema validation");
     expect(await cli.stats("")).toMatchObject({ count: 3, dim: 384 });
   }, 300_000);
 
@@ -66,5 +67,27 @@ describe.skipIf(!BIN)("mif-cli bridge, live", () => {
     expect(list.every((h) => h.path && names.includes(h.path))).toBe(true);
     const similar = await cli.similar(v.files.get("cited.md") as never, 5);
     expect((similar as Array<{ path?: string }>).map((h) => h.path).sort()).toEqual(["long.md", "uncited.md"]);
+  }, 120_000);
+
+  it("returns the matching passage, filters by folder, and skips what is already stored", async () => {
+    const { v, cli } = await setup();
+    const hits = (await cli.search("", "rotate keys and verify each service", { limit: 3 })) as Array<{ path?: string; text?: string; cosine?: number; score: number }>;
+    expect(hits[0]).toMatchObject({ path: "long.md", text: expect.stringContaining("Rotate keys monthly") });
+    // Hybrid ranking: the score is a rank-fusion value, the cosine is the similarity.
+    expect(hits[0]!.score).toBeLessThan(0.04);
+    expect(hits[0]!.cosine).toBeGreaterThan(0.3);
+    expect(await cli.search("", "rotate keys", { folder: "nowhere" })).toEqual([]);
+    expect(await cli.ingest(v.files.get("cited.md") as never, { background: true })).toMatchObject({ unchanged: true, stored: false });
+    const again = await cli.ingestBundle("");
+    expect(again).toMatchObject({ stored: 0, unchanged: 3 });
+    expect(again.failed.map((f) => f.path)).toEqual(["broken.md"]);
+    expect(await cli.prunable("")).toEqual([]);
+    expect(await cli.stats("")).toMatchObject({ count: 3, withoutText: 0 });
+  }, 120_000);
+
+  it("reports relationship gaps from pairwise similarity", async () => {
+    const { cli } = await setup();
+    const r = await cli.gaps("");
+    expect(r).toMatchObject({ compared: 3 });
   }, 120_000);
 });

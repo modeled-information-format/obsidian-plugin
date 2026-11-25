@@ -192,10 +192,13 @@ describe("findMifCli", () => {
 describe("mif-cli bridge (fake executable)", () => {
   const files = { "cited.md": fixture("citations", "cited.md"), "uncited.md": fixture("citations", "uncited.md") };
 
-  async function bridge(answer: (args: string[]) => { code: number; stdout?: string; stderr?: string }, path = "/bin/mif-cli", env: LookupEnv = machine([])) {
+  // The bridge asks a binary for its version before its first command; `version` answers that
+  // (null hands the question to `answer`, and records it like any other call).
+  async function bridge(answer: (args: string[]) => { code: number; stdout?: string; stderr?: string }, path = "/bin/mif-cli", env: LookupEnv = machine([]), version: string | null = "mif-cli 0.13.0\n") {
     const { v, manager } = await vault(files);
     const calls: Array<{ file: string; args: string[] }> = [];
     const exec = (file: string, args: string[], _o: unknown, cb: (e: (Error & { code?: number }) | null, out: string, err: string) => void) => {
+      if (version !== null && args.includes("--version")) return cb(null, version, "");
       calls.push({ file, args });
       const a = answer(args);
       cb(a.code ? Object.assign(new Error("exit"), { code: a.code }) : null, a.stdout ?? "", a.stderr ?? "");
@@ -214,10 +217,19 @@ describe("mif-cli bridge (fake executable)", () => {
   });
 
   it("runs the mif-cli found on PATH when the path is empty", async () => {
-    const { cli, calls } = await bridge(() => ({ code: 0, stdout: "mif-cli 0.4.0\n" }), "", machine(["/home/me/.cargo/bin/mif-cli"]));
+    const { cli, calls } = await bridge(() => ({ code: 0, stdout: "mif-cli 0.13.0\n" }), "", machine(["/home/me/.cargo/bin/mif-cli"]), null);
     expect(cli.unavailable()).toBeUndefined();
-    expect(await cli.version()).toBe("mif-cli 0.4.0");
+    expect(await cli.version()).toBe("mif-cli 0.13.0");
     expect(calls[0]!.file).toBe("/home/me/.cargo/bin/mif-cli");
+  });
+
+  it("refuses a mif-cli older than 0.13.0, and says which version it found", async () => {
+    const { v, cli, calls } = await bridge(() => ({ code: 0, stdout: REAL.search }), "/bin/mif-cli", machine([]), "mif-cli 0.12.0\n");
+    // Nothing is known until the binary has been asked once.
+    expect(cli.unavailable()).toBeUndefined();
+    expect(await cli.ingest(v.files.get("cited.md") as never)).toMatchObject({ title: expect.stringMatching(/mif-cli 0\.12\.0 was found, and 0\.13\.0 or later is needed/) });
+    expect(cli.unavailable()).toMatch(/0\.13\.0 or later is needed/);
+    expect(calls).toEqual([]);
   });
 
   it("ingests with an argument list (no shell) into the bundle's store", async () => {
@@ -241,9 +253,9 @@ describe("mif-cli bridge (fake executable)", () => {
   it("maps search hits back to notes by id", async () => {
     const { v, cli } = await bridge(() => ({ code: 0, stdout: REAL.search }));
     (v.app.vault.adapter as { exists: (p: string) => Promise<boolean> }).exists = async (p) => p === ".mif/vectors.db";
-    expect(await cli.search("", "memory")).toEqual([
-      { score: 0.1052, id: "urn:mif:c0000000-0000-4000-8000-000000000001", path: "cited.md", title: "Cited fact" },
-      { score: 0.0499, id: "urn:mif:c0000000-0000-4000-8000-000000000003", path: "uncited.md", title: "Uncited" },
+    expect(await cli.similar(v.files.get("uncited.md") as never)).toEqual([
+      { score: 0.1052, cosine: 0.1052, id: "urn:mif:c0000000-0000-4000-8000-000000000001", path: "cited.md", title: "Cited fact" },
+      { score: 0.0499, cosine: 0.0499, id: "urn:mif:c0000000-0000-4000-8000-000000000003", path: "uncited.md", title: "Uncited" },
     ]);
   });
 });

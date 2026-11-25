@@ -2,7 +2,7 @@
 id: 75a481d5-5f49-5c27-be88-56b4025e8af8
 type: semantic
 created: 2026-10-07T23:48:49Z
-modified: 2026-10-28T18:45:23Z
+modified: 2026-11-25T18:26:34Z
 namespace: _semantic/reference
 title: MIF for Obsidian
 tags:
@@ -75,10 +75,10 @@ folder always work offline.
 
 The optional **mif-cli bridge** (desktop only, off until `mif-cli` is found
 on `PATH`, in a usual install folder, or at **Settings → MIF → mif-cli
-path**) runs mif-rs's `mif-cli` on your machine. The plugin
+path**) runs mif-rs's `mif-cli` (0.13.0 or later) on your machine. The plugin
 itself sends nothing; `mif-cli ingest` downloads its embedding model
 (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face the first time
-and caches it. Embeddings are stored in each bundle's `.mif/vectors.db`.
+and caches it. Embeddings are stored in each bundle's `.mif/vectors.db`, with a record of what the plugin ingested in `.mif/ingest-ledger.json`.
 
 ## Using MIF data elsewhere
 

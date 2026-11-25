@@ -948,6 +948,18 @@ export class MifManager extends Events {
     }, { background: true });
   }
 
+  /** The similarity thresholds from settings. */
+  similarity(): { duplicate: number; similar: number; mislink: number } {
+    const s = this.settings();
+    return { duplicate: s.duplicateThreshold, similar: s.similarThreshold, mislink: s.mislinkThreshold };
+  }
+
+  /** The title of the concept at a vault path, when it has one. */
+  titleAt(path: string): string | undefined {
+    const t = this.files.get(path)?.analysis.frontmatter?.title;
+    return typeof t === "string" && t.trim() ? t : undefined;
+  }
+
   /**
    * Record a successful ingest in the concept's frontmatter: the
    * EmbeddingReference `mif-cli` reported (model, version, dimensions,

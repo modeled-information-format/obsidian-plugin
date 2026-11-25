@@ -1,13 +1,20 @@
-// Optional bridge to mif-rs's `mif-cli` (desktop only; the binary comes from
-// the mif-cli path setting, else from PATH and the usual install folders, see
-// `findMifCli`). `ingest` embeds a concept into the bundle's
-// `.mif/vectors.db` (the CLI downloads its embedding model from Hugging Face
-// on first use); `search` and `find-similar` rank ingested concepts. The
-// binary runs with an argument list, never through a shell.
+// Optional bridge to mif-rs's `mif-cli` 0.13.0 or later (desktop only; the
+// binary comes from the mif-cli path setting, else from PATH and the usual
+// install folders, see `findMifCli`). `ingest` embeds a concept into the
+// bundle's `.mif/vectors.db` (the CLI downloads its embedding model from
+// Hugging Face on first use); `search` and `find-similar` rank ingested
+// concepts, and `prune` drops documents whose note is gone. What the plugin
+// ingested is recorded in `.mif/ingest-ledger.json`, since the CLI cannot
+// list its store. The binary runs with an argument list, never through a
+// shell.
 
-import { FileSystemAdapter, Modal, Notice, Platform, Setting, TFile, type App } from "obsidian";
+import { FileSystemAdapter, MarkdownView, Modal, Notice, Platform, Setting, TFile, type App } from "obsidian";
 
-import { embeddingReference, idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type IngestResult, type Problem, type ScoredId } from "./engine";
+import {
+  conceptHash, coverage, embeddingReference, idFromUrn, MIN_CLI_VERSION, pairKey, parseIngest, parseIngestBatch, parseMatches, parseProblem, parsePrune, parseScored,
+  parseStats, parseVersion, passageLine, relationshipGaps, snippet, versionAtLeast,
+  type Coverage, type GapPair, type IngestResult, type Ledger, type Match, type Problem, type StoreStats,
+} from "./engine";
 import type { MifManager } from "./manager";
 import type { MifSettings } from "./settings";
 
@@ -89,27 +96,96 @@ function systemEnv(): LookupEnv {
   };
 }
 
-export interface Hit extends ScoredId {
+export interface Hit extends Match {
   /** Vault path of the concept, when it is in the vault. */
   path?: string;
-  title?: string;
 }
 
+export interface SearchOptions {
+  limit?: number;
+  /** Only concepts whose `entity.entity_type` is exactly this. */
+  entityType?: string;
+  /** Only concepts in this vault folder or below it. */
+  folder?: string;
+  /** Rank by cosine similarity alone; the default is the CLI's hybrid ranking. */
+  semantic?: boolean;
+}
+
+export interface BundleIngest {
+  stored: number;
+  unchanged: number;
+  failed: Array<{ path: string; problem: Problem }>;
+}
+
+/** What the bundle report shows about a bundle's vector store. */
+export interface StoreStatus {
+  stats?: StoreStats;
+  /** Ids the store holds whose note is gone from the bundle. */
+  prunable: string[];
+  coverage: Coverage;
+}
+
+export interface GapReport {
+  unlinked: Array<GapPair & { aPath?: string; bPath?: string }>;
+  mislinks: Array<GapPair & { aPath?: string; bPath?: string }>;
+  /** Concepts compared (those the store holds). */
+  compared: number;
+}
+
+const LEDGER_FILE = ".mif/ingest-ledger.json";
+const versionText = (v: [number, number, number]) => v.join(".");
+
 export class MifCli {
+  /** Version reported by each binary that has been run, by path. */
+  private readonly versions = new Map<string, [number, number, number] | null>();
+  private readonly ledgers = new Map<string, Ledger>();
+  private readonly timers = new Map<string, number>();
+  private readonly listeners = new Set<() => void>();
+  /** Bumped whenever the store or the ledger changes, so views know to refresh. */
+  revision = 0;
+
   constructor(private readonly app: App, private readonly manager: MifManager, private readonly settings: () => MifSettings, private readonly exec?: ExecFile, private readonly env?: () => LookupEnv) {}
+
+  /** Call `fn` whenever the store or ledger changes; returns the unsubscribe. */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private changed(): void {
+    this.revision++;
+    for (const fn of this.listeners) fn();
+  }
 
   /** The binary to run; looked up on each call so a later install is found without a restart. */
   lookup(): CliLookup {
     return findMifCli(this.settings().mifCliPath, this.env ?? systemEnv);
   }
 
-  /** Why the bridge cannot run, or undefined when it can. */
+  /** Why the bridge cannot run, or undefined when it can (or its version is not known yet). */
   unavailable(): string | undefined {
     if (!this.exec && !Platform.isDesktopApp) return "The mif-cli bridge is desktop only.";
     if (!this.exec && !(this.app.vault.adapter instanceof FileSystemAdapter)) return "The vault is not on the local file system.";
     const found = this.lookup();
     if ("searched" in found) return notFoundText(found.searched);
-    return undefined;
+    return this.tooOld(this.versions.get(found.bin));
+  }
+
+  private tooOld(v: [number, number, number] | null | undefined): string | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return "mif-cli did not report its version.";
+    return versionAtLeast(v) ? undefined : `mif-cli ${versionText(v)} was found, and ${versionText(MIN_CLI_VERSION)} or later is needed. Update it (cargo install mif-cli).`;
+  }
+
+  /** Run `--version` once per binary; resolves to why the bridge cannot be used, or undefined. */
+  async checkVersion(): Promise<string | undefined> {
+    const found = this.lookup();
+    if ("searched" in found) return notFoundText(found.searched);
+    if (!this.versions.has(found.bin)) {
+      const r = await this.spawn(found.bin, ["--version"]);
+      this.versions.set(found.bin, r.code === 0 ? (parseVersion(r.stdout) ?? null) : null);
+    }
+    return this.tooOld(this.versions.get(found.bin));
   }
 
   private execFile(): ExecFile {
@@ -123,11 +199,9 @@ export class MifCli {
     return typeof adapter.getFullPath === "function" ? adapter.getFullPath(vaultPath) : vaultPath;
   }
 
-  private run(args: string[]): Promise<Run> {
-    const found = this.lookup();
-    if ("searched" in found) return Promise.resolve({ code: -1, stdout: "", stderr: notFoundText(found.searched) });
+  private spawn(bin: string, args: string[]): Promise<Run> {
     return new Promise((resolve) => {
-      this.execFile()(found.bin, ["--format", "json", ...args], { cwd: this.abs(""), timeout: 10 * 60_000, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
+      this.execFile()(bin, ["--format", "json", ...args], { cwd: this.abs(""), timeout: 10 * 60_000, maxBuffer: 16 << 20 }, (err, stdout, stderr) => {
         const code = err ? (typeof err.code === "number" ? err.code : -1) : 0;
         if (err && typeof err.code !== "number") stderr = `${stderr}\n${err.message}`;
         this.manager.debug("mif-cli", { args, code, stderr: stderr.slice(0, 300) });
@@ -136,61 +210,250 @@ export class MifCli {
     });
   }
 
+  /** Run a command, refusing a binary older than the bridge supports. */
+  private async run(args: string[]): Promise<Run> {
+    const why = await this.checkVersion();
+    if (why) return { code: -1, stdout: "", stderr: why };
+    return this.spawn((this.lookup() as { bin: string }).bin, args);
+  }
+
+  private fail(r: Run): Problem {
+    return parseProblem(r.stderr) ?? { title: r.code === -1 ? r.stderr.trim() || "mif-cli did not run" : `mif-cli exited ${r.code}`, ...(r.code === -1 ? {} : { detail: r.stderr.trim().slice(0, 300) }) };
+  }
+
   private dbPath(root: string): string {
     return `${root ? `${root}/` : ""}.mif/vectors.db`;
   }
 
   async version(): Promise<string> {
-    const r = await this.run(["--version"]);
+    const found = this.lookup();
+    if ("searched" in found) throw new Error(notFoundText(found.searched));
+    const r = await this.spawn(found.bin, ["--version"]);
     if (r.code !== 0) throw new Error(problemText(parseProblem(r.stderr)) ?? (r.stderr.trim() || `exit ${r.code}`));
+    this.versions.set(found.bin, parseVersion(r.stdout) ?? null);
     return r.stdout.trim();
   }
 
-  /** Embed one concept into its bundle's vector store. */
-  async ingest(file: TFile): Promise<IngestResult | Problem> {
+  // --- ledger ---------------------------------------------------------------------
+
+  private ledgerPath(root: string): string {
+    return `${root ? `${root}/` : ""}${LEDGER_FILE}`;
+  }
+
+  /** What the plugin has ingested into a bundle's store, by lower-case concept id. */
+  async ledger(root: string): Promise<Ledger> {
+    const cached = this.ledgers.get(root);
+    if (cached) return cached;
+    let ledger: Ledger = {};
+    try {
+      const adapter = this.app.vault.adapter;
+      if (await adapter.exists(this.ledgerPath(root))) {
+        const doc = JSON.parse(await adapter.read(this.ledgerPath(root))) as { entries?: Ledger };
+        if (doc.entries && typeof doc.entries === "object") ledger = doc.entries;
+      }
+    } catch (err) {
+      this.manager.debug("ledger-read-error", { root, message: (err as Error).message });
+    }
+    this.ledgers.set(root, ledger);
+    return ledger;
+  }
+
+  private async saveLedger(root: string): Promise<void> {
+    const adapter = this.app.vault.adapter as { write?: (p: string, d: string) => Promise<void>; mkdir?: (p: string) => Promise<void>; exists: (p: string) => Promise<boolean> };
+    try {
+      const dir = this.ledgerPath(root).slice(0, -"/ingest-ledger.json".length);
+      if (!(await adapter.exists(dir))) await adapter.mkdir?.(dir);
+      await adapter.write?.(this.ledgerPath(root), `${JSON.stringify({ version: 1, entries: this.ledgers.get(root) ?? {} }, null, 1)}\n`);
+    } catch (err) {
+      this.manager.debug("ledger-write-error", { root, message: (err as Error).message });
+    }
+  }
+
+  /** The bundle's concepts as (id, bundle path, content hash). */
+  private concepts(root: string): Array<{ id: string; path: string; hash: string }> {
+    const index = this.manager.bundleInfo(root)?.index;
+    if (!index) return [];
+    const out: Array<{ id: string; path: string; hash: string }> = [];
+    for (const c of index.concepts.values()) {
+      if (typeof c.frontmatter.id === "string") out.push({ id: c.frontmatter.id, path: c.path, hash: conceptHash(c.frontmatter, c.body) });
+    }
+    return out;
+  }
+
+  /** Note that `file` is in the store as it stands now; true when it was not in the ledger before. */
+  private async record(root: string, file: TFile, id: string): Promise<boolean> {
+    const a = this.manager.get(file.path);
+    if (!a?.frontmatter) return false;
+    const ledger = await this.ledger(root);
+    const key = idFromUrn(id).toLowerCase();
+    const first = !ledger[key];
+    ledger[key] = { path: this.manager.toBundlePath(root, file.path), hash: conceptHash(a.frontmatter, a.body ?? ""), at: new Date().toISOString() };
+    return first;
+  }
+
+  /** Which concepts of a bundle are ingested, changed since, or never ingested. */
+  async coverage(root: string): Promise<Coverage> {
+    return coverage(this.concepts(root), await this.ledger(root));
+  }
+
+  // --- ingest ---------------------------------------------------------------------
+
+  /**
+   * Embed one concept into its bundle's vector store. A background ingest
+   * skips a document the store already holds and never writes to the note.
+   */
+  async ingest(file: TFile, opts: { background?: boolean } = {}): Promise<IngestResult | Problem> {
     const root = this.manager.rootFor(file.path);
     if (root === null) return { title: "Not in a MIF bundle" };
-    const r = await this.run(["ingest", this.abs(file.path), "--db-path", this.abs(this.dbPath(root))]);
-    if (r.code === 0) {
-      const result = parseIngest(r.stdout);
-      if (!result) return { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
-      // The store knows the vector; the concept records what it was embedded with.
-      if (result.stored && result.embedding && result.id) await this.manager.recordEmbedding(file, embeddingReference(result.embedding, result.id));
-      return result;
-    }
-    return parseProblem(r.stderr) ?? { title: `mif-cli exited ${r.code}`, detail: r.stderr.trim().slice(0, 300) };
+    const r = await this.run(["ingest", this.abs(file.path), "--db-path", this.abs(this.dbPath(root)), ...(opts.background ? ["--changed-only"] : [])]);
+    if (r.code !== 0) return this.fail(r);
+    const result = parseIngest(r.stdout);
+    if (!result) return { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
+    await this.afterIngest(root, [[file, result]], !!opts.background);
+    return result;
   }
 
-  /** Ingest every concept of a bundle; returns how many were stored and which failed. */
-  async ingestBundle(root: string, progress?: (done: number, total: number) => void): Promise<{ stored: number; failed: Array<{ path: string; problem: Problem }> }> {
-    const files = this.manager.all().filter((a) => a.root === root && a.isConcept).map((a) => this.app.vault.getAbstractFileByPath(a.path)).filter((f): f is TFile => f instanceof TFile);
-    let stored = 0;
-    const failed: Array<{ path: string; problem: Problem }> = [];
-    for (let i = 0; i < files.length; i++) {
-      const r = await this.ingest(files[i]!);
-      if ("checks" in r && r.stored) stored++;
-      else failed.push({ path: files[i]!.path, problem: "checks" in r ? { title: "Not stored" } : r });
-      progress?.(i + 1, files.length);
+  /** Record results in the note (when asked to) and the ledger, then warn about likely duplicates among new concepts. */
+  private async afterIngest(root: string, results: Array<[TFile, IngestResult]>, background: boolean): Promise<void> {
+    const fresh: TFile[] = [];
+    for (const [file, result] of results) {
+      if (!result.id || (!result.stored && !result.unchanged)) continue;
+      // The store knows the vector; the concept records what it was embedded with.
+      if (result.stored && result.embedding && !background && this.settings().writeEmbeddingReference) {
+        await this.manager.recordEmbedding(file, embeddingReference(result.embedding, result.id));
+      }
+      if ((await this.record(root, file, result.id)) && result.stored) fresh.push(file);
     }
-    return { stored, failed };
+    await this.saveLedger(root);
+    this.changed();
+    // A handful of new notes is someone writing; a whole bundle is a first ingest, not news.
+    if (fresh.length <= 3) for (const file of fresh) await this.warnIfDuplicate(file);
   }
+
+  /** Ingest every new or changed concept of a bundle in one run of the CLI per batch. */
+  async ingestBundle(root: string, progress?: (done: number, total: number) => void): Promise<BundleIngest> {
+    const files = this.manager.all().filter((a) => a.root === root && a.isConcept).map((a) => this.app.vault.getAbstractFileByPath(a.path)).filter((f): f is TFile => f instanceof TFile);
+    const out: BundleIngest = { stored: 0, unchanged: 0, failed: [] };
+    const done: Array<[TFile, IngestResult]> = [];
+    const BATCH = 40;
+    for (let i = 0; i < files.length; i += BATCH) {
+      const batch = files.slice(i, i + BATCH);
+      const paths = batch.map((f) => this.abs(f.path));
+      const r = await this.run(["ingest", ...paths, "--db-path", this.abs(this.dbPath(root)), "--changed-only"]);
+      const results = parseIngestBatch(r.stdout, r.stderr, paths);
+      // With one file a refusal is the file's own problem document, not a stderr line.
+      const whole = r.code !== 0 && results.size === 0 ? this.fail(r) : undefined;
+      batch.forEach((file, n) => {
+        const res = results.get(paths[n]!) ?? whole ?? { title: "No result from mif-cli" };
+        if ("checks" in res) {
+          if (res.stored) out.stored++;
+          else if (res.unchanged) out.unchanged++;
+          else out.failed.push({ path: file.path, problem: { title: "Not stored" } });
+          done.push([file, res]);
+        } else out.failed.push({ path: file.path, problem: res });
+      });
+      progress?.(Math.min(i + BATCH, files.length), files.length);
+      if (r.code === -1) break;
+    }
+    await this.afterIngest(root, done, false);
+    return out;
+  }
+
+  /**
+   * Ingest a concept a few seconds after its last change, into a store that
+   * already exists (a first ingest downloads the model, so it stays a
+   * command). The store is updated and the note is left alone.
+   */
+  scheduleIngest(file: TFile, delay = 5000): void {
+    if (this.unavailable()) return;
+    window.clearTimeout(this.timers.get(file.path));
+    this.timers.set(file.path, window.setTimeout(() => {
+      this.timers.delete(file.path);
+      void this.backgroundIngest(file);
+    }, delay));
+  }
+
+  private async backgroundIngest(file: TFile): Promise<void> {
+    const root = this.manager.rootFor(file.path);
+    const a = this.manager.get(file.path);
+    if (root === null || !a?.isConcept || !a.frontmatter || typeof a.frontmatter.id !== "string") return;
+    if (!(await this.hasStore(root))) return;
+    const entry = (await this.ledger(root))[a.frontmatter.id.toLowerCase()];
+    if (entry?.hash === conceptHash(a.frontmatter, a.body ?? "")) return;
+    const r = await this.ingest(file, { background: true });
+    this.manager.debug("background-ingest", { path: file.path, result: "checks" in r ? (r.stored ? "stored" : "unchanged") : r.title });
+  }
+
+  /** Stop pending background ingests (the plugin is unloading). */
+  dispose(): void {
+    for (const t of this.timers.values()) window.clearTimeout(t);
+    this.timers.clear();
+    this.listeners.clear();
+  }
+
+  // --- store ----------------------------------------------------------------------
 
   /** The store must exist: searching a missing one makes the CLI create an empty file. */
-  private async hasStore(root: string): Promise<boolean> {
+  async hasStore(root: string): Promise<boolean> {
     return this.app.vault.adapter.exists(this.dbPath(root));
   }
 
-  async stats(root: string): Promise<{ count: number; dim?: number } | undefined> {
+  async stats(root: string): Promise<StoreStats | undefined> {
     if (!(await this.hasStore(root))) return { count: 0 };
     const r = await this.run(["corpus-stats", "--db-path", this.abs(this.dbPath(root))]);
     return r.code === 0 ? parseStats(r.stdout) : undefined;
   }
 
-  async search(root: string, query: string, limit = 10): Promise<Hit[] | Problem> {
-    if (!(await this.hasStore(root))) return { title: "Nothing ingested yet", detail: "Run “Ingest bundle into the vector store” first." };
-    const r = await this.run(["search", query, "--db-path", this.abs(this.dbPath(root)), "--limit", String(limit)]);
-    if (r.code !== 0) return parseProblem(r.stderr) ?? { title: `mif-cli exited ${r.code}` };
-    return this.resolve(root, parseScored(r.stdout));
+  private pruneArgs(root: string): string[] {
+    // Excluded folders are never ingested, so a copy of a note there does not keep its document.
+    const ignore = this.settings().excludedFolders.flatMap((f) => {
+      const inside = root === "" ? f : f.startsWith(`${root}/`) ? f.slice(root.length + 1) : undefined;
+      return inside ? ["--ignore", inside.includes("/") ? `${inside}/**` : inside] : [];
+    });
+    return ["prune", "--root", this.abs(root), "--db-path", this.abs(this.dbPath(root)), ...ignore];
+  }
+
+  /** Ids the store holds that no note of the bundle carries; nothing is removed. */
+  async prunable(root: string): Promise<string[] | Problem> {
+    if (!(await this.hasStore(root))) return [];
+    const r = await this.run([...this.pruneArgs(root), "--dry-run"]);
+    return r.code === 0 ? parsePrune(r.stdout) : this.fail(r);
+  }
+
+  /** Remove from the store every document whose note is gone; returns the ids removed. */
+  async prune(root: string): Promise<string[] | Problem> {
+    if (!(await this.hasStore(root))) return [];
+    const r = await this.run(this.pruneArgs(root));
+    if (r.code !== 0) return this.fail(r);
+    const removed = parsePrune(r.stdout);
+    const ledger = await this.ledger(root);
+    for (const id of removed) delete ledger[idFromUrn(id).toLowerCase()];
+    await this.saveLedger(root);
+    this.changed();
+    return removed;
+  }
+
+  /** Store statistics, what could be pruned, and ledger coverage, for the bundle report. */
+  async status(root: string): Promise<StoreStatus> {
+    const prunable = await this.prunable(root);
+    return { stats: await this.stats(root), prunable: Array.isArray(prunable) ? prunable : [], coverage: await this.coverage(root) };
+  }
+
+  // --- search ---------------------------------------------------------------------
+
+  async search(root: string, query: string, options: SearchOptions | number = {}): Promise<Hit[] | Problem> {
+    const o = typeof options === "number" ? { limit: options } : options;
+    if (!(await this.hasStore(root))) return { title: "Nothing ingested yet", detail: "Run “Ingest this bundle into the vector store” first." };
+    const args = ["search", query, "--db-path", this.abs(this.dbPath(root)), "--limit", String(o.limit ?? 10)];
+    if (o.semantic) args.push("--mode", "semantic");
+    if (o.entityType) args.push("--entity-type", o.entityType);
+    const folder = o.folder === undefined ? undefined : this.manager.toBundlePath(root, o.folder).replace(/^\/+|\/+$/g, "");
+    if (folder) args.push("--source-prefix", `${folder}/`);
+    const r = await this.run(args);
+    if (r.code !== 0) return this.fail(r);
+    const matches = parseMatches(r.stdout);
+    if (!matches) return { title: "Unexpected mif-cli output", detail: r.stdout.slice(0, 200) };
+    return this.resolve(root, matches);
   }
 
   async similar(file: TFile, limit = 10): Promise<Hit[] | Problem> {
@@ -199,53 +462,155 @@ export class MifCli {
     if (root === null || typeof id !== "string") return { title: "Not a MIF concept" };
     if (!(await this.hasStore(root))) return { title: "Nothing ingested yet", detail: "Ingest this note or its bundle first." };
     const r = await this.run(["find-similar", `urn:mif:${id}`, "--db-path", this.abs(this.dbPath(root)), "--limit", String(limit)]);
-    if (r.code !== 0) return parseProblem(r.stderr) ?? { title: `mif-cli exited ${r.code}` };
-    return this.resolve(root, parseScored(r.stdout));
+    if (r.code !== 0) return this.fail(r);
+    // find-similar ranks by cosine similarity, so its score is one.
+    return this.resolve(root, parseScored(r.stdout).map((m) => ({ ...m, cosine: m.score })));
   }
 
-  private resolve(root: string, hits: ScoredId[]): Hit[] {
+  private resolve(root: string, hits: Match[]): Hit[] {
     const index = this.manager.bundleInfo(root)?.index;
     return hits.map((h) => {
       const bundlePath = index?.byId.get(idFromUrn(h.id).toLowerCase());
       const concept = bundlePath ? index!.concepts.get(bundlePath) : undefined;
-      return {
-        ...h,
-        path: bundlePath ? this.manager.toVaultPath(root, bundlePath) : undefined,
-        title: concept && typeof concept.frontmatter.title === "string" ? concept.frontmatter.title : undefined,
-      };
+      const title = concept && typeof concept.frontmatter.title === "string" ? concept.frontmatter.title : h.title;
+      return { ...h, ...(bundlePath ? { path: this.manager.toVaultPath(root, bundlePath) } : {}), ...(title ? { title } : {}) };
     });
+  }
+
+  /** Existing concepts whose best passage is at least as close to `text` as the duplicate threshold. */
+  async duplicatesOf(root: string, text: string): Promise<Hit[]> {
+    if (this.unavailable() || !text.trim() || !(await this.hasStore(root))) return [];
+    const hits = await this.search(root, text, { limit: 5, semantic: true });
+    return Array.isArray(hits) ? hits.filter((h) => (h.cosine ?? 0) >= this.settings().duplicateThreshold) : [];
+  }
+
+  /** After a concept's first ingest, say so when an existing concept is very similar. */
+  private async warnIfDuplicate(file: TFile): Promise<void> {
+    const hits = await this.similar(file, 3);
+    if (!Array.isArray(hits)) return;
+    const close = hits.filter((h) => (h.cosine ?? 0) >= this.settings().duplicateThreshold);
+    if (!close.length) return;
+    new Notice(`MIF: ${file.basename} may duplicate ${close.map((h) => `${h.title ?? h.path ?? h.id} (${(h.cosine ?? 0).toFixed(2)})`).join(", ")}.`, 12_000);
+  }
+
+  /**
+   * Compare every ingested concept of a bundle with every other (one
+   * `find-similar` per concept) and report pairs that look related but are
+   * not, and related pairs that look unalike.
+   */
+  async gaps(root: string, progress?: (done: number, total: number) => void): Promise<GapReport | Problem> {
+    const index = this.manager.bundleInfo(root)?.index;
+    if (!index) return { title: "Not a MIF bundle" };
+    if (!(await this.hasStore(root))) return { title: "Nothing ingested yet", detail: "Run “Ingest this bundle into the vector store” first." };
+    const stats = await this.stats(root);
+    if (!stats) return { title: "mif-cli could not read the vector store" };
+    const idOf = new Map<string, string>();
+    for (const [id, path] of index.byId) idOf.set(path, id);
+    const similar = new Map<string, Map<string, number>>();
+    const ids = [...index.concepts.values()].map((c) => c.frontmatter.id).filter((id): id is string => typeof id === "string");
+    for (let i = 0; i < ids.length; i++) {
+      const r = await this.run(["find-similar", `urn:mif:${ids[i]}`, "--db-path", this.abs(this.dbPath(root)), "--limit", String(Math.max(stats.count, 1))]);
+      // A concept that was never ingested has no row; that is the coverage view's business.
+      if (r.code === 0) similar.set(ids[i]!.toLowerCase(), new Map(parseScored(r.stdout).map((m) => [idFromUrn(m.id).toLowerCase(), m.score])));
+      else if (r.code === -1) return this.fail(r);
+      progress?.(i + 1, ids.length);
+    }
+    const related = new Set<string>();
+    for (const [from, edges] of index.outgoing) {
+      const a = idOf.get(from);
+      for (const e of edges) {
+        const b = e.resolved ? idOf.get(e.resolved) : undefined;
+        if (a && b && a !== b) related.add(pairKey(a, b));
+      }
+    }
+    const s = this.settings();
+    const { unlinked, mislinks } = relationshipGaps(similar, related, s.similarThreshold, s.mislinkThreshold);
+    const place = (p: GapPair) => {
+      const a = index.byId.get(p.a);
+      const b = index.byId.get(p.b);
+      return { ...p, ...(a ? { aPath: this.manager.toVaultPath(root, a) } : {}), ...(b ? { bPath: this.manager.toVaultPath(root, b) } : {}) };
+    };
+    // A pair with one side outside the bundle cannot be linked from here.
+    return { unlinked: unlinked.map(place).filter((p) => p.aPath && p.bPath), mislinks: mislinks.map(place), compared: similar.size };
   }
 }
 
 export const problemText = (p: Problem | undefined) => (p ? `${p.title}${p.detail ? `: ${p.detail}` : ""}` : undefined);
 
-/** Search box and ranked results (also used for "find similar"). */
+/** Open a hit's note at the passage that matched. */
+export async function openHit(app: App, hit: Hit): Promise<void> {
+  const f = hit.path ? app.vault.getAbstractFileByPath(hit.path) : null;
+  if (!(f instanceof TFile)) return;
+  const line = passageLine(await app.vault.cachedRead(f), hit.heading, hit.startLine);
+  const leaf = app.workspace.getLeaf(false);
+  await leaf.openFile(f, line === undefined ? undefined : { eState: { line } });
+  if (line !== undefined && leaf.view instanceof MarkdownView) {
+    const editor = leaf.view.editor;
+    editor.setCursor({ line, ch: 0 });
+    editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
+  }
+}
+
+/** What the search dialog can filter by, from the bundle's own concepts. */
+export interface SearchFilters {
+  entityTypes: string[];
+  folders: string[];
+}
+
+/** Search box with filters and ranked results (also used for "find similar"). */
 export class SearchModal extends Modal {
   private results?: HTMLElement;
+  private query = "";
+  private entityType = "";
+  private folder = "";
 
-  constructor(app: App, private readonly cli: MifCli, private readonly root: string, private readonly initial?: { title: string; hits: Hit[] | Problem }) {
+  constructor(app: App, private readonly cli: MifCli, private readonly root: string, private readonly initial?: { title: string; hits: Hit[] | Problem }, private readonly filters?: SearchFilters) {
     super(app);
   }
 
   override onOpen() {
     this.setTitle(this.initial?.title ?? "MIF semantic search");
     if (!this.initial) {
-      let query = "";
       new Setting(this.contentEl).setName("Query").addText((t) => {
-        t.setPlaceholder("What are you looking for?").onChange((v) => (query = v));
+        t.setPlaceholder("What are you looking for?").onChange((v) => (this.query = v));
         t.inputEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") void this.search(query);
+          if (e.key === "Enter") void this.search();
         });
-      }).addButton((b) => b.setButtonText("Search").setCta().onClick(() => void this.search(query)));
+        window.setTimeout(() => t.inputEl.focus(), 0);
+      }).addButton((b) => b.setButtonText("Search").setCta().onClick(() => void this.search()));
+      const f = this.filters;
+      if (f && (f.entityTypes.length || f.folders.length)) {
+        const row = new Setting(this.contentEl).setName("Only");
+        if (f.entityTypes.length) {
+          row.addDropdown((d) => {
+            d.addOption("", "Any entity type");
+            for (const t of f.entityTypes) d.addOption(t, t);
+            d.onChange((v) => {
+              this.entityType = v;
+              void this.search();
+            });
+          });
+        }
+        if (f.folders.length) {
+          row.addDropdown((d) => {
+            d.addOption("", "Any folder");
+            for (const p of f.folders) d.addOption(p, p);
+            d.onChange((v) => {
+              this.folder = v;
+              void this.search();
+            });
+          });
+        }
+      }
     }
     this.results = this.contentEl.createDiv({ cls: "mif-search-results" });
     if (this.initial) this.show(this.initial.hits);
   }
 
-  private async search(query: string) {
-    if (!query.trim() || !this.results) return;
+  private async search() {
+    if (!this.query.trim() || !this.results) return;
     this.results.setText("Searching…");
-    this.show(await this.cli.search(this.root, query));
+    this.show(await this.cli.search(this.root, this.query, { entityType: this.entityType || undefined, folder: this.folder || undefined }));
   }
 
   private show(hits: Hit[] | Problem) {
@@ -260,20 +625,25 @@ export class SearchModal extends Modal {
       return;
     }
     for (const h of hits) {
-      const row = el.createDiv({ cls: "mif-rel-row" });
-      row.createSpan({ cls: "mif-muted", text: h.score.toFixed(3) });
+      const item = el.createDiv({ cls: "mif-search-hit" });
+      const row = item.createDiv({ cls: "mif-rel-row" });
+      // Hybrid scores are rank-fusion values with no scale of their own; cosine is the readable one.
+      row.createSpan({ cls: "mif-muted", text: (h.cosine ?? h.score).toFixed(2) });
       if (h.path) {
         const a = row.createEl("a", { text: h.title ?? h.path, href: "#" });
         a.onclick = (e) => {
           e.preventDefault();
-          const f = this.app.vault.getAbstractFileByPath(h.path!);
-          if (f instanceof TFile) void this.app.workspace.getLeaf(false).openFile(f);
+          void openHit(this.app, h);
           this.close();
         };
       } else {
-        row.createSpan({ text: h.id });
+        row.createSpan({ text: h.title ?? h.id });
         row.createSpan({ cls: "mif-muted", text: " (not in this vault)" });
       }
+      if (h.heading) row.createSpan({ cls: "mif-search-heading", text: `› ${h.heading}` });
+      if (h.entityType) row.createSpan({ cls: "mif-muted", text: ` · ${h.entityType}` });
+      const text = snippet(h.text, h.title);
+      if (text) item.createDiv({ cls: "mif-search-snippet mif-muted", text });
     }
   }
 
@@ -284,6 +654,6 @@ export class SearchModal extends Modal {
 
 /** Notice for an ingest result. */
 export function ingestNotice(file: TFile, r: IngestResult | Problem): void {
-  if ("checks" in r) new Notice(r.stored ? `MIF: ${file.basename} ingested (${r.checks.embedding_dim ?? "?"}-dim embedding).` : `MIF: ${file.basename} was not stored.`);
+  if ("checks" in r) new Notice(r.stored ? `MIF: ${file.basename} ingested (${r.checks.embedding_dim ?? "?"}-dim embedding).` : r.unchanged ? `MIF: ${file.basename} is already in the vector store.` : `MIF: ${file.basename} was not stored.`);
   else new Notice(`MIF: ${file.basename} not ingested — ${problemText(r)}`, 10_000);
 }
