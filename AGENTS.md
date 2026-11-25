@@ -2,7 +2,7 @@
 id: 2211dd05-d9d0-5038-816c-d8134303bdc3
 type: procedural
 created: 2026-10-09T09:55:09Z
-modified: 2026-11-25T18:26:34Z
+modified: 2026-11-25T18:53:07Z
 namespace: _procedural/learning
 title: AGENTS.md
 tags:
@@ -71,9 +71,16 @@ tree.
   matches. It ingests notes into the bundle's vector store and, after a
   stored ingest the user started, writes an `EmbeddingReference` into the
   concept's `embedding` block when `writeEmbeddingReference` is on
-  (`embeddingReference`, `MifManager.recordEmbedding`). A background ingest
-  (Sync mode, `scheduleIngest`) updates the store only and never writes a
-  note.
+  (`embeddingReference`, `MifManager.recordEmbedding`), deferred like the
+  stamp until the note is no longer being edited. A background ingest (the
+  `backgroundIngest` setting: `scheduleIngest` on create and modify,
+  `reconcile` at startup) updates the store only and never writes a note.
+- Ingest must not race edits. Every mif-cli command against a store goes
+  through `MifCli.run`, which runs one at a time per store (SQLite, no busy
+  timeout). The ledger records the hash taken before mif-cli starts, never
+  after; a note that changed during the run is scheduled again. A
+  background ingest waits while an editor holds unsaved text
+  (`MifManager.hasUnsavedText`), and one note never has two in flight.
 - mif-cli cannot list its store, so the bridge records each ingest in the
   bundle's `.mif/ingest-ledger.json` (id, bundle path, `conceptHash`).
   Coverage, the stale counts, and the first-ingest duplicate warning read

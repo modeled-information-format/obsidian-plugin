@@ -2,7 +2,7 @@
 id: f069aae6-9344-56a7-9071-877176a455d6
 type: procedural
 created: 2026-10-08T15:18:08Z
-modified: 2026-11-25T18:26:34Z
+modified: 2026-11-25T18:53:07Z
 namespace: _procedural/learning
 title: Search concepts by meaning with mif-cli
 tags:
@@ -57,7 +57,8 @@ A stored ingest also writes an `embedding` block into the note's frontmatter,
 the MIF EmbeddingReference: `model`, `modelVersion` (the model's hub
 revision), `dimensions`, `normalized`, and `vectorUri: urn:mif:vector:<id>`,
 the vector's address in the store. The vector itself is not written to the
-note. To keep notes untouched, turn off **Settings → MIF → Write the
+note, and the block is written only once you have left the note, never
+while you are editing it. To keep notes untouched, turn off **Settings → MIF → Write the
 embedding reference into notes**; the store is the same either way, and
 blocks already written stay.
 
@@ -80,12 +81,20 @@ similarity of its best passage, from 0 to 1.
 
 ## 4. Keep the store current
 
-- In **Sync** mode, a concept is ingested a few seconds after you change it,
-  once the bundle has a vector store. This updates the store only: the note
-  is not written, whatever the embedding reference setting says. In Observe
-  mode nothing is ingested until you run a command.
+- Turn on **Settings → MIF → Background ingest**. A concept is then
+  ingested a few seconds after it is added or changed, and when Obsidian
+  starts the plugin ingests whatever was added or changed while it was not
+  running, including notes written by other tools. This updates the store
+  only: no note is written, whatever the embedding reference setting says.
+  It works in Observe and Sync mode alike, and only for a bundle that
+  already has a vector store, so ingest the bundle once first. With it off,
+  nothing is ingested until you run a command.
+- Background ingest waits for an open editor to save before it reads a
+  note, runs one `mif-cli` at a time against a store, and ingests a note
+  again if it changed while `mif-cli` was running.
 - **MIF: Open vector store coverage** lists concepts that were never
-  ingested and concepts that changed since they were. **Ingest new and
+  ingested, concepts that changed since they were, and notes `mif-cli`
+  refused on their last ingest, with the reason. **Ingest new and
   changed** brings the store up to date.
 - The **MIF bundle report** shows one line per vector store: documents
   stored, notes changed since ingest, notes never ingested, and stored

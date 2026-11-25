@@ -72,6 +72,7 @@ export class CoverageView extends ItemView {
     const count = (s: CoverageState) => cov.rows.filter((r) => r.state === s).length;
     el.createEl("p", { text: `${root || "Vault bundle"}: ${count("current")} up to date · ${count("changed")} changed since ingest · ${count("never")} never ingested` });
     el.createEl("p", { cls: "mif-muted", text: "This lists what the plugin ingested. A note ingested by another tool shows as never ingested until you ingest new and changed notes here: mif-cli skips what its store already holds." });
+    const refused = this.host.cli.refusals(root);
     const todo = cov.rows.filter((r) => r.state !== "current");
     const run = el.createEl("button", { cls: "mod-cta", text: this.busy ? "Ingesting…" : "Ingest new and changed" });
     run.disabled = this.busy || !cov.rows.length;
@@ -86,6 +87,19 @@ export class CoverageView extends ItemView {
         await this.render();
       }
     };
+    if (refused.length) {
+      el.createEl("h5", { text: `Refused by mif-cli (${refused.length})` });
+      for (const r of refused) {
+        const row = el.createDiv({ cls: "mif-rel-row mif-gap-row" });
+        const a = row.createEl("a", { text: this.host.manager.toBundlePath(root, r.path), href: "#" });
+        a.onclick = (e) => {
+          e.preventDefault();
+          const f = this.app.vault.getAbstractFileByPath(r.path);
+          if (f instanceof TFile) void openAtLine(this, f);
+        };
+        row.createSpan({ cls: "mif-error-text", text: (problemText(r.problem) ?? "").slice(0, 240) });
+      }
+    }
     if (!todo.length) {
       el.createEl("p", { cls: "mif-ok", text: cov.rows.length ? "Every concept is in the vector store as it stands." : "No concepts in this bundle." });
       return;

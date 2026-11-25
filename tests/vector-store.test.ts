@@ -124,7 +124,8 @@ describe("coverage and gaps", () => {
 
 type Answer = { code: number; stdout?: string; stderr?: string };
 
-async function bridge(answer: (args: string[]) => Answer, settings: Partial<MifSettings> = {}, extra: Record<string, string> = {}) {
+/** `hold` may return a promise that a command waits on before it answers, to keep mif-cli "running". */
+async function bridge(answer: (args: string[]) => Answer, settings: Partial<MifSettings> = {}, extra: Record<string, string> = {}, hold?: (args: string[]) => Promise<void> | undefined) {
   const v = memoryApp({ "cited.md": fixture("cited.md"), "uncited.md": fixture("uncited.md"), "long.md": fixture("long.md"), ...extra });
   const disk = new Map<string, string>([[".mif/vectors.db", "db"]]);
   Object.assign(v.app.vault.adapter, {
@@ -139,17 +140,30 @@ async function bridge(answer: (args: string[]) => Answer, settings: Partial<MifS
   await manager.scanAll();
   manager.rebuildIndexes();
   const calls: string[][] = [];
+  const finished: string[][] = [];
   const exec = (_file: string, args: string[], _o: unknown, cb: (e: (Error & { code?: number }) | null, out: string, err: string) => void) => {
     const a = args.slice(2);
     if (a[0] === "--version") return cb(null, "mif-cli 0.13.0\n", "");
     calls.push(a);
-    const r = answer(a);
-    cb(r.code ? Object.assign(new Error("exit"), { code: r.code }) : null, r.stdout ?? "", r.stderr ?? "");
+    const finish = () => {
+      finished.push(a);
+      const r = answer(a);
+      cb(r.code ? Object.assign(new Error("exit"), { code: r.code }) : null, r.stdout ?? "", r.stderr ?? "");
+    };
+    const wait = hold?.(a);
+    if (wait) void wait.then(finish);
+    else finish();
   };
   const cli = new MifCli(v.app as never, manager, () => live, exec as never, () => ({ path: "", home: "/h", windows: false, isExecutable: () => false }));
   const file = (p: string) => v.files.get(p) as never;
   const text = (p: string) => v.app.vault.read(v.files.get(p) as never) as Promise<string>;
-  return { v, manager, cli, calls, disk, file, text, live };
+  /** Change a note on disk as a saved edit does, and let the manager read it. */
+  const edit = async (p: string, add: string) => {
+    await v.app.vault.process(v.files.get(p) as never, (t: string) => `${t}\n${add}\n`);
+    await manager.analyzeFile(v.files.get(p) as never);
+    manager.rebuildIndexes();
+  };
+  return { v, manager, cli, calls, finished, disk, file, text, live, edit };
 }
 
 /** Answers ingest with a stored line per file, and find-similar with nothing close. */
@@ -266,6 +280,139 @@ describe("ingest, the embedding reference, and the ledger", () => {
     // Only the first ingest of a concept is news.
     await cli.ingest(file("cited.md"));
     expect(notices).toEqual([]);
+  });
+});
+
+describe("races between edits and ingestion", () => {
+  beforeEach(() => void (notices.length = 0));
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const gate = () => {
+    let open!: () => void;
+    const closed = new Promise<void>((r) => (open = r));
+    return { closed, open };
+  };
+  const state = async (cli: MifCli, path: string) => (await cli.coverage("")).rows.find((r) => r.path === path)!.state;
+
+  it("a note edited while mif-cli runs still reads as changed, and is ingested again", async () => {
+    const g = gate();
+    let held = false;
+    const { cli, file, calls, edit } = await bridge(storing, { writeEmbeddingReference: false }, {}, (a) => {
+      if (a[0] !== "ingest" || held) return undefined;
+      held = true;
+      return g.closed;
+    });
+    cli.scheduleIngest(file("uncited.md"), 10);
+    await wait(40);
+    expect(calls.filter((c) => c[0] === "ingest")).toHaveLength(1);
+    // mif-cli has read the note and is still embedding it when the note changes.
+    await edit("uncited.md", "Written while mif-cli was running.");
+    cli.scheduleIngest(file("uncited.md"), 10);
+    await wait(40);
+    // No second mif-cli for the same note while the first runs.
+    expect(calls.filter((c) => c[0] === "ingest")).toHaveLength(1);
+    g.open();
+    await wait(5);
+    // The ledger holds what was embedded, not what the note says now.
+    expect(await state(cli, "uncited.md")).toBe("changed");
+    await wait(80);
+    expect(calls.filter((c) => c[0] === "ingest")).toHaveLength(2);
+    expect(await state(cli, "uncited.md")).toBe("current");
+  });
+
+  it("a manual ingest records the content it started with", async () => {
+    const g = gate();
+    const { cli, file, edit } = await bridge(storing, { writeEmbeddingReference: false }, {}, (a) => (a[0] === "ingest" ? g.closed : undefined));
+    const running = cli.ingest(file("cited.md"));
+    await wait(10);
+    await edit("cited.md", "Added during the ingest.");
+    g.open();
+    await running;
+    expect(await state(cli, "cited.md")).toBe("changed");
+  });
+
+  it("runs one mif-cli at a time against a store, in the order asked", async () => {
+    const g = gate();
+    let held = false;
+    const { cli, file, calls, finished } = await bridge((a) => (a[0] === "search" ? { code: 0, stdout: REAL.search } : storing(a)), { writeEmbeddingReference: false }, {}, (a) => {
+      if (a[0] !== "ingest" || held) return undefined;
+      held = true;
+      return g.closed;
+    });
+    const first = cli.ingest(file("cited.md"));
+    const second = cli.ingest(file("uncited.md"));
+    const search = cli.search("", "rotate keys");
+    await wait(20);
+    // The first ingest is running; nothing else has been started.
+    expect(calls.map((c) => c[0])).toEqual(["ingest"]);
+    g.open();
+    await Promise.all([first, second, search]);
+    expect(finished.filter((c) => c[0] !== "find-similar").map((c) => `${c[0]} ${c[1]}`)).toEqual(["ingest cited.md", "ingest uncited.md", "search rotate keys"]);
+  });
+
+  it("a failed command does not block the ones queued behind it", async () => {
+    const { cli, file } = await bridge((a) => (a[1] === "cited.md" ? { code: 2, stderr: '{"title":"Document failed schema validation","status":422}' } : storing(a)), { writeEmbeddingReference: false });
+    const [bad, good] = await Promise.all([cli.ingest(file("cited.md")), cli.ingest(file("uncited.md"))]);
+    expect(bad).toMatchObject({ status: 422 });
+    expect(good).toMatchObject({ stored: true });
+  });
+
+  it("waits for an open editor to save before a background ingest reads the file", async () => {
+    const { v, cli, file, calls, text } = await bridge(storing);
+    const { MarkdownView } = await import("./support/obsidian-stub");
+    const ws = v.app.workspace as { views: unknown[] };
+    // An editor holds text that is not on disk yet.
+    ws.views = [new MarkdownView(v.files.get("cited.md") as never, "unsaved text")];
+    cli.scheduleIngest(file("cited.md"), 10);
+    await wait(60);
+    expect(calls).toEqual([]);
+    // Saved: the editor and the disk agree.
+    ws.views = [new MarkdownView(v.files.get("cited.md") as never, await text("cited.md"))];
+    await wait(60);
+    expect(calls.filter((c) => c[0] === "ingest")).toHaveLength(1);
+  });
+
+  it("writes the embedding reference only once the note is no longer being edited", async () => {
+    const { v, manager, cli, file, text } = await bridge(storing);
+    const { MarkdownView } = await import("./support/obsidian-stub");
+    const ws = v.app.workspace as { views: unknown[]; active: unknown };
+    const before = await text("cited.md");
+    ws.active = new MarkdownView(v.files.get("cited.md") as never, before);
+    ws.views = [ws.active];
+    expect(await cli.ingest(file("cited.md"))).toMatchObject({ stored: true });
+    // The note is the active editor: nothing is written into it.
+    expect(await text("cited.md")).toBe(before);
+    await manager.flushPendingStamps();
+    expect(await text("cited.md")).toBe(before);
+    // You moved to another note.
+    ws.active = null;
+    ws.views = [];
+    await manager.flushPendingStamps();
+    expect(await text("cited.md")).toContain("vectorUri: urn:mif:vector:c0000000-0000-4000-8000-000000000001");
+  });
+
+  it("catches up an existing store without writing notes, and starts none", async () => {
+    const { cli, calls, text, disk } = await bridge(storing);
+    const before = await text("cited.md");
+    await cli.reconcile();
+    const ingests = calls.filter((c) => c[0] === "ingest");
+    expect(ingests).toHaveLength(1);
+    expect(ingests[0]!.at(-1)).toBe("--changed-only");
+    expect(await text("cited.md")).toBe(before);
+    expect(await state(cli, "long.md")).toBe("current");
+    calls.length = 0;
+    disk.delete(".mif/vectors.db");
+    await cli.reconcile();
+    expect(calls).toEqual([]);
+  });
+
+  it("lists the notes mif-cli refused until they are ingested", async () => {
+    let fixed = false;
+    const { cli, file } = await bridge((a) => (a[0] === "ingest" && !fixed ? { code: 2, stderr: '{"title":"Document failed schema validation","status":422}' } : storing(a)), { writeEmbeddingReference: false });
+    await cli.ingest(file("cited.md"), { background: true });
+    expect(cli.refusals("")).toEqual([{ path: "cited.md", problem: expect.objectContaining({ status: 422 }) }]);
+    fixed = true;
+    await cli.ingest(file("cited.md"), { background: true });
+    expect(cli.refusals("")).toEqual([]);
   });
 });
 

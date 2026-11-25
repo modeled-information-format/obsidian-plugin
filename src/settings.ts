@@ -24,6 +24,8 @@ export interface MifSettings {
   exportFolder: string;
   /** Desktop only: absolute path to mif-rs's `mif-cli`; empty turns the bridge off. */
   mifCliPath: string;
+  /** Desktop only: keep an existing vector store current as concepts are added and changed (never writes a note). */
+  backgroundIngest: boolean;
   /** After a stored ingest you start, write the EmbeddingReference into the note's frontmatter. */
   writeEmbeddingReference: boolean;
   /** Cosine similarity at or above which a new concept is reported as a likely duplicate. */
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: MifSettings = {
   explorerBadges: true,
   exportFolder: "dist/jsonld",
   mifCliPath: "",
+  backgroundIngest: false,
   writeEmbeddingReference: true,
   duplicateThreshold: 0.55,
   similarThreshold: 0.55,
