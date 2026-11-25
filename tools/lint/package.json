@@ -11,6 +11,16 @@
     "typescript-eslint": "8.71.1"
   },
   "overrides": {
-    "moment": "2.31.0"
+    "moment": "2.31.0",
+    "fast-uri": "3.1.9",
+    "eslint-plugin-n": {
+      "minimatch": "11.0.1"
+    },
+    "eslint-plugin-json-schema-validator": {
+      "minimatch": "11.0.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    }
   }
 }
