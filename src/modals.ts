@@ -36,6 +36,8 @@ export class NewConceptModal extends Modal {
     private readonly root: string,
     private readonly onSubmit: (input: NewConceptInput) => Promise<void>,
     private readonly hints?: OntologyHints,
+    /** Existing concepts that look like the typed title, for the duplicate warning. */
+    private readonly similar?: (title: string) => Promise<Array<{ title: string; path?: string; cosine: number }>>,
   ) {
     super(app);
     this.input = { type: "semantic", title: "", namespace: "", folder: this.defaultFolder("semantic") };
@@ -60,13 +62,35 @@ export class NewConceptModal extends Modal {
         }
       });
     });
+    let dupTimer = 0;
+    let dupEl: HTMLElement | undefined;
+    const checkDuplicates = () => {
+      window.clearTimeout(dupTimer);
+      if (!this.similar) return;
+      const similar = this.similar;
+      const check = async () => {
+        const title = this.input.title;
+        const found = title.length >= 4 ? await similar(title).catch(() => []) : [];
+        // The answer to an earlier keystroke is stale.
+        if (title !== this.input.title || !dupEl) return;
+        dupEl.empty();
+        if (!found.length) return;
+        dupEl.createEl("p", { cls: "mif-warning-text", text: "Similar concepts already exist:" });
+        for (const f of found) dupEl.createEl("p", { cls: "mif-muted", text: `${f.cosine.toFixed(2)}  ${f.title}${f.path ? ` — ${f.path}` : ""}` });
+      };
+      dupTimer = window.setTimeout(() => void check(), 600);
+    };
     new Setting(this.contentEl).setName("Title").addText((t) => {
-      t.setPlaceholder("API rate limit policy").onChange((v) => (this.input.title = v.trim()));
+      t.setPlaceholder("API rate limit policy").onChange((v) => {
+        this.input.title = v.trim();
+        checkDuplicates();
+      });
       window.setTimeout(() => t.inputEl.focus(), 0);
       t.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") void this.submit();
       });
     });
+    dupEl = this.contentEl.createDiv({ cls: "mif-duplicates" });
     // Suggestions come from a <datalist> refreshed when type or ontology changes.
     const nsList = this.contentEl.createEl("datalist", { attr: { id: "mif-ns-suggestions" } });
     let typeSelect: { selectEl: HTMLSelectElement } | undefined;

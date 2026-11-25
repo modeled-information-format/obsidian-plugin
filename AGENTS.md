@@ -2,7 +2,7 @@
 id: 2211dd05-d9d0-5038-816c-d8134303bdc3
 type: procedural
 created: 2026-10-09T09:55:09Z
-modified: 2026-10-12T13:12:00Z
+modified: 2026-11-25T18:26:34Z
 namespace: _procedural/learning
 title: AGENTS.md
 tags:
@@ -66,11 +66,19 @@ tree.
   lists those the manager performs against the vault.
 - `src/engine/generated/` is built by `npm run validators` from `schemas/`.
   It is gitignored; never edit it by hand.
-- The desktop-only mif-cli bridge (`src/cliBridge.ts`) ingests notes into
-  the bundle's vector store and, after a stored ingest, writes an
-  `EmbeddingReference` into the concept's `embedding` block
-  (`embeddingReference`, `MifManager.recordEmbedding`). A mif-cli that
-  reports no model leaves the block unwritten.
+- The desktop-only mif-cli bridge (`src/cliBridge.ts`) needs mif-cli 0.13.0
+  or later (`MIN_CLI_VERSION`) and parses its `search --format json`
+  matches. It ingests notes into the bundle's vector store and, after a
+  stored ingest the user started, writes an `EmbeddingReference` into the
+  concept's `embedding` block when `writeEmbeddingReference` is on
+  (`embeddingReference`, `MifManager.recordEmbedding`). A background ingest
+  (Sync mode, `scheduleIngest`) updates the store only and never writes a
+  note.
+- mif-cli cannot list its store, so the bridge records each ingest in the
+  bundle's `.mif/ingest-ledger.json` (id, bundle path, `conceptHash`).
+  Coverage, the stale counts, and the first-ingest duplicate warning read
+  the ledger; similarity thresholds compare `cosine`, never the hybrid
+  `score`.
 
 ## Where the spec is silent
 

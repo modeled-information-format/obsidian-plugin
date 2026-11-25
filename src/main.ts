@@ -18,7 +18,8 @@ import { addEntityReference, ENTITIES_VIEW, EntitiesView, ONTOLOGY_VIEW, Ontolog
 import { DIAGNOSTICS_VIEW, DiagnosticsView, REPORT_VIEW, ReportView } from "./views";
 import { MifApi } from "./api";
 import { registerMifBasesView } from "./basesView";
-import { ingestNotice, MifCli, SearchModal } from "./cliBridge";
+import { ingestNotice, MifCli, problemText, SearchModal, type SearchFilters } from "./cliBridge";
+import { COVERAGE_VIEW, CoverageView, GAPS_VIEW, GapsView } from "./storeViews";
 import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
 
@@ -58,8 +59,11 @@ export default class MifPlugin extends Plugin {
     view(FRESHNESS_VIEW, (leaf) => new FreshnessView(leaf, this));
     view(JSONLD_VIEW, (leaf) => new JsonLdView(leaf, this));
     view(GRAPH_VIEW, (leaf) => new GraphView(leaf, this));
+    view(COVERAGE_VIEW, (leaf) => new CoverageView(leaf, this));
+    view(GAPS_VIEW, (leaf) => new GapsView(leaf, this));
     this.api = new MifApi(this.manager);
     this.cli = new MifCli(this.app, this.manager, () => this.settings);
+    this.register(() => this.cli.dispose());
     // Bases (Obsidian 1.10+): a "MIF table" view with level, freshness, trust.
     registerMifBasesView(this, this.api, this.manager);
 
@@ -82,6 +86,8 @@ export default class MifPlugin extends Plugin {
       void this.manager.ensureOntologies();
       this.registerVaultEvents();
       this.refreshStatus();
+      // Learn the mif-cli version once, so its commands can say when it is too old.
+      if (Platform.isDesktopApp && "bin" in this.cli.lookup()) void this.cli.checkVersion();
     });
   }
 
@@ -119,8 +125,10 @@ export default class MifPlugin extends Plugin {
         if (!(file instanceof TFile)) return;
         void this.manager.noteActivity(file);
         if (file.path.endsWith(".mif/config.yaml")) return this.reloadBundles();
-        await this.manager.analyzeFile(file);
+        const a = await this.manager.analyzeFile(file);
         this.manager.scheduleStamp(file);
+        // Sync mode keeps an existing vector store in step with the note; the note itself is not written.
+        if (this.settings.mode === "sync" && a?.isConcept) this.cli.scheduleIngest(file);
       }),
     );
     this.registerEvent(
@@ -233,7 +241,9 @@ export default class MifPlugin extends Plugin {
           entityTypes: (ontology, type) =>
             corpus.has(ontology) ? [...visibleTypes(ontology, corpus).values()].filter((t) => t.base === type).map((t) => t.name).sort() : [],
         };
-        new NewConceptModal(this.app, root, (input) => this.createConcept(input), hints).open();
+        const similar = async (title: string) =>
+          (await this.cli.duplicatesOf(root, title)).map((h) => ({ title: h.title ?? h.path ?? h.id, path: h.path, cosine: h.cosine ?? 0 }));
+        new NewConceptModal(this.app, root, (input) => this.createConcept(input), hints, similar).open();
       },
     });
     this.addCommand({
@@ -391,7 +401,7 @@ export default class MifPlugin extends Plugin {
           const notice = new Notice("MIF: ingesting…", 0);
           const r = await this.cli.ingestBundle(root, (done, total) => notice.setMessage(`MIF: ingesting ${done} / ${total}…`));
           notice.hide();
-          new Notice(`MIF: ${r.stored} concepts ingested into ${root ? `${root}/` : ""}.mif/vectors.db${r.failed.length ? `; ${r.failed.length} refused (${r.failed.slice(0, 3).map((f) => `${f.path}: ${f.problem.title}`).join("; ")}${r.failed.length > 3 ? "; …" : ""})` : ""}.`, 12_000);
+          new Notice(`MIF: ${r.stored} concepts ingested into ${root ? `${root}/` : ""}.mif/vectors.db, ${r.unchanged} already current${r.failed.length ? `; ${r.failed.length} refused (${r.failed.slice(0, 3).map((f) => `${f.path}: ${problemText(f.problem)}`.slice(0, 160)).join("; ")}${r.failed.length > 3 ? "; …" : ""})` : ""}.`, 12_000);
         });
         return ok;
       },
@@ -403,7 +413,35 @@ export default class MifPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         const root = (file ? this.manager.rootFor(file.path) : null) ?? this.manager.bundleRoots()[0] ?? "";
         const ok = !this.cli.unavailable();
-        if (ok && !checking) new SearchModal(this.app, this.cli, root).open();
+        if (ok && !checking) new SearchModal(this.app, this.cli, root, undefined, this.searchFilters(root)).open();
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "cli-prune",
+      name: "Prune the vector store",
+      checkCallback: (checking) => {
+        const root = this.activeRoot();
+        const ok = root !== undefined && !this.cli.unavailable();
+        if (ok && !checking) withCli(() => this.pruneStore(root));
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "open-coverage",
+      name: "Open vector store coverage",
+      checkCallback: (checking) => {
+        const ok = !this.cli.unavailable();
+        if (ok && !checking) void this.revealView(COVERAGE_VIEW);
+        return ok;
+      },
+    });
+    this.addCommand({
+      id: "open-gaps",
+      name: "Open relationship gap report",
+      checkCallback: (checking) => {
+        const ok = !this.cli.unavailable();
+        if (ok && !checking) void this.revealView(GAPS_VIEW);
         return ok;
       },
     });
@@ -547,8 +585,51 @@ export default class MifPlugin extends Plugin {
     if (this.manager.rootFor(path) === null) new Notice(`MIF: ${path} is outside every MIF bundle, so it won't be validated.`);
   }
 
-  /** Open the add (index undefined) or edit dialog for a concept's relationship. */
-  editRelationship(file: TFile, index?: number): void {
+  /** The active note's bundle; otherwise (no note, or a .base / canvas open) the first bundle. */
+  private activeRoot(): string | undefined {
+    const file = this.app.workspace.getActiveFile();
+    return (file ? this.manager.rootFor(file.path) : null) ?? this.manager.bundleRoots()[0];
+  }
+
+  /** Entity types and folders the bundle's concepts use, for the search dialog's filters. */
+  private searchFilters(root: string): SearchFilters {
+    const types = new Set<string>();
+    const folders = new Set<string>();
+    for (const a of this.manager.all()) {
+      if (a.root !== root || !a.isConcept) continue;
+      const t = (a.frontmatter?.entity as { entity_type?: unknown } | undefined)?.entity_type;
+      if (typeof t === "string" && t) types.add(t);
+      const parts = a.path.split("/").slice(0, -1);
+      for (let i = 1; i <= parts.length; i++) {
+        const folder = parts.slice(0, i).join("/");
+        if (folder.length > root.length) folders.add(folder);
+      }
+    }
+    return { entityTypes: [...types].sort(), folders: [...folders].sort() };
+  }
+
+  /** List what a prune would remove from a bundle's store, and remove it once confirmed. */
+  async pruneStore(root: string): Promise<void> {
+    const ids = await this.cli.prunable(root);
+    if (!Array.isArray(ids)) {
+      new Notice(`MIF: ${problemText(ids)}`, 10_000);
+      return;
+    }
+    if (!ids.length) {
+      new Notice("MIF: nothing to prune. Every stored document still has its note.");
+      return;
+    }
+    new ConfirmModal(this.app, "Prune the vector store", [
+      `${ids.length} stored document${ids.length === 1 ? " has" : "s have"} no note in ${root || "the vault bundle"} any more. Pruning removes their vectors from .mif/vectors.db; no note is touched.`,
+      ids.slice(0, 8).join(", ") + (ids.length > 8 ? ", …" : ""),
+    ], "Prune", async () => {
+      const removed = await this.cli.prune(root);
+      new Notice(Array.isArray(removed) ? `MIF: pruned ${removed.length} document${removed.length === 1 ? "" : "s"} from the vector store.` : `MIF: ${problemText(removed)}`, 8000);
+    }).open();
+  }
+
+  /** Open the add (index undefined) or edit dialog for a concept's relationship; `targetVaultPath` preselects the target of a new one. */
+  editRelationship(file: TFile, index?: number, targetVaultPath?: string): void {
     const ctx = this.manager.indexFor(file.path);
     if (!ctx) return;
     const { index: bundleIndex, bundlePath, info } = ctx;
@@ -561,7 +642,7 @@ export default class MifPlugin extends Plugin {
           style: edge.target.startsWith("urn:") ? "id" : edge.target.startsWith("/") ? "path" : "relative",
           strength: edge.strength,
         }
-      : { type: "relates-to", style: "path" };
+      : { type: "relates-to", style: "path", ...(targetVaultPath ? { targetPath: this.manager.toBundlePath(info.root, targetVaultPath) } : {}) };
     const types = [...info.registry.types.values()];
     const concepts = [...bundleIndex.concepts.values()].sort((a, b) => a.path.localeCompare(b.path));
     new RelationshipModal(this.app, types, concepts, bundlePath, draft, async (type, target, strength) => {
@@ -723,28 +804,53 @@ class MifSettingTab extends PluginSettingTab {
       );
     const cliSetting = new Setting(containerEl)
       .setName("mif-cli path (desktop)")
-      .setDesc("Optional. Absolute path to mif-rs's mif-cli, for ingest, semantic search, and find-similar. Empty turns this off. On first ingest mif-cli downloads its embedding model (all-MiniLM-L6-v2) from Hugging Face.")
+      .setDesc("Optional. Absolute path to mif-rs's mif-cli, version 0.13.0 or later, for ingest, semantic search, find-similar, the coverage panel, and the gap report. When empty, the plugin looks for mif-cli on the system search path, then in ~/.cargo/bin, /opt/homebrew/bin, and /usr/local/bin, and the mif-cli commands stay hidden until it is found. Test shows which binary is used. On first ingest mif-cli downloads its embedding model (all-MiniLM-L6-v2) from Hugging Face.")
       .addText((t) =>
-        t.setPlaceholder("/path/to/mif-cli").setValue(s.mifCliPath).onChange(async (v) => {
+        t.setPlaceholder("Empty: look it up").setValue(s.mifCliPath).onChange(async (v) => {
           s.mifCliPath = v.trim();
           await this.plugin.saveSettings();
         }),
       )
       .addButton((b) =>
         b.setButtonText("Test").onClick(async () => {
-          const why = this.plugin.cli.unavailable();
-          if (why) {
-            new Notice(`MIF: ${why}`);
+          const found0 = this.plugin.cli.lookup();
+          if ("searched" in found0) {
+            new Notice(`MIF: ${this.plugin.cli.unavailable() ?? "mif-cli was not found."}`);
             return;
           }
           try {
-            new Notice(`MIF: found ${await this.plugin.cli.version()}.`);
+            const found = this.plugin.cli.lookup();
+            const version = await this.plugin.cli.version();
+            const old = this.plugin.cli.unavailable();
+            new Notice(`MIF: found ${version}${"bin" in found ? ` at ${found.bin}` : ""}.${old ? ` ${old}` : ""}`, old ? 10_000 : undefined);
           } catch (err) {
             new Notice(`MIF: mif-cli did not run — ${(err as Error).message}`, 10_000);
           }
         }),
       );
     if (!Platform.isDesktopApp) cliSetting.setDisabled(true);
+    new Setting(containerEl)
+      .setName("Write the embedding reference into notes")
+      .setDesc("After an ingest you start, record the model, its version, the dimensions, and the vector's address in the note's `embedding` block. Off leaves notes untouched; the vector store is the same either way. Background ingest in Sync mode never writes it.")
+      .addToggle((t) =>
+        t.setValue(s.writeEmbeddingReference).onChange(async (v) => {
+          s.writeEmbeddingReference = v;
+          await this.plugin.saveSettings();
+        }),
+      );
+    const threshold = (name: string, desc: string, key: "duplicateThreshold" | "similarThreshold" | "mislinkThreshold") =>
+      new Setting(containerEl).setName(name).setDesc(desc).addText((t) =>
+        t.setValue(String(s[key])).onChange(async (v) => {
+          const n = Number(v);
+          if (v.trim() !== "" && n >= 0 && n <= 1) {
+            s[key] = n;
+            await this.plugin.saveSettings();
+          }
+        }),
+      );
+    threshold("Duplicate threshold", "Cosine similarity, 0 to 1, at or above which a new concept is reported as a likely duplicate of an existing one.", "duplicateThreshold");
+    threshold("Similar threshold", "Cosine similarity at or above which two concepts with no typed relationship appear in the relationship gap report and the related panel offers to link them.", "similarThreshold");
+    threshold("Mislink threshold", "Cosine similarity at or below which a typed relationship appears in the gap report as a possible mislink.", "mislinkThreshold");
 
     new Setting(containerEl)
       .setName("Developer commands")

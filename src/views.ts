@@ -3,6 +3,7 @@
 import { ItemView, MarkdownView, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 
 import { TRUST_LEVELS, trustOf, type Diagnostic, type Level, type Severity } from "./engine";
+import type { MifCli, StoreStatus } from "./cliBridge";
 import type { FileAnalysis, MifManager } from "./manager";
 
 export const DIAGNOSTICS_VIEW = "mif-diagnostics";
@@ -12,7 +13,11 @@ const SEVERITY_ICON: Record<Severity, string> = { error: "x-circle", warning: "a
 
 export interface ViewHost {
   manager: MifManager;
+  cli: MifCli;
   convertActive(): void;
+  /** Confirm and prune a bundle's vector store. */
+  pruneStore(root: string): Promise<void>;
+  revealView(type: string): Promise<void>;
 }
 
 /** Open a file and put the cursor on a 0-based line. */
@@ -149,17 +154,74 @@ export class ReportView extends ItemView {
         timer = window.setTimeout(() => this.renderTable(), 250);
       }),
     );
+    this.register(this.host.cli.onChange(() => void this.renderStore()));
     this.renderShell();
   }
 
   private tableEl?: HTMLElement;
   private summaryEl?: HTMLElement;
+  private storeEl?: HTMLElement;
+  /** Store status per bundle root, as of one store revision. */
+  private store?: { revision: number; byRoot: Map<string, StoreStatus> };
+  private storeRun = 0;
+
+  /**
+   * One line per bundle with a vector store: how many documents it holds,
+   * how many notes changed since or were never ingested, and how many stored
+   * documents have lost their note. Asks mif-cli once per store revision.
+   */
+  private async renderStore() {
+    const el = this.storeEl;
+    const cli = this.host.cli;
+    if (!el) return;
+    if (cli.unavailable()) {
+      el.empty();
+      return;
+    }
+    // A newer call replaces this one; only the latest draws.
+    const run = ++this.storeRun;
+    if (this.store?.revision !== cli.revision) {
+      const revision = cli.revision;
+      const byRoot = new Map<string, StoreStatus>();
+      for (const root of this.host.manager.bundleRoots()) if (await cli.hasStore(root)) byRoot.set(root, await cli.status(root));
+      this.store = { revision, byRoot };
+    } else {
+      // Notes change far more often than the store: recount coverage, keep what mif-cli said.
+      for (const [root, status] of this.store.byRoot) status.coverage = await cli.coverage(root);
+    }
+    if (run !== this.storeRun || !this.store) return;
+    el.empty();
+    for (const [root, s] of this.store.byRoot) {
+      const n = (state: string) => s.coverage.rows.filter((r) => r.state === state).length;
+      const p = el.createEl("p", { cls: "mif-store-line" });
+      p.createSpan({ text: `Vector store${root ? ` (${root})` : ""}: ${s.stats?.count ?? "?"} documents` });
+      const flag = (count: number, text: string) => {
+        if (count) p.createSpan({ cls: "mif-warning-text", text: ` · ${count} ${text}` });
+      };
+      flag(n("changed"), "changed since ingest");
+      flag(n("never"), "never ingested");
+      flag(s.prunable.length, "to prune");
+      flag(s.stats?.withoutText ?? 0, "need re-ingest for snippets");
+      const actions = p.createSpan({ cls: "mif-row-actions" });
+      actions.createEl("a", { text: "Coverage", href: "#" }).onclick = (e) => {
+        e.preventDefault();
+        void this.host.revealView("mif-coverage");
+      };
+      if (s.prunable.length) {
+        actions.createEl("a", { text: "Prune…", href: "#" }).onclick = (e) => {
+          e.preventDefault();
+          void this.host.pruneStore(root);
+        };
+      }
+    }
+  }
 
   private renderShell() {
     const el = this.contentEl;
     el.empty();
     el.addClass("mif-view");
     this.summaryEl = el.createDiv({ cls: "mif-summary" });
+    this.storeEl = el.createDiv({ cls: "mif-summary" });
     const controls = el.createDiv({ cls: "mif-controls" });
     const search = controls.createEl("input", { type: "search", placeholder: "Filter by path" });
     search.oninput = () => {
@@ -248,6 +310,8 @@ export class ReportView extends ItemView {
         this.summaryEl.createEl("p", { cls: "mif-error-text", text: issue });
       }
     }
+
+    void this.renderStore();
 
     this.tableEl.empty();
     const rows = all.filter((a) => this.matches(a));

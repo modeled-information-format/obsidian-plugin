@@ -2,7 +2,7 @@
 id: 190c9f2f-286d-5cce-9da3-13ea38b4f27e
 type: procedural
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-09T10:47:10Z
+modified: 2026-11-25T18:26:34Z
 namespace: _procedural/learning
 title: Work with relationships
 tags:
@@ -46,6 +46,11 @@ Obsidian's backlinks and graph) can follow them.
   panel.
 
 Every change updates frontmatter and the body mirror together.
+
+With `mif-cli` connected and the bundle ingested, the related panel also
+lists **Semantically related** concepts, each with **Add as relationship**,
+and the relationship gap report finds similar concepts that are not related
+yet; see [Search concepts by meaning](semantic-search.md).
 
 ## Custom relationship types
 

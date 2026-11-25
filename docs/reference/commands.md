@@ -2,7 +2,7 @@
 id: e83f6fe9-76b3-58e6-a111-48a712280afe
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:47:42Z
+modified: 2026-11-25T18:26:34Z
 namespace: _semantic/reference
 title: Commands
 tags:
@@ -96,14 +96,17 @@ fails if this list and the source disagree.
 | Reload bundle configuration | Re-read `.mif/config.yaml`, ontologies, and entities |
 | Rescan all bundles | Re-read every note (the bundle report's **Rescan**) |
 
-## mif-cli (desktop, when a path is set)
+## mif-cli (desktop, when mif-cli 0.13.0 or later is found)
 
 | Command | What it does |
 |---|---|
 | Ingest this note into the vector store | *Concept.* Embed it into the bundle's `.mif/vectors.db` |
-| Ingest this bundle into the vector store | Embed every concept of the bundle |
-| Semantic search | Rank ingested concepts by similarity to a query |
+| Ingest this bundle into the vector store | Embed every new or changed concept of the bundle; concepts the store already holds unchanged are skipped |
+| Semantic search | Rank ingested concepts against a query, show the passage that matched, and open the note there; filter by entity type and folder |
 | Find concepts similar to this note | *Concept.* Rank ingested concepts by similarity to it |
+| Prune the vector store | List the stored documents whose note is gone and, once confirmed, remove them from the store |
+| Open vector store coverage | Open the panel of concepts never ingested or changed since they were ingested |
+| Open relationship gap report | Open the panel of similar concepts with no relationship, and related concepts that are unalike |
 
 ## Developer (when **Developer commands** is on)
 

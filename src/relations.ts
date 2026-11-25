@@ -4,6 +4,8 @@
 import { FuzzySuggestModal, ItemView, Modal, Notice, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import { incomingLabel, linkTarget, relativeTarget, titleOf, type BundleConcept, type Edge, type RelType } from "./engine";
+import { problemText, type Hit, type MifCli } from "./cliBridge";
+import type { Problem } from "./engine";
 import type { MifManager } from "./manager";
 import { renderCompressed } from "./compressionView";
 import { renderTimeline } from "./freshnessView";
@@ -13,7 +15,8 @@ export const RELATED_VIEW = "mif-related";
 
 export interface RelationsHost {
   manager: MifManager;
-  editRelationship(file: TFile, index?: number): void;
+  cli: MifCli;
+  editRelationship(file: TFile, index?: number, targetVaultPath?: string): void;
 }
 
 const label = (c: BundleConcept | undefined, fallback: string) => titleOf(c) ?? fallback;
@@ -21,6 +24,9 @@ const label = (c: BundleConcept | undefined, fallback: string) => titleOf(c) ?? 
 // --- Related panel ---------------------------------------------------------------
 
 export class RelatedView extends ItemView {
+  /** Neighbours from the vector store for one note, as of one store revision. */
+  private neighbours?: { key: string; hits?: Hit[] | Problem };
+
   constructor(leaf: WorkspaceLeaf, private readonly host: RelationsHost) {
     super(leaf);
   }
@@ -39,7 +45,55 @@ export class RelatedView extends ItemView {
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.render()));
     this.registerEvent(this.app.workspace.on("file-open", () => this.render()));
     this.registerEvent(this.host.manager.on("changed", () => this.render()));
+    this.register(this.host.cli.onChange(() => this.render()));
     this.render();
+  }
+
+  /**
+   * Concepts the vector store ranks closest to this one. mif-cli runs once
+   * per note and store revision; the panel redraws when the answer arrives.
+   */
+  private semantic(el: HTMLElement, file: TFile, linked: Set<string>) {
+    if (this.host.cli.unavailable()) return;
+    const key = `${file.path}|${this.host.cli.revision}`;
+    if (this.neighbours?.key !== key) {
+      this.neighbours = { key };
+      void this.host.cli.similar(file, 8).then((hits) => {
+        if (this.neighbours?.key !== key) return;
+        this.neighbours.hits = hits;
+        this.render();
+      });
+    }
+    const hits = this.neighbours.hits;
+    // Before anything is ingested there is nothing to say here.
+    if (!hits || (!Array.isArray(hits) && hits.title === "Nothing ingested yet")) return;
+    el.createEl("h5", { text: "Semantically related" });
+    if (!Array.isArray(hits)) {
+      el.createEl("p", { cls: "mif-muted", text: hits.status === 404 ? "Ingest this note to see concepts like it." : (problemText(hits) ?? "") });
+      return;
+    }
+    const near = hits.filter((h) => h.path && h.path !== file.path);
+    if (!near.length) el.createEl("p", { cls: "mif-muted", text: "None in the vector store." });
+    const threshold = this.host.manager.similarity().similar;
+    for (const h of near) {
+      const row = el.createDiv({ cls: "mif-rel-row" });
+      row.createSpan({ cls: "mif-muted", text: (h.cosine ?? h.score).toFixed(2) });
+      const a = row.createEl("a", { text: h.title ?? h.path!, href: "#" });
+      a.onclick = (ev) => {
+        ev.preventDefault();
+        const f = this.app.vault.getAbstractFileByPath(h.path!);
+        if (f instanceof TFile) void openAtLine(this, f);
+      };
+      const actions = row.createSpan({ cls: "mif-row-actions" });
+      if (linked.has(h.path!)) actions.createSpan({ cls: "mif-muted", text: "related" });
+      else {
+        const add = actions.createEl("a", { text: "Add as relationship", href: "#", cls: (h.cosine ?? 0) >= threshold ? "mif-suggested" : "" });
+        add.onclick = (ev) => {
+          ev.preventDefault();
+          this.host.editRelationship(file, undefined, h.path);
+        };
+      }
+    }
   }
 
   private render() {
@@ -106,6 +160,11 @@ export class RelatedView extends ItemView {
     });
 
     if (!outgoing.length && !incoming.length) el.createEl("p", { cls: "mif-muted", text: "No relationships yet." });
+
+    const linked = new Set<string>();
+    for (const e of outgoing) if (e.resolved) linked.add(this.host.manager.toVaultPath(info.root, e.resolved));
+    for (const e of incoming) linked.add(this.host.manager.toVaultPath(info.root, e.from));
+    this.semantic(el, file, linked);
   }
 
   private section(parent: HTMLElement, title: string, edges: Edge[], groupBy: (e: Edge) => string, row: (el: HTMLElement, e: Edge) => void) {

@@ -77,5 +77,9 @@ export { compress, compressionDiagnostics, compressionState, contentLines, decom
 export { provenanceDiagnostics, SOURCE_TYPES, TRUST_LEVELS, trustOf, vocabularyLabel } from "./provenance";
 export { applyTextFix, VAULT_TRANSFORMS } from "./fixes";
 export { exportPath, serializeJsonLd, staleExports } from "./export";
-export { embeddingReference, idFromUrn, parseIngest, parseProblem, parseScored, parseStats, type EmbeddingInfo, type IngestResult, type Problem, type ScoredId } from "./cli";
+export {
+  conceptHash, coverage, embeddingReference, idFromUrn, MIN_CLI_VERSION, pairKey, parseIngest, parseIngestBatch, parseMatches, parseProblem, parsePrune, parseScored,
+  parseStats, parseVersion, passageLine, relationshipGaps, snippet, versionAtLeast,
+  type Coverage, type CoverageState, type EmbeddingInfo, type GapPair, type IngestResult, type Ledger, type LedgerEntry, type Match, type Problem, type ScoredId, type StoreStats,
+} from "./cli";
 export { graphOf, layout, type Graph, type GraphEdge, type GraphNode } from "./graph";

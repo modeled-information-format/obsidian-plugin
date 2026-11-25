@@ -183,3 +183,13 @@
 .mif-search-results { max-height: 50vh; overflow: auto; margin-top: var(--size-4-2); }
 .mif-bases-group td { font-weight: 600; padding-top: var(--size-4-3); }
 .mif-report .mif-fresh-action { font-size: var(--font-ui-smaller); margin: 0 var(--size-4-1) var(--size-4-1) 0; }
+
+/* Semantic search results, the vector store line, and the gap report. */
+.mif-search-hit { padding: var(--size-4-1) 0; border-bottom: 1px solid var(--background-modifier-border); }
+.mif-search-hit .mif-rel-row { padding-left: 0; flex-wrap: wrap; }
+.mif-search-heading { color: var(--mif-machine); font-size: var(--font-ui-smaller); }
+.mif-search-snippet { font-size: var(--font-ui-smaller); padding-top: var(--size-2-1); }
+.mif-duplicates p { margin: var(--size-2-1) 0; font-size: var(--font-ui-smaller); }
+.mif-store-line { display: flex; flex-wrap: wrap; gap: var(--size-2-1); align-items: baseline; }
+.mif-gap-row { flex-wrap: wrap; }
+.mif-row-actions a.mif-suggested { color: var(--mif-human); }

@@ -23,7 +23,7 @@ async function setup(files: Record<string, string>, active: string) {
   const manager = new MifManager(v.app as never, () => DEFAULT_SETTINGS);
   await manager.loadBundles();
   await manager.scanAll();
-  return { v, manager, host: { manager, revealView: async () => {}, addEntityReference: () => {}, convertActive: () => {}, editRelationship: () => {} } };
+  return { v, manager, host: { manager, cli: { unavailable: () => "mif-cli is not set up", onChange: () => () => {}, revision: 0 }, pruneStore: async () => {}, revealView: async () => {}, addEntityReference: () => {}, convertActive: () => {}, editRelationship: () => {} } };
 }
 
 describe("panels render without errors", () => {

@@ -24,6 +24,14 @@ export interface MifSettings {
   exportFolder: string;
   /** Desktop only: absolute path to mif-rs's `mif-cli`; empty turns the bridge off. */
   mifCliPath: string;
+  /** After a stored ingest you start, write the EmbeddingReference into the note's frontmatter. */
+  writeEmbeddingReference: boolean;
+  /** Cosine similarity at or above which a new concept is reported as a likely duplicate. */
+  duplicateThreshold: number;
+  /** Cosine similarity at or above which two unrelated concepts are a relationship gap. */
+  similarThreshold: number;
+  /** Cosine similarity at or below which a typed relationship is reported as a possible mislink. */
+  mislinkThreshold: number;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -39,6 +47,10 @@ export const DEFAULT_SETTINGS: MifSettings = {
   explorerBadges: true,
   exportFolder: "dist/jsonld",
   mifCliPath: "",
+  writeEmbeddingReference: true,
+  duplicateThreshold: 0.55,
+  similarThreshold: 0.55,
+  mislinkThreshold: 0.1,
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");
