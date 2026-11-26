@@ -118,7 +118,7 @@ function editYaml(yaml: string, key: string, value: unknown): string {
     const block = yaml.slice(existing.start, existing.end);
     const keepNewline = block.endsWith("\n");
     // Keep the file's list style when a block value is rewritten.
-    return yaml.slice(0, existing.start) + renderPair(key, value, usesIndentedSeq(block)) + (keepNewline ? "\n" : "") + yaml.slice(existing.end);
+    return yaml.slice(0, existing.start) + matchKeyQuotes(renderPair(key, value, usesIndentedSeq(block)), yaml) + (keepNewline ? "\n" : "") + yaml.slice(existing.end);
   }
 
   const at = insertionOffset(spans, key, yaml.length);
@@ -126,7 +126,7 @@ function editYaml(yaml: string, key: string, value: unknown): string {
   const after = yaml.slice(at);
   const lead = before.length && !before.endsWith("\n") ? "\n" : "";
   const trail = after.length ? "\n" : "";
-  return before + lead + renderPair(key, value) + trail + after;
+  return before + lead + matchKeyQuotes(renderPair(key, value), yaml) + trail + after;
 }
 
 /**
@@ -140,7 +140,15 @@ export function updateFrontmatter(text: string, updates: Record<string, unknown>
   const original = parts.yaml === "" ? {} : parseMarkdown(text).frontmatter;
 
   let yaml = parts.yaml;
-  for (const [key, value] of Object.entries(updates)) yaml = editYaml(yaml, key, value);
+  let edited = false;
+  for (const [key, value] of Object.entries(updates)) {
+    // A key that already holds this value keeps its exact text.
+    if (value !== undefined && key in original && sameValue(original[key], value)) continue;
+    if (value === undefined && !(key in original)) continue;
+    yaml = editYaml(yaml, key, value);
+    edited = true;
+  }
+  if (!edited) return text;
   if (yaml.endsWith("\n")) yaml = yaml.slice(0, -1);
   const result = parts.head + yaml + parts.tail;
 
@@ -161,6 +169,8 @@ export function updateFrontmatter(text: string, updates: Record<string, unknown>
   }
   return result;
 }
+
+const sameValue = (x: unknown, y: unknown) => JSON.stringify(sortKeys(x)) === JSON.stringify(sortKeys(JSON.parse(JSON.stringify(y))));
 
 function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);

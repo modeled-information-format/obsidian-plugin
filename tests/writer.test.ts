@@ -141,6 +141,26 @@ describe("nested edits keep the file's YAML style", () => {
   });
 });
 
+describe("rewriting a block keeps the file's key quoting", () => {
+  const ref = { "@type": "EmbeddingReference", model: "m", dimensions: 384, vectorUri: "urn:mif:vector:x", normalized: true };
+  const note = "---\nid: x\ntemporal:\n  '@type': TemporalMetadata\nembedding:\n  '@type': EmbeddingReference\n  model: m\n  dimensions: 384\n  vectorUri: urn:mif:vector:x\n  normalized: true\n---\nBody.\n";
+
+  it("leaves the file untouched when the value is the same", () => {
+    expect(updateFrontmatter(note, { embedding: ref })).toBe(note);
+    expect(updateFrontmatter(note, { embedding: { ...ref }, missing: undefined })).toBe(note);
+  });
+
+  it("keeps single-quoted keys when the block changes", () => {
+    const out = updateFrontmatter(note, { embedding: { ...ref, model: "n" } });
+    expect(addedLines(note, out)).toEqual(["  model: n"]);
+  });
+
+  it("single-quotes the keys of a new block in a single-quoted file", () => {
+    const bare = note.replace(/embedding:[\s\S]*?(?=---\nBody)/, "");
+    expect(updateFrontmatter(bare, { embedding: ref })).toContain("embedding:\n  '@type': EmbeddingReference\n");
+  });
+});
+
 describe("new keys follow the file's key quoting", async () => {
   const { matchKeyQuotes } = await import("../src/engine/writer");
   it("single-quotes keys only when the file does and never double-quotes", () => {
