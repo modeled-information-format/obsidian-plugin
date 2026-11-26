@@ -990,7 +990,7 @@ export class MifManager extends Events {
   }
 
   private async writeEmbedding(file: TFile, embedding: Record<string, unknown>): Promise<boolean> {
-    const ok = await this.write(file, (text) => updateFrontmatter(text, { embedding }), { background: true });
+    const ok = await this.write(file, (text) => updateFrontmatter(text, { embedding }, { keepUnchanged: true }), { background: true });
     if (ok) await this.analyzeFile(file);
     return ok;
   }
