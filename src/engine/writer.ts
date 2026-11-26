@@ -132,9 +132,12 @@ function editYaml(yaml: string, key: string, value: unknown): string {
 /**
  * Apply top-level frontmatter updates to a concept file. A value of
  * `undefined` deletes the key. Creates a frontmatter block if the file has
- * none. Throws WriteError if the file cannot be edited safely.
+ * none. Throws WriteError if the file cannot be edited safely. A key is
+ * rewritten even when its value is unchanged, which is how a fix replaces
+ * ambiguous text with its canonical form; pass `keepUnchanged` to leave such
+ * a key's text alone.
  */
-export function updateFrontmatter(text: string, updates: Record<string, unknown>): string {
+export function updateFrontmatter(text: string, updates: Record<string, unknown>, opts: { keepUnchanged?: boolean } = {}): string {
   if (text.includes("\r\n")) throw new WriteError("File uses CRLF line endings; convert to LF first");
   const parts = split(text) ?? { head: "---\n", yaml: "", tail: `\n---\n${text}` };
   const original = parts.yaml === "" ? {} : parseMarkdown(text).frontmatter;
@@ -142,8 +145,8 @@ export function updateFrontmatter(text: string, updates: Record<string, unknown>
   let yaml = parts.yaml;
   let edited = false;
   for (const [key, value] of Object.entries(updates)) {
-    // A key that already holds this value keeps its exact text.
-    if (value !== undefined && key in original && sameValue(original[key], value)) continue;
+    // With keepUnchanged, a key that already holds this value keeps its exact text.
+    if (opts.keepUnchanged && value !== undefined && key in original && sameValue(original[key], value)) continue;
     if (value === undefined && !(key in original)) continue;
     yaml = editYaml(yaml, key, value);
     edited = true;

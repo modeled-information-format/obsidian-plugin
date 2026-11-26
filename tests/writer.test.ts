@@ -146,8 +146,10 @@ describe("rewriting a block keeps the file's key quoting", () => {
   const note = "---\nid: x\ntemporal:\n  '@type': TemporalMetadata\nembedding:\n  '@type': EmbeddingReference\n  model: m\n  dimensions: 384\n  vectorUri: urn:mif:vector:x\n  normalized: true\n---\nBody.\n";
 
   it("leaves the file untouched when the value is the same", () => {
+    expect(updateFrontmatter(note, { embedding: ref }, { keepUnchanged: true })).toBe(note);
+    expect(updateFrontmatter(note, { embedding: { ...ref }, missing: undefined }, { keepUnchanged: true })).toBe(note);
+    // Without the option the block is rewritten, in the file's quoting.
     expect(updateFrontmatter(note, { embedding: ref })).toBe(note);
-    expect(updateFrontmatter(note, { embedding: { ...ref }, missing: undefined })).toBe(note);
   });
 
   it("keeps single-quoted keys when the block changes", () => {
