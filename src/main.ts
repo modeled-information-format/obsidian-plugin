@@ -24,6 +24,7 @@ import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
 import { newToken } from "./mcp/guard";
 import { McpService, mcpServing, SwitchMirror, VaultMcpHost, type McpModule } from "./mcpHost";
+import { EMBEDDED_MCP, ensureMcpFile, type UnpackNode } from "./mcpUnpack";
 import { confirmReject, PromoteModal, REVIEW_VIEW, ReviewView } from "./reviewView";
 
 export default class MifPlugin extends Plugin {
@@ -192,8 +193,9 @@ export default class MifPlugin extends Plugin {
   }
 
   /**
-   * The MCP server's code lives in mcp.cjs beside main.js and is loaded only
-   * here: on desktop, when a vault turns the server on. Mobile never reads it.
+   * The MCP server's code is loaded only here: on desktop, when a vault turns
+   * the server on. It is carried inside main.js and written out as mcp.cjs
+   * beside it first (src/mcpUnpack.ts). Mobile never reads it.
    * It is named .cjs because Node decides how to load a .js file from the
    * nearest package.json above it, and a vault can sit inside a project whose
    * package.json says "type": "module"; .cjs is CommonJS wherever it is.
@@ -204,6 +206,9 @@ export default class MifPlugin extends Plugin {
     try {
       const path = window.require("path") as typeof import("node:path");
       const file = path.join(adapter.getBasePath(), this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`, "mcp.cjs");
+      const node = { fs: window.require("fs") as UnpackNode["fs"], zlib: window.require("zlib") as UnpackNode["zlib"], crypto: window.require("crypto") as UnpackNode["crypto"], Buffer: (window.require("buffer") as { Buffer: UnpackNode["Buffer"] }).Buffer };
+      const unpacked = ensureMcpFile(file, EMBEDDED_MCP, node);
+      if (unpacked !== "present") this.manager.debug("mcp-unpack", { result: unpacked });
       // A reloaded plugin must get the file now on disk, not the copy Node cached at the last load.
       const load = window.require;
       delete load.cache[load.resolve(file)];

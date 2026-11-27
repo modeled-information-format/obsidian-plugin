@@ -6,6 +6,7 @@
 //   - manifest.json does not claim desktop-only, and minAppVersion matches
 //     versions.json.
 //   npm run build && node scripts/check-mobile.mjs
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 
@@ -39,6 +40,9 @@ try {
   problems.push("mcp.cjs is missing: the build should emit it beside main.js");
 }
 if (mcpJs && !mcpJs.includes(MARKER)) problems.push("mcp.cjs does not contain the MCP server code");
+// Obsidian's installer fetches main.js and not mcp.cjs, so main.js must carry this very mcp.cjs,
+// compressed: its sha256 is recorded in main.js beside the copy (src/mcpUnpack.ts).
+if (mcpJs && !js.includes(createHash("sha256").update(readFileSync("mcp.cjs")).digest("hex"))) problems.push("main.js does not carry this build's mcp.cjs (its sha256 is not in main.js): build with `npm run build`");
 for (const m of mcpJs.matchAll(/\brequire\("([^"]+)"\)/g)) {
   if (!builtinModules.includes(m[1]) && !m[1].startsWith("node:")) problems.push(`mcp.cjs requires "${m[1]}", which is not bundled`);
 }
@@ -49,4 +53,4 @@ if (problems.length) {
   console.error(`mobile check failed:\n  ${problems.join("\n  ")}`);
   process.exit(1);
 }
-console.log(`mobile check passed: main.js requires only "obsidian" at load and carries no MCP server code; desktop-only lazy loads: ${lazyNode.join(", ") || "none"}, mcp.cjs`);
+console.log(`mobile check passed: main.js requires only "obsidian" at load and carries the MCP server code only compressed; desktop-only lazy loads: ${lazyNode.join(", ") || "none"}, mcp.cjs`);
