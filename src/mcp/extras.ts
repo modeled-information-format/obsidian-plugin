@@ -7,6 +7,7 @@ import { completable, ProtocolError, ProtocolErrorCode, ResourceNotFoundError, R
 import * as z from "zod/v4";
 import type { McpHost } from "./host";
 import { countEdges, countsLine, TOOL_NAMES, weighingLine } from "./tools";
+import { WRITE_TOOL_NAMES } from "./write";
 
 /** Prompts, in the order `prompts/list` returns them. Same prefix as the tools (plan M24). */
 export const PROMPT_NAMES = ["mif_vault_guide", "mif_vault_recall"] as const;
@@ -27,7 +28,7 @@ const CACHE = { ttlMs: 5_000, cacheScope: "private" as const };
 
 export function guide(host: McpHost): string {
   const v = host.vault();
-  const [search, get, relate, list, entities, status] = TOOL_NAMES;
+  const [search, get, relate, list, entities, status, entityTypes] = TOOL_NAMES;
   return [
     `This is the MIF memory of the Obsidian vault "${v.name}".${v.purpose ? ` Its purpose: ${v.purpose.replace(/[.\s]+$/, "")}.` : ""}`,
     "",
@@ -37,7 +38,7 @@ export function guide(host: McpHost): string {
     `- You know a title or a code in a title: pass it straight to ${get} or ${relate}. No search is needed.`,
     `- You know a topic: ${search}. It needs the vector store; if that is missing it says so.`,
     `- You know facts about what you want (its type, its folder, how many relationships of a kind it has): ${list}.`,
-    `- You want named things, such as people or standards: ${entities}.`,
+    `- You want named things, such as people or standards: ${entities}. The types such things can have: ${entityTypes}.`,
     "",
     "How relationships work. A relationship is declared on one concept and points at another. Outgoing relationships are the ones a concept declares; incoming ones are declared by other concepts and point at it. " +
       `"What is grounded in X" and "what is briefed in X" are X's incoming relationships. Every view of a concept counts its relationships by type and direction, so read the counts before deciding which to list. ` +
@@ -47,7 +48,14 @@ export function guide(host: McpHost): string {
       "Expired concepts are left out unless you ask for them. Lists mark a concept only where it calls for caution. " +
       `When you use a concept, cite its title or path, and say so if it is stale, expired or low in trust. Use as_of to ask what was valid on a past date. ${status} reports how complete and current the vault is as a whole.`,
     "",
-    "This server only reads. It does not write notes or change the vector store.",
+    host.writes().allowed
+      ? [
+          `Writing. This vault allows writes. ${WRITE_TOOL_NAMES[0]} creates a concept or supersedes one; ${WRITE_TOOL_NAMES[1]} adds, changes or removes a typed relationship; ${WRITE_TOOL_NAMES[2]} adds a citation, records an entity, or adds an entity reference; ${WRITE_TOOL_NAMES[4]} edits a concept's text or merges concepts into one; ${WRITE_TOOL_NAMES[3]} brings semantic search up to date.`,
+          "Check for what the vault already holds before you write. To correct or extend a concept, edit it; when the claim itself has changed, supersede it, and the old one is kept with its validity ended; when two concepts say the same thing, merge them. " +
+            "What you write, edit or merge is saved as unverified under your client's name, and waits for the user's review in Obsidian. Superseding a concept and changing or removing a relationship need the user's agreement. " +
+            "A note that is open with unsaved edits is not changed: the tool says so, and you try again later.",
+        ].join(" ")
+      : "This vault does not allow writes: this server only reads. The user can turn writes on in the plugin's settings.",
   ].join("\n");
 }
 

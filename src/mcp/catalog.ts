@@ -313,6 +313,8 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
             entities: z.number(),
             ontologies: z.array(z.object({ id: z.string(), version: z.string(), uri: z.string(), address: z.enum(["declared", "catalog", "local"]), address_note: z.string().optional() })),
             duplicate_ids: z.array(z.object({ id: z.string(), paths: z.array(z.string()) })),
+            /** Concepts an MCP client wrote or edited that the user has not reviewed since. */
+            awaiting_review: z.number(),
           })
           .optional(),
         stores: z
@@ -393,6 +395,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
             .filter((o) => o.bundles.some((b) => targets.includes(b)))
             .map((o) => ({ id: o.id, version: o.version, uri: o.uri, address: o.address, ...(o.address_note ? { address_note: o.address_note } : {}) })),
           duplicate_ids: host.duplicateIds().filter((d) => d.paths.some((p) => concepts.some((c) => c.path === p))),
+          awaiting_review: host.reviewQueue().filter((r) => concepts.some((c) => c.path === r.path)).length,
         };
         const text = [
           `${graph.concepts} concept(s) in ${targets.length} bundle(s), ${graph.relationships} typed relationship(s), ${graph.entities} entit${graph.entities === 1 ? "y" : "ies"}.`,
@@ -402,6 +405,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
           `${graph.without_relationships} concept(s) have no typed relationship in either direction. ${graph.unresolved_targets} relationship target(s) do not resolve to a concept (an entity, another bundle, or a missing note).`,
           `Freshness: ${tallyLine(graph.freshness)}.`,
           `Trust: ${tallyLine(graph.trust)}.`,
+          graph.awaiting_review ? `${graph.awaiting_review} concept(s) were written or edited by an MCP client and are not yet reviewed by the user; they read as trust: uncertain.` : "",
           graph.ontologies.length ? `Ontologies loaded, each readable as a resource at its address:\n${graph.ontologies.map((o) => `  - ${o.id} ${o.version} — ${o.uri}${o.address_note ? ` (${o.address_note})` : ""}`).join("\n")}` : "Ontologies loaded: none.",
           graph.duplicate_ids.length
             ? `${graph.duplicate_ids.length} id(s) are carried by more than one note, so those notes cannot be told apart by id; address them by path:\n${graph.duplicate_ids.map((d) => `  - ${d.id}: ${d.paths.join(", ")}`).join("\n")}`
@@ -505,6 +509,59 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         .filter(Boolean)
         .join("\n");
       return finish({ data: { report: "gaps", gaps, problems }, text }, args.response_format);
+    },
+  );
+
+  server.registerTool(
+    TOOL_NAMES[6],
+    {
+      title: "List MIF entity types",
+      description:
+        "List the entity types this vault has: the core types every bundle has (Person, Organization, Technology, Concept, File) and the types its loaded ontologies define, " +
+        "each with the ontology that defines it, its base concept type, what it is a subtype of, and how many entity records and concepts of that type the vault holds. " +
+        "An entity can be recorded only as one of these types, so read this before recording one. " +
+        `A type is a definition, not evidence that the vault holds anything of it; the counts say what it holds. List the entities of a type with ${TOOL_NAMES[4]}, and the concepts with ${TOOL_NAMES[3]}.`,
+      inputSchema: z.object({
+        bundle: z.string().optional().describe('Only the types of this bundle. "" is the vault root. Omit for every bundle.').meta(suggest(vocab.bundles)),
+        name_contains: z.string().min(1).optional().describe("Only types whose name or description contains this text, ignoring case."),
+        source: z.string().optional().describe('Only types from this source: "core", or an ontology id.'),
+        response_format: responseFormat,
+      }),
+      outputSchema: z.object({
+        count: z.number(),
+        entity_types: z.array(
+          z.object({
+            name: z.string(),
+            /** The type segment of an entity urn of this type. */
+            slug: z.string(),
+            source: z.string(),
+            base: z.string().optional(),
+            description: z.string().optional(),
+            subtype_of: z.array(z.string()),
+            bundles: z.array(z.string()),
+            entities: z.number(),
+            concepts: z.number(),
+          }),
+        ),
+      }),
+      annotations: READ_ONLY,
+    },
+    async (args): Promise<ToolResult> => {
+      if (args.bundle !== undefined && !vocab.bundles.includes(args.bundle)) return fail(`No bundle "${args.bundle}". Bundles in this vault: ${vocab.bundles.map((b) => `"${b}"`).join(", ")}.`);
+      const needle = args.name_contains?.toLowerCase();
+      const entity_types = host.entityTypes().filter(
+        (t) =>
+          (args.bundle === undefined || t.bundles.includes(args.bundle)) &&
+          (args.source === undefined || t.source.toLowerCase() === args.source.toLowerCase()) &&
+          (!needle || t.name.toLowerCase().includes(needle) || (t.description ?? "").toLowerCase().includes(needle)),
+      );
+      const lines = entity_types.map(
+        (t) =>
+          `  - ${t.name} (urn segment "${t.slug}") — ${t.source === "core" ? "core" : `ontology ${t.source}`}${t.base ? `, ${t.base}` : ""}${t.subtype_of.length ? `, subtype of ${t.subtype_of.join(", ")}` : ""}` +
+          ` — ${t.entities} entit${t.entities === 1 ? "y" : "ies"}, ${t.concepts} concept(s)${t.description ? ` — ${t.description}` : ""}`,
+      );
+      const head = entity_types.length ? `${entity_types.length} entity type(s).` : "No entity type matches.";
+      return finish({ data: { count: entity_types.length, entity_types }, text: [head, ...lines].join("\n") }, args.response_format);
     },
   );
 }

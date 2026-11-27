@@ -42,6 +42,12 @@ export interface MifSettings {
   mcpToken: string;
   /** One line telling an agent what this vault's memory is for. */
   mcpPurpose: string;
+  /** Let MCP clients write: create and supersede concepts, change relationships, add citations and entities, ingest. Off until turned on. */
+  mcpAllowWrites: boolean;
+  /** Writes an MCP client may make within the window below; more are refused until the window moves on. */
+  mcpWriteLimit: number;
+  /** Length in minutes of the window the write limit counts over. */
+  mcpWriteWindowMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -66,6 +72,9 @@ export const DEFAULT_SETTINGS: MifSettings = {
   mcpPort: 27182,
   mcpToken: "",
   mcpPurpose: "",
+  mcpAllowWrites: false,
+  mcpWriteLimit: 30,
+  mcpWriteWindowMinutes: 10,
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

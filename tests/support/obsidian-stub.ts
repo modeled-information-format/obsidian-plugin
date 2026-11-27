@@ -168,6 +168,7 @@ export function memoryAdapter(files: Map<string, string>) {
       return files.get(p)!;
     },
     write: async (p: string, d: string) => void files.set(p, d),
+    append: async (p: string, d: string) => void files.set(p, (files.get(p) ?? "") + d),
     mkdir: async () => {},
     rmdir: async (p: string) => {
       for (const k of [...files.keys()]) if (k.startsWith(`${p}/`)) files.delete(k);

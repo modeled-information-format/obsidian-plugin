@@ -56,6 +56,8 @@ function send(res: ServerResponse, status: number, message: string, headers: Rec
 export interface McpEndpoint {
   port: number;
   url: string;
+  /** Tell clients listening for list changes that the tools on offer have changed. */
+  toolsChanged(): void;
   close(): Promise<void>;
 }
 
@@ -129,6 +131,7 @@ export function startEndpoint(http: Http, opts: EndpointOptions): Promise<McpEnd
       resolve({
         port,
         url: `http://${LOOPBACK}:${port}${MCP_PATH}`,
+        toolsChanged: () => handler.notify.toolsChanged(),
         close: () =>
           new Promise<void>((done) => {
             server.close(() => done());

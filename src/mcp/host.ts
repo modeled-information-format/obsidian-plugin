@@ -164,6 +164,79 @@ export interface Unavailable {
 /** `ambiguous` lists the candidates as "path — title", so the caller can pick one. */
 export type Resolved = { concept: ConceptView } | { ambiguous: string[] } | { missing: true };
 
+/** Who is writing: the MCP client, as it identified itself. Recorded in provenance; self-reported, not verified. */
+export interface Author {
+  agent: string;
+  agent_version?: string;
+}
+
+/** Why a write was not made, in words an agent can act on. Nothing was changed. */
+export interface Refused {
+  refused: string;
+}
+
+export interface RelationshipWrite {
+  type: string;
+  /** Vault path of the concept the relationship points at. */
+  target: string;
+  strength?: number;
+}
+
+/** An entity type a bundle may record entities of: one of the core types, or one a loaded ontology defines. */
+export interface EntityTypeView {
+  /** As defined, e.g. "Person" or "agricultural-holding". */
+  name: string;
+  /** The type segment of an entity urn of this type, e.g. "person". */
+  slug: string;
+  /** "core", or the id of the ontology that defines it. */
+  source: string;
+  base?: string;
+  description?: string;
+  subtype_of: string[];
+  bundles: string[];
+  /** Entity records of this type. */
+  entities: number;
+  /** Concepts whose entity type this is. */
+  concepts: number;
+}
+
+/** A change to an existing concept's own text. */
+export interface ConceptEdit {
+  /** The whole text, replacing the current one. */
+  body?: string;
+  /** One section replaced (or added), the rest left alone. */
+  section?: { heading: string; text: string };
+  summary?: string;
+  tags?: string[];
+}
+
+export interface NewConceptInput {
+  title: string;
+  /** semantic, episodic or procedural. For a superseding concept, defaults to the old concept's. */
+  type?: string;
+  namespace?: string;
+  /** Bundle-relative folder; defaults to a folder named for the type, or the old concept's folder. */
+  folder?: string;
+  bundle?: string;
+  body: string;
+  summary?: string;
+  tags?: string[];
+  entity_type?: string;
+  relationships: RelationshipWrite[];
+  citations: Array<Record<string, unknown>>;
+  entities: Array<{ urn: string; name?: string; role?: string }>;
+  valid_until?: string;
+  /** Vault path of the concept this one supersedes: it gets a `supersedes` relationship, and the old one's validity ends now. */
+  supersedes?: string;
+}
+
+export interface IngestView {
+  bundle: string;
+  stored: number;
+  unchanged: number;
+  failed: Array<{ path: string; reason: string }>;
+}
+
 export interface McpHost {
   /** Called once before the endpoint starts, for anything the host must fetch first. */
   prepare?(): Promise<void>;
@@ -196,8 +269,43 @@ export interface McpHost {
   /** An entity type and every type the loaded ontologies declare as its subtype, at any depth. Names compare without case or punctuation. */
   subtypes(type: string): string[];
   vocabulary(): Vocabulary;
+  /** The entity types entities may be recorded as: the core types, and those the loaded ontologies define. */
+  entityTypes(): EntityTypeView[];
   /** Ids carried by more than one note, with the vault paths of each. */
   duplicateIds(): Array<{ id: string; paths: string[] }>;
+
+  // --- writes (plan, Phase 2). Offered only while the vault's "Allow writes" setting is on. ---
+  // Every write: is refused while its note is open with unsaved edits or is the active editor;
+  // is checked against the MIF schema before anything is saved; never edits a note's own prose;
+  // is logged; and raises a notice in Obsidian. A concept an agent creates is marked agent-written
+  // and unverified (provenance.sourceType agent_inferred, trustLevel uncertain) with the client's name.
+
+  writes(): { allowed: boolean; limit: number; window_minutes: number };
+  /** Count one write against the limit; refused once the window is full. */
+  admit(): Refused | undefined;
+  createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  addRelationship(path: string, rel: RelationshipWrite, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  /** Change the type or strength of the relationship `path` declares to `match.target`. */
+  updateRelationship(path: string, match: { type: string; target: string }, next: { type?: string; strength?: number }, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  removeRelationship(path: string, match: { type: string; target: string }, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  addCitation(path: string, citation: Record<string, unknown>, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  createEntity(bundle: string, entity: { type: string; name: string }, author: Author): Promise<{ urn: string; created: boolean } | Refused>;
+  addEntityReference(path: string, entity: { urn: string; name?: string; role?: string }, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  /**
+   * Change a concept's own text. The mirrored Relationships and Citations sections are rebuilt from
+   * the frontmatter, never taken from the edit. The concept goes back to review: trustLevel uncertain,
+   * with the client recorded.
+   */
+  editConcept(path: string, edit: ConceptEdit, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  /**
+   * Merge the concepts at `from` into the one at `into`: it takes `body` as its text and their relationships,
+   * citations and entity references, and supersedes each of them; each is kept with its validity ended.
+   */
+  mergeConcepts(into: string, from: string[], body: string, author: Author): Promise<{ concept: ConceptRef; merged: ConceptRef[]; warnings: string[] } | Refused>;
+  /** Bring a bundle's vector store up to date. Changes the store only, never a note. */
+  ingest(bundle: string, author: Author, progress?: (done: number, total: number) => void): Promise<IngestView | Unavailable>;
+  /** Concepts an agent wrote or edited that nobody has reviewed since: trustLevel uncertain, and either sourceType agent_inferred or sourceRef "mcp:mif-vault". */
+  reviewQueue(): ConceptRef[];
   /** The vault's cosine thresholds for duplicates, relationship gaps and mislinks. */
   thresholds(): { duplicate: number; similar: number; mislink: number };
 }

@@ -19,6 +19,9 @@ export interface EntityRecord {
   file?: string;
 }
 
+/** The entity types every bundle has, whatever its ontologies add: the ones the plugin's own "New entity" dialog offers. */
+export const CORE_ENTITY_TYPES = ["Person", "Organization", "Technology", "Concept", "File"] as const;
+
 export const ENTITY_URN = /^urn:mif:entity:([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)$/;
 
 /** Lower-case kebab slug for names and type folders. */

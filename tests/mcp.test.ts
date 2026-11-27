@@ -16,12 +16,14 @@ import { MifCli } from "../src/cliBridge";
 import { MifManager } from "../src/manager";
 import { MAX_BODY, newToken, refusal, sameToken, startEndpoint, type McpEndpoint } from "../src/mcp/http";
 import { guide, PROMPT_NAMES, RESOURCE_PAGE, RESOURCE_TEMPLATE } from "../src/mcp/extras";
+import { WRITE_PROMPT_NAMES, WRITE_TOOL_NAMES } from "../src/mcp/write";
+import { AUDIT_LOG } from "../src/mcpWrites";
 import { CHARACTER_LIMIT, countEdges, countsLine, sectionOf, TOOL_NAMES } from "../src/mcp/tools";
 import { McpService, mcpServing, SwitchMirror, VaultMcpHost } from "../src/mcpHost";
 import { DEFAULT_SETTINGS, type MifSettings } from "../src/settings";
 import { OntologyStore } from "../src/ontologyStore";
 import { CATALOG_URL } from "../src/ontologyStore";
-import { memoryAdapter, memoryApp, network } from "./support/obsidian-stub";
+import { MarkdownView, memoryAdapter, memoryApp, network, notices } from "./support/obsidian-stub";
 
 const vaultNote = (p: string) => readFileSync(join(__dirname, "../test-vault", p), "utf8");
 const POLICY = "urn:mif:7b3c1e90-5a2f-4c8d-9e10-2f6a4b8c1d3e";
@@ -148,7 +150,7 @@ async function vault(opts: { store?: boolean; notes?: Record<string, string>; ro
     cb(null, out[a[0]!] ?? "", "");
   };
   const cli = new MifCli(v.app as never, manager, () => settings, exec as never, () => ({ path: "", home: "/h", windows: false, isExecutable: () => false }));
-  return { host: new VaultMcpHost(v.app as never, manager, cli, () => settings), settings, calls, dotFiles };
+  return { host: new VaultMcpHost(v.app as never, manager, cli, () => settings), settings, calls, dotFiles, manager, mem: v };
 }
 
 const TOKEN = "t".repeat(64);
@@ -567,6 +569,7 @@ describe("the endpoint", () => {
       entities: 1,
       ontologies: [{ id: "gateway-ops", version: "1.0.0", uri: "https://example.test/ontologies/gateway-ops", address: "declared" }],
       duplicate_ids: [],
+      awaiting_review: 1,
     });
     expect(textOf(graph)).toContain("No id is carried by more than one note.");
     expect(textOf(graph)).toContain("4 concept(s) in 1 bundle(s), 4 typed relationship(s), 1 entity.");
@@ -1074,5 +1077,391 @@ describe("McpService", () => {
     expect(missing.state).toBe("failed");
     expect((missing as { reason: string }).reason).toContain("mcp.cjs");
     await service.dispose();
+  });
+});
+
+// --- Phase 2: writes ---------------------------------------------------------------------
+
+const ASKING = { ...META, "io.modelcontextprotocol/clientCapabilities": { elicitation: {} } };
+/** A tool call from a client that can ask its user, as raw HTTP: the result, whatever its kind. */
+async function asking(port: number, name: string, args: Record<string, unknown>, inputResponses?: Record<string, unknown>) {
+  const m = modern("tools/call", { name, arguments: args, ...(inputResponses ? { inputResponses } : {}) }, name);
+  const body = JSON.stringify({ ...(JSON.parse(m.body) as { params: Record<string, unknown> }), params: { name, arguments: args, ...(inputResponses ? { inputResponses } : {}), _meta: ASKING } });
+  const r = await raw(port, { headers: m.headers, body });
+  const data = r.body.startsWith("{") ? r.body : r.body.split("\n").find((l) => l.startsWith("data:"))!.slice(5);
+  return (JSON.parse(data) as { result: Called & { resultType?: string; inputRequests?: Record<string, { params?: { message?: string } }> } }).result;
+}
+
+describe("writes", () => {
+  const [W_CONCEPT, W_REL, W_REF, W_INGEST, W_EDIT] = WRITE_TOOL_NAMES;
+  // The fake search always finds the policy at cosine 0.71; the duplicate floor is above it except where a test lowers it.
+  const on = (extra: Partial<MifSettings> = {}) => vault({ settings: { mcpAllowWrites: true, duplicateThreshold: 0.9, ...extra } });
+
+  it("are not offered until the vault allows them, and appear when it does, without a restart", async () => {
+    const v = await vault();
+    const c = await connect(v);
+    expect((await c.client.listTools()).tools.map((t) => t.name)).toEqual([...TOOL_NAMES]);
+    expect((await c.client.listPrompts()).prompts.map((p) => p.name)).toEqual([...PROMPT_NAMES]);
+    expect(guide(v.host)).toContain("does not allow writes");
+    await expect(c.call(W_CONCEPT, { operation: "create", title: "X", body: "x", type: "semantic" })).rejects.toThrow(/not found/);
+    v.settings.mcpAllowWrites = true;
+    // The first client may keep its cached list until it is told the list changed; a client that asks afresh sees the new one.
+    const fresh = new Client({ name: "vitest", version: "0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    await fresh.connect(new StreamableHTTPClientTransport(new URL(c.endpoint.url), { requestInit: { headers: { Authorization: `Bearer ${TOKEN}` } } }));
+    const { tools } = await fresh.listTools();
+    expect(tools.map((t) => t.name)).toEqual([...TOOL_NAMES, ...WRITE_TOOL_NAMES]);
+    for (const t of tools.filter((t) => (WRITE_TOOL_NAMES as readonly string[]).includes(t.name))) {
+      expect(t.name).toMatch(/^mif_vault_[a-z_]+$/);
+      expect(OTHER_SERVERS).not.toContain(t.name);
+      expect(OTHER_SERVERS).not.toContain(t.name.replace(/^mif_vault_/, ""));
+      expect(t.annotations).toMatchObject({ readOnlyHint: false });
+      expect(t.outputSchema).toBeDefined();
+      expect(t.description).toMatch(/evidence|freshness/);
+    }
+    expect(tools.find((t) => t.name === W_INGEST)!.annotations).toMatchObject({ openWorldHint: true, destructiveHint: false });
+    expect((await fresh.listPrompts()).prompts.map((p) => p.name)).toEqual([...PROMPT_NAMES, ...WRITE_PROMPT_NAMES]);
+    const g = guide(v.host);
+    for (const name of WRITE_TOOL_NAMES) expect(g).toContain(name);
+    const p = await fresh.getPrompt({ name: WRITE_PROMPT_NAMES[0], arguments: { what: "We chose 100 rpm." } });
+    expect(JSON.stringify(p.messages)).toContain(W_CONCEPT);
+    await fresh.close();
+    await c.close();
+  });
+
+  it("creates a concept whole, linked and cited, marked agent-written and unverified under the client's name", async () => {
+    const v = await on();
+    const c = await connect(v);
+    notices.length = 0;
+    const r = await c.call(W_CONCEPT, {
+      operation: "create", title: "Burst Allowance", type: "semantic", body: "Bursts of 20 requests are allowed.\n\n## Why\n\nShort spikes are normal.", summary: "Bursts of 20 are allowed.",
+      relationships: [{ type: "relates-to", target: "API Rate Limit Policy" }], citations: [{ title: "Gateway manual", url: "https://example.test/manual" }],
+      entities: [{ urn: "urn:mif:entity:policy:rate-limit", name: "Rate limit" }],
+    });
+    expect(textOf(r)).toContain("Created Burst Allowance [semantic/burst-allowance.md]");
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ operation: "create", changed: ["semantic/burst-allowance.md"], concept: { path: "semantic/burst-allowance.md", title: "Burst Allowance" } });
+    expect(textOf(r)).toContain("trust: uncertain");
+    const text = v.mem.texts.get("semantic/burst-allowance.md")!;
+    expect(text).toMatch(/sourceType: agent_inferred/);
+    expect(text).toMatch(/trustLevel: uncertain/);
+    expect(text).toMatch(/agent: vitest/);
+    expect(text).toContain("target: /semantic/rate-limit-policy.md");
+    expect(text).toContain("## Why");
+    expect(text).toContain("- relates-to [API Rate Limit Policy]");
+    expect(text).toContain("Gateway manual");
+    expect(text).toContain("urn:mif:entity:policy:rate-limit");
+    // It is in the graph at once, and in the review queue.
+    const rels = await c.call("mif_vault_list_relationships", { concept: POLICY_PATH, direction: "incoming" });
+    expect(textOf(rels)).toContain("Burst Allowance");
+    const status = await c.call("mif_vault_get_status", { report: "graph" });
+    expect((status.structuredContent as { graph: { awaiting_review: number } }).graph.awaiting_review).toBe(2);
+    expect(v.host.reviewItems().map((i) => [i.concept.path, i.agent])).toContainEqual(["semantic/burst-allowance.md", "vitest 0"]);
+    expect(notices.some((n) => n.includes("vitest") && n.includes("Burst Allowance"))).toBe(true);
+    await vi.waitFor(() => expect([...v.dotFiles].find(([k]) => k.endsWith(AUDIT_LOG))?.[1]).toMatch(/vitest 0\tcreate-concept\tsemantic\/burst-allowance\.md\tdone/));
+    // A second concept of the same title gets its own file; nothing is overwritten.
+    const again = await c.call(W_CONCEPT, { operation: "create", title: "Burst Allowance", type: "semantic", body: "Again.", on_duplicate: "create" });
+    expect((again.structuredContent as { concept: { path: string } }).concept.path).not.toBe("semantic/burst-allowance.md");
+    await c.close();
+  });
+
+  it("refuses what would not be valid MIF, a missing type, and an unknown target, and writes nothing", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const before = v.mem.texts.size;
+    expect(textOf(await c.call(W_CONCEPT, { operation: "create", title: "No type", body: "x" }))).toContain('needs type');
+    expect((await c.call(W_CONCEPT, { operation: "create", title: "Bad", type: "semantic", body: "x", relationships: [{ type: "relates-to", target: "No Such Concept" }] })).isError).toBe(true);
+    expect((await c.call(W_CONCEPT, { operation: "create", title: "Bad date", type: "semantic", body: "x", valid_until: "next week" })).isError).toBe(true);
+    expect(v.mem.texts.size).toBe(before);
+    await c.close();
+  });
+
+  it("asks about a near-duplicate: by elicitation when the client can ask, by an error naming the choices when it cannot", async () => {
+    const v = await on({ duplicateThreshold: 0.7 });
+    const c = await connect(v);
+    const args = { operation: "create", title: "Rate Limits", type: "semantic", body: "100 per minute." };
+    const told = await c.call(W_CONCEPT, args);
+    expect(told.isError).toBe(true);
+    expect(textOf(told)).toContain("API Rate Limit Policy (cosine 0.71)");
+    expect(textOf(told)).toMatch(/create[\s\S]*supersede[\s\S]*cancel[\s\S]*on_duplicate/);
+    expect(textOf(told)).toContain("merge");
+    // "merge" writes nothing and says how: read the existing concept, then edit it with the combined text.
+    const merge = await c.call(W_CONCEPT, { ...args, on_duplicate: "merge" });
+    expect(merge.isError).toBeFalsy();
+    expect(merge.structuredContent).toMatchObject({ operation: "merge_needed", changed: [], concept: { path: POLICY_PATH } });
+    expect(textOf(merge)).toMatch(/mif_vault_get_concept[\s\S]*mif_vault_edit_concept/);
+    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+    const cancelled = await c.call(W_CONCEPT, { ...args, on_duplicate: "cancel" });
+    expect(cancelled.isError).toBeFalsy();
+    expect(cancelled.structuredContent).toMatchObject({ operation: "cancelled", changed: [] });
+    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+
+    const asked = await asking(c.endpoint.port, W_CONCEPT, args);
+    expect(asked.resultType).toBe("input_required");
+    expect(JSON.stringify(asked.inputRequests)).toContain("API Rate Limit Policy");
+    const declined = await asking(c.endpoint.port, W_CONCEPT, args, { duplicate: { action: "decline" } });
+    expect(declined.isError).toBe(true);
+    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+    const replaced = await asking(c.endpoint.port, W_CONCEPT, args, { duplicate: { action: "accept", content: { choice: "supersede" } } });
+    expect(replaced.isError).toBeFalsy();
+    expect(replaced.structuredContent).toMatchObject({ operation: "supersede", superseded: { path: POLICY_PATH } });
+    expect(v.mem.texts.get("semantic/rate-limits.md")).toMatch(/agent: raw-test/);
+    await c.close();
+  });
+
+  it("supersedes with the user's agreement: the old concept is kept with its validity ended, and the new one points at it", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const args = { operation: "supersede", supersedes: POLICY, title: "API Rate Limit Policy v2", body: "200 per minute." };
+    const unasked = await c.call(W_CONCEPT, args);
+    expect(unasked.isError).toBe(true);
+    expect(textOf(unasked)).toContain("confirm: true");
+    expect((await asking(c.endpoint.port, W_CONCEPT, args)).resultType).toBe("input_required");
+    expect((await asking(c.endpoint.port, W_CONCEPT, args, { confirm: { action: "accept", content: { confirm: false } } })).isError).toBe(true);
+    expect(v.mem.texts.get(POLICY_PATH)).not.toMatch(/validUntil/);
+    const r = await c.call(W_CONCEPT, { ...args, confirm: true });
+    expect(textOf(r)).toContain("supersedes API Rate Limit Policy");
+    expect(r.isError).toBeFalsy();
+    const path = (r.structuredContent as { concept: { path: string } }).concept.path;
+    expect(path).toBe("semantic/api-rate-limit-policy-v2.md");
+    expect(v.mem.texts.get(path)).toMatch(/type: supersedes\n\s+target: \.?\/?(semantic\/)?rate-limit-policy\.md|type: supersedes/);
+    expect(v.mem.texts.get(path)).toMatch(/type: semantic/);
+    expect(v.mem.texts.get(POLICY_PATH)).toMatch(/validUntil: /);
+    const old = await c.call("mif_vault_get_concept", { concept: POLICY_PATH });
+    expect(textOf(old)).toMatch(/expired/i);
+    // Rejecting the new concept in review moves it to the trash and makes the old one valid again.
+    expect(await v.host.reject(path)).toBe(true);
+    expect(v.mem.trashed).toContain(path);
+    expect(v.mem.texts.get(POLICY_PATH)).not.toMatch(/validUntil/);
+    await c.close();
+  });
+
+  it("adds, changes and removes a typed relationship in the frontmatter and its mirrored section only", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const prose = (t: string) => t.split("\n---\n")[1]!.split("## Relationships")[0];
+    const before = v.mem.texts.get(RUNBOOK_PATH)!;
+    const added = await c.call(W_REL, { operation: "add", from: RUNBOOK, target: INCIDENT, type: "derived-from", strength: 0.6 });
+    expect(textOf(added)).toContain("derived-from");
+    expect(added.isError).toBeFalsy();
+    expect(added.structuredContent).toMatchObject({ operation: "add", changed: [RUNBOOK_PATH] });
+    let text = v.mem.texts.get(RUNBOOK_PATH)!;
+    expect(text).toContain("type: derived-from");
+    expect(text).toContain("- derived-from [");
+    expect(prose(text)).toBe(prose(before));
+    expect((await c.call(W_REL, { operation: "add", from: RUNBOOK, target: INCIDENT, type: "derived-from" })).isError).toBe(true);
+    expect((await c.call(W_REL, { operation: "add", from: RUNBOOK, target: RUNBOOK, type: "relates-to" })).isError).toBe(true);
+
+    // No type: the user chooses, or the agent is told the choices.
+    const untyped = await c.call(W_REL, { operation: "add", from: INCIDENT, target: RUNBOOK });
+    expect(untyped.isError).toBe(true);
+    expect(textOf(untyped)).toContain("relates-to");
+    const asked = await asking(c.endpoint.port, W_REL, { operation: "add", from: INCIDENT, target: RUNBOOK });
+    expect(asked.resultType).toBe("input_required");
+    const picked = await asking(c.endpoint.port, W_REL, { operation: "add", from: INCIDENT, target: RUNBOOK }, { type: { action: "accept", content: { choice: "relates-to" } } });
+    expect(picked.isError).toBeFalsy();
+    expect(v.mem.texts.get(INCIDENT_PATH)).toContain("rotate-api-keys.md");
+
+    // Update and remove need the user's agreement.
+    const change = { operation: "update", from: RUNBOOK, target: INCIDENT, type: "derived-from", new_type: "relates-to", strength: 0.9 };
+    expect(textOf(await c.call(W_REL, change))).toContain("confirm: true");
+    expect((await c.call(W_REL, { ...change, confirm: true })).isError).toBeFalsy();
+    text = v.mem.texts.get(RUNBOOK_PATH)!;
+    expect(text).not.toContain("type: derived-from");
+    expect(text).toContain("strength: 0.9");
+    expect((await c.call(W_REL, { operation: "remove", from: RUNBOOK, target: INCIDENT, type: "derived-from", confirm: true })).isError).toBe(true);
+    const removed = await asking(c.endpoint.port, W_REL, { operation: "remove", from: RUNBOOK, target: INCIDENT, type: "relates-to" }, { confirm: { action: "accept", content: { confirm: true } } });
+    expect(removed.isError).toBeFalsy();
+    expect(v.mem.texts.get(RUNBOOK_PATH)).not.toContain("incident-2026-01-rate-spike.md");
+    expect(prose(v.mem.texts.get(RUNBOOK_PATH)!)).toBe(prose(before));
+    await c.close();
+  });
+
+  it("never writes a note that is open with unsaved edits, and says to try again", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const before = v.mem.texts.get(RUNBOOK_PATH)!;
+    const ws = v.mem.app.workspace;
+    ws.views.push(new MarkdownView(v.mem.files.get(RUNBOOK_PATH)!, `${before}\nunsaved`));
+    const r = await c.call(W_REL, { operation: "add", from: RUNBOOK, target: INCIDENT, type: "relates-to" });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain("unsaved edits");
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toBe(before);
+    ws.views.length = 0;
+    ws.active = new MarkdownView(v.mem.files.get(POLICY_PATH)!, v.mem.texts.get(POLICY_PATH)!);
+    expect((await c.call(W_CONCEPT, { operation: "supersede", supersedes: POLICY, title: "P2", body: "x", confirm: true })).isError).toBe(true);
+    expect(v.mem.texts.has("semantic/p2.md")).toBe(false);
+    ws.active = null;
+    await c.close();
+  });
+
+  it("adds a citation, records an entity, and adds an entity reference by urn or by name", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const cited = await c.call(W_REF, { operation: "add_citation", concept: RUNBOOK, citation: { title: "Key rotation guide", url: "https://example.test/keys", type: "article" } });
+    expect(textOf(cited)).toContain('now cites "Key rotation guide"');
+    expect(cited.isError).toBeFalsy();
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toContain("https://example.test/keys");
+    expect((await c.call(W_REF, { operation: "add_citation", concept: RUNBOOK, citation: { title: "Key rotation guide", url: "https://example.test/keys" } })).isError).toBe(true);
+    expect((await c.call(W_REF, { operation: "add_citation", concept: RUNBOOK })).isError).toBe(true);
+
+    const made = await c.call(W_REF, { operation: "create_entity", entity: { name: "Ada Lovelace", type: "person" } });
+    expect(textOf(made)).toContain("urn:mif:entity:person:ada-lovelace");
+    expect(made.structuredContent).toMatchObject({ urn: "urn:mif:entity:person:ada-lovelace", created: true });
+    expect(v.dotFiles.has(".mif/entities/person/ada-lovelace.yaml")).toBe(true);
+    expect((await c.call(W_REF, { operation: "create_entity", entity: { name: "Ada Lovelace", type: "person" } })).structuredContent).toMatchObject({ created: false });
+
+    // Only a type the bundle has: a core type, or one its ontologies define.
+    const unknown = await c.call(W_REF, { operation: "create_entity", entity: { name: "Edge Gateway", type: "appliance" } });
+    expect(unknown.isError).toBe(true);
+    expect(textOf(unknown)).toMatch(/not an entity type of this bundle[\s\S]*Person, Organization, Technology, Concept, File, guide, how-to-guide[\s\S]*mif_vault_list_entity_types/);
+    expect([...v.dotFiles.keys()].some((k) => k.includes("appliance"))).toBe(false);
+    expect((await c.call(W_REF, { operation: "create_entity", entity: { name: "Key Rotation", type: "How-To Guide" } })).structuredContent).toMatchObject({ urn: "urn:mif:entity:how-to-guide:key-rotation", created: true });
+
+    const byName = await c.call(W_REF, { operation: "add_entity_reference", concept: RUNBOOK, entity: { name: "ada lovelace", role: "author" } });
+    expect(textOf(byName)).toContain("urn:mif:entity:person:ada-lovelace");
+    expect(byName.isError).toBeFalsy();
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toContain("urn:mif:entity:person:ada-lovelace");
+    expect((await c.call(W_REF, { operation: "add_entity_reference", concept: RUNBOOK, entity: { urn: "urn:mif:entity:person:ada-lovelace" } })).isError).toBe(true);
+    expect(textOf(await c.call(W_REF, { operation: "add_entity_reference", concept: RUNBOOK, entity: { name: "Nobody Known" } }))).toContain("create_entity");
+    await c.close();
+  });
+
+  it("lists the entity types an entity may be recorded as: the core ones and those the ontologies define", async () => {
+    const v = await vault();
+    const c = await connect(v);
+    const all = await c.call("mif_vault_list_entity_types", {});
+    const types = (all.structuredContent as { entity_types: Array<{ name: string; slug: string; source: string; base?: string; subtype_of: string[]; entities: number; concepts: number }> }).entity_types;
+    expect(types.map((t) => t.name)).toEqual(["Person", "Organization", "Technology", "Concept", "File", "guide", "how-to-guide"]);
+    expect(types.find((t) => t.name === "Person")).toMatchObject({ slug: "person", source: "core" });
+    expect(types.find((t) => t.name === "how-to-guide")).toMatchObject({ source: "gateway-ops", base: "procedural", subtype_of: ["guide"], concepts: 1 });
+    expect(textOf(all)).toContain('how-to-guide (urn segment "how-to-guide") — ontology gateway-ops, procedural, subtype of guide');
+    const core = await c.call("mif_vault_list_entity_types", { source: "core", name_contains: "org" });
+    expect(core.structuredContent).toMatchObject({ count: 1, entity_types: [{ name: "Organization" }] });
+    expect((await c.call("mif_vault_list_entity_types", { bundle: "nope" })).isError).toBe(true);
+    await c.close();
+  });
+
+  it("edits a concept's text, whole or by section, keeps the mirrored sections, and sends it back to review", async () => {
+    const v = await on();
+    const c = await connect(v);
+    expect(v.host.reviewQueue().map((r) => r.path)).toEqual(["semantic/old-limit.md"]);
+    const section = await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, section: "Steps", text: "1. Revoke the key.\n2. Issue a new one." });
+    expect(textOf(section)).toContain('Edited Rotate API Keys [procedural/rotate-api-keys.md]: its "Steps" section.');
+    expect(section.isError).toBeFalsy();
+    let text = v.mem.texts.get(RUNBOOK_PATH)!;
+    expect(text).toContain("How-to knowledge: rotate an API key");
+    expect(text).toContain("## Steps\n\n1. Revoke the key.\n2. Issue a new one.\n");
+    expect(text).not.toContain("Identify the key ID");
+    expect(text).toContain("## Relationships\n\n- relates-to [API Rate Limit Policy](/semantic/rate-limit-policy.md)");
+    expect(text).toMatch(/---\n\n# Rotate API Keys\n/);
+    // A human-written concept an agent edited is unverified again, under the client's name.
+    expect(text).toMatch(/trustLevel: uncertain/);
+    expect(text).toMatch(/agent: vitest/);
+    expect(text).toMatch(/sourceRef: mcp:mif-vault/);
+    expect(text).toMatch(/modified: /);
+    expect(v.host.reviewQueue().map((r) => r.path)).toContain(RUNBOOK_PATH);
+    expect(textOf(section)).toContain("trust: uncertain");
+
+    // The whole text: the note keeps its title heading, and a Relationships section the agent sends is ignored.
+    const whole = await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, body: "Rotate a key that is compromised.\n\n## Relationships\n\n- relates-to [Nothing](/nothing.md)", summary: "How to rotate a key.", tags: ["runbook"] });
+    expect(whole.isError).toBeFalsy();
+    text = v.mem.texts.get(RUNBOOK_PATH)!;
+    expect(text).toContain("# Rotate API Keys\n\nRotate a key that is compromised.");
+    expect(text).not.toContain("nothing.md");
+    expect(text).not.toContain("## Steps");
+    expect(text).toContain("- relates-to [API Rate Limit Policy](/semantic/rate-limit-policy.md)");
+    expect(text).toContain("summary: How to rotate a key.");
+    expect(text).not.toContain("- security");
+    // A section the concept lacks is added; the mirrored ones cannot be written.
+    expect((await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, section: "Rollback", text: "Restore the old key." })).isError).toBeFalsy();
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toMatch(/## Rollback\n\nRestore the old key\.\n\n## Relationships/);
+    expect(textOf(await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, section: "Relationships", text: "x" }))).toContain("written from the concept's frontmatter");
+    expect((await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK })).isError).toBe(true);
+    expect((await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, section: "Steps" })).isError).toBe(true);
+    expect((await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, body: "x", section: "Steps", text: "y" })).isError).toBe(true);
+    // Promoting it takes it out of review again.
+    expect(await v.host.promote(RUNBOOK_PATH, "verified")).toBe(true);
+    expect(v.host.reviewQueue().map((r) => r.path)).not.toContain(RUNBOOK_PATH);
+    // Never while the note is open with unsaved edits.
+    const before = v.mem.texts.get(RUNBOOK_PATH)!;
+    v.mem.app.workspace.views.push(new MarkdownView(v.mem.files.get(RUNBOOK_PATH)!, `${before}\nunsaved`));
+    expect(textOf(await c.call(W_EDIT, { operation: "edit", concept: RUNBOOK, body: "No." }))).toContain("unsaved edits");
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toBe(before);
+    v.mem.app.workspace.views.length = 0;
+    await c.close();
+  });
+
+  it("merges concepts into one: it takes the merged text and what they declared, and supersedes each, which is kept", async () => {
+    const v = await on();
+    const c = await connect(v);
+    expect((await c.call(W_EDIT, { operation: "merge", concept: POLICY, merge_from: ["Old Rate Limit"] })).isError).toBe(true);
+    expect((await c.call(W_EDIT, { operation: "merge", concept: POLICY, body: "x" })).isError).toBe(true);
+    expect((await c.call(W_EDIT, { operation: "merge", concept: POLICY, merge_from: [POLICY], body: "x" })).isError).toBe(true);
+    await c.call(W_REL, { operation: "add", from: "Old Rate Limit", target: INCIDENT, type: "derived-from", strength: 0.5 });
+    await c.call(W_REL, { operation: "add", from: "Old Rate Limit", target: RUNBOOK, type: "documents", strength: 0.5 });
+    const r = await c.call(W_EDIT, { operation: "merge", concept: POLICY, merge_from: ["Old Rate Limit"], body: "The limit is 100 requests per minute. Until 2026-02 it was 50." });
+    expect(textOf(r)).toContain("Merged Old Rate Limit into API Rate Limit Policy [semantic/rate-limit-policy.md]");
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ operation: "merge", changed: [POLICY_PATH, "semantic/old-limit.md"], concept: { path: POLICY_PATH }, merged: [{ path: "semantic/old-limit.md" }], warnings: [] });
+    const text = v.mem.texts.get(POLICY_PATH)!;
+    expect(text).toContain("# API Rate Limit Policy\n\nThe limit is 100 requests per minute. Until 2026-02 it was 50.");
+    // What the merged concept declared is carried over; its relationship to the survivor is not.
+    expect(text).toMatch(/type: documents\n\s+target: \/procedural\/rotate-api-keys\.md\n\s+strength: 0\.5/);
+    // One the survivor already declares is not added a second time, and keeps its own strength.
+    expect(text.match(/type: derived-from/g)).toHaveLength(1);
+    expect(text).toMatch(/type: derived-from\n\s+target: \/episodic\/incident-2026-01-rate-spike\.md\n\s+strength: 0\.9/);
+    expect(text).toMatch(/type: supersedes\n\s+target: \/semantic\/old-limit\.md/);
+    expect(text).not.toMatch(/target: \/semantic\/rate-limit-policy\.md/);
+    expect(text).toContain("Gateway manual");
+    expect(text).toContain("urn:mif:entity:policy:rate-limit");
+    expect(text).toContain("- supersedes [Old Rate Limit](/semantic/old-limit.md)");
+    expect(text).toMatch(/trustLevel: uncertain/);
+    expect(text).toMatch(/sourceRef: mcp:mif-vault/);
+    // The merged concept is still there, as it was, already ended before the merge.
+    expect(v.mem.texts.get("semantic/old-limit.md")).toContain("validUntil: 2026-02-01T00:00:00Z");
+    expect(v.mem.trashed).toEqual([]);
+    const rels = await c.call("mif_vault_list_relationships", { concept: POLICY_PATH, direction: "outgoing", include_expired: true });
+    expect(textOf(rels)).toContain("supersedes");
+    await c.close();
+  });
+
+  it("ingests through the plugin's mif-cli bridge, and counts as a write", async () => {
+    const v = await on();
+    const c = await connect(v);
+    const r = await c.call(W_INGEST, {});
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ bundle: "" });
+    expect(v.calls.some((a) => a[0] === "ingest" && a.includes("--changed-only"))).toBe(true);
+    await c.close();
+  });
+
+  it("stops at the vault's write limit and says when to try again", async () => {
+    const v = await on({ mcpWriteLimit: 2, mcpWriteWindowMinutes: 10 });
+    const c = await connect(v);
+    const cite = (n: number) => c.call(W_REF, { operation: "add_citation", concept: RUNBOOK, citation: { title: `Source ${n}`, url: `https://example.test/${n}` } });
+    const first = await cite(1);
+    expect(textOf(first)).toContain("now cites");
+    expect(first.isError).toBeFalsy();
+    expect((await cite(2)).isError).toBeFalsy();
+    const third = await cite(3);
+    expect(third.isError).toBe(true);
+    expect(textOf(third)).toMatch(/2 writes in 10 minutes[\s\S]*Try again in about \d+ minute/);
+    expect(v.mem.texts.get(RUNBOOK_PATH)).not.toContain("Source 3");
+    // Reads are not limited, and the limit clears as writes age out.
+    expect((await c.call("mif_vault_get_concept", { concept: RUNBOOK })).isError).toBeFalsy();
+    expect(v.host.admit()).toBeDefined();
+    await c.close();
+  });
+
+  it("lets the user promote a reviewed concept to a trust level, keeping who wrote it", async () => {
+    const v = await on();
+    expect(v.host.reviewQueue().map((r) => r.path)).toEqual(["semantic/old-limit.md"]);
+    expect(await v.host.promote("semantic/old-limit.md", "user_stated")).toBe(true);
+    const text = v.mem.texts.get("semantic/old-limit.md")!;
+    expect(text).toMatch(/trustLevel: user_stated/);
+    expect(text).toMatch(/sourceType: agent_inferred/);
+    expect(v.host.reviewQueue()).toEqual([]);
+    expect(await v.host.promote("plain.md", "verified")).toBe(false);
+    expect(await v.host.promote("semantic/old-limit.md", "uncertain" as never)).toBe(false);
   });
 });

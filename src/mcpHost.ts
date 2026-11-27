@@ -1,13 +1,15 @@
 // The vault side of the MCP server: a McpHost over MifManager and the
 // mif-cli bridge, and the service that starts and stops the endpoint for
-// this vault. Read-only: nothing here writes a note or the vector store.
+// this vault. Reads are here; what a client may write, and its rules, are in
+// mcpWrites.ts.
 
 import type { App } from "obsidian";
 import type { MifCli } from "./cliBridge";
-import { trustOf } from "./engine";
+import { CORE_ENTITY_TYPES, entitySlug, trustOf } from "./engine";
 import type { MifManager } from "./manager";
 import type { McpEndpoint, startEndpoint } from "./mcp/http";
-import type { ConceptRef, ConceptSummary, ConceptView, EdgeView, EntityView, GapsView, McpHost, OntologyView, Resolved, SearchHit, SearchRequest, StoreView, Unavailable, Vocabulary, Weighing } from "./mcp/host";
+import type { Author, ConceptEdit, ConceptRef, ConceptSummary, ConceptView, EdgeView, EntityTypeView, EntityView, GapsView, McpHost, NewConceptInput, OntologyView, RelationshipWrite, Resolved, SearchHit, SearchRequest, StoreView, Unavailable, Vocabulary, Weighing } from "./mcp/host";
+import { REVIEW_SOURCE, VaultWrites, type ReviewLevel } from "./mcpWrites";
 import type { MifSettings } from "./settings";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,7 +21,78 @@ export class VaultMcpHost implements McpHost {
     private readonly manager: MifManager,
     private readonly cli: MifCli,
     private readonly settings: () => MifSettings,
+    private readonly pluginDir: string = `${app.vault.configDir}/plugins/mif`,
   ) {}
+
+  private written?: VaultWrites;
+
+  /** The vault's write operations and their rules; see mcpWrites.ts. */
+  private get write(): VaultWrites {
+    return (this.written ??= new VaultWrites(this.app, this.manager, this.cli, this.settings, (path) => this.ref(path), this.pluginDir, () => this.entityTypes()));
+  }
+
+  writes() {
+    return this.write.writes();
+  }
+  admit() {
+    return this.write.admit();
+  }
+  createConcept(input: NewConceptInput, author: Author) {
+    return this.write.createConcept(input, author);
+  }
+  addRelationship(path: string, rel: RelationshipWrite, author: Author) {
+    return this.write.addRelationship(path, rel, author);
+  }
+  updateRelationship(path: string, match: { type: string; target: string }, next: { type?: string; strength?: number }, author: Author) {
+    return this.write.updateRelationship(path, match, next, author);
+  }
+  removeRelationship(path: string, match: { type: string; target: string }, author: Author) {
+    return this.write.removeRelationship(path, match, author);
+  }
+  addCitation(path: string, citation: Record<string, unknown>, author: Author) {
+    return this.write.addCitation(path, citation, author);
+  }
+  createEntity(bundle: string, entity: { type: string; name: string }, author: Author) {
+    return this.write.createEntity(bundle, entity, author);
+  }
+  addEntityReference(path: string, entity: { urn: string; name?: string; role?: string }, author: Author) {
+    return this.write.addEntityReference(path, entity, author);
+  }
+  ingest(bundle: string, author: Author, progress?: (done: number, total: number) => void) {
+    return this.write.ingest(bundle, author, progress);
+  }
+  editConcept(path: string, edit: ConceptEdit, author: Author) {
+    return this.write.editConcept(path, edit, author);
+  }
+  mergeConcepts(into: string, from: string[], body: string, author: Author) {
+    return this.write.mergeConcepts(into, from, body, author);
+  }
+
+  /** Agent-written or agent-edited and not reviewed since: trustLevel uncertain, with sourceType agent_inferred or this server as sourceRef (spec §12). */
+  reviewQueue(): ConceptRef[] {
+    return this.manager.all().flatMap((a) => {
+      const p = a.isConcept ? a.frontmatter?.provenance : undefined;
+      const prov = p && typeof p === "object" ? (p as Record<string, unknown>) : undefined;
+      const ref = prov?.trustLevel === "uncertain" && (prov.sourceType === "agent_inferred" || prov.sourceRef === REVIEW_SOURCE) ? this.ref(a.path) : undefined;
+      return ref ? [ref] : [];
+    });
+  }
+
+  /** The review queue as the Review panel shows it: who wrote each concept, and when. */
+  reviewItems(): Array<{ concept: ConceptRef; agent: string; created?: string }> {
+    return this.reviewQueue().map((concept) => {
+      const fm = this.manager.get(concept.path)?.frontmatter ?? {};
+      const prov = fm.provenance as Record<string, unknown>;
+      const created = str(fm.created);
+      return { concept, agent: [str(prov.agent) ?? "unknown agent", str(prov.agentVersion)].filter(Boolean).join(" "), ...(created ? { created } : {}) };
+    });
+  }
+  promote(path: string, level: ReviewLevel) {
+    return this.write.promote(path, level);
+  }
+  reject(path: string) {
+    return this.write.reject(path);
+  }
 
   vault() {
     return { name: this.app.vault.getName(), purpose: this.settings().mcpPurpose.trim(), bundles: this.manager.bundleRoots() };
@@ -305,6 +378,36 @@ export class VaultMcpHost implements McpHost {
     return [...found.values()];
   }
 
+  entityTypes(): EntityTypeView[] {
+    const out = new Map<string, EntityTypeView>();
+    const roots = this.manager.bundleRoots();
+    for (const name of CORE_ENTITY_TYPES) out.set(entitySlug(name), { name, slug: entitySlug(name), source: "core", subtype_of: [], bundles: [...roots], entities: 0, concepts: 0 });
+    for (const o of this.ontologies()) {
+      for (const t of o.entity_types) {
+        const slug = entitySlug(t.name);
+        const seen = out.get(slug);
+        if (seen) {
+          for (const b of o.bundles) if (!seen.bundles.includes(b)) seen.bundles.push(b);
+          continue;
+        }
+        out.set(slug, { name: t.name, slug, source: o.id, base: t.base, ...(t.description ? { description: t.description } : {}), subtype_of: [...t.subtype_of], bundles: [...o.bundles], entities: 0, concepts: 0 });
+      }
+    }
+    for (const e of this.entities()) {
+      const t = e.recorded ? out.get(e.urn.split(":")[3] ?? "") : undefined;
+      if (t) t.entities++;
+    }
+    for (const a of this.manager.all()) {
+      const entity = a.isConcept ? a.frontmatter?.entity : undefined;
+      const type = entity && typeof entity === "object" ? str((entity as Record<string, unknown>).entity_type) : undefined;
+      const t = type ? out.get(entitySlug(type)) : undefined;
+      if (t) t.concepts++;
+    }
+    // Core types first, in their own order; then each ontology's, by name.
+    const all = [...out.values()];
+    return [...all.filter((t) => t.source === "core"), ...all.filter((t) => t.source !== "core").sort((a, b) => a.source.localeCompare(b.source) || a.name.localeCompare(b.name))];
+  }
+
   private vocab?: { at: number; value: Vocabulary };
 
   vocabulary(): Vocabulary {
@@ -405,7 +508,7 @@ export class SwitchMirror {
  */
 export class McpService {
   private endpoint?: McpEndpoint;
-  private running?: { port: number };
+  private running?: { port: number; writes: boolean };
   private queue: Promise<unknown> = Promise.resolve();
   status: McpStatus = { state: "off" };
 
@@ -437,7 +540,15 @@ export class McpService {
       this.log("mcp-stopped");
     }
     if (!want) return (this.status = { state: "off" });
-    if (this.endpoint) return this.status;
+    if (this.endpoint) {
+      // The write tools come and go with the setting: tell clients that are listening for list changes.
+      if (this.running && this.running.writes !== s.mcpAllowWrites) {
+        this.running.writes = s.mcpAllowWrites;
+        this.endpoint.toolsChanged();
+        this.log("mcp-tools-changed", { writes: s.mcpAllowWrites });
+      }
+      return this.status;
+    }
     const http = this.http();
     if (!http) return (this.status = { state: "failed", reason: "The MCP server is desktop only." });
     const mcp = this.load();
@@ -453,7 +564,7 @@ export class McpService {
         version: this.version,
         onError: (error) => this.log("mcp-error", { message: error.message }),
       });
-      this.running = { port: s.mcpPort };
+      this.running = { port: s.mcpPort, writes: s.mcpAllowWrites };
       this.log("mcp-started", { port: s.mcpPort });
       return (this.status = { state: "running", url: this.endpoint.url });
     } catch (err) {

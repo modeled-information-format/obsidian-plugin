@@ -942,7 +942,7 @@ export class MifManager extends Events {
   }
 
   /** True while the note is the active editor, or an open editor holds text not yet saved to disk. */
-  private async isBeingEdited(file: TFile): Promise<boolean> {
+  async isBeingEdited(file: TFile): Promise<boolean> {
     if (this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path) return true;
     return this.hasUnsavedText(file);
   }

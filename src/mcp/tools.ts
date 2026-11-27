@@ -18,6 +18,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { registerCatalogTools } from "./catalog";
 import { registerExtras } from "./extras";
+import { registerWriteTools } from "./write";
 import type { ConceptRef, ConceptView, EdgeView, McpHost, SearchHit, Weighing } from "./host";
 
 export const SERVER_NAME = "mif-vault";
@@ -27,7 +28,7 @@ export const SERVER_NAME = "mif-vault";
  * The `mif_vault_` prefix keeps them apart from mif-rs's mif-mcp and
  * mif-rh-mcp servers (plan M24); tests/mcp.test.ts checks both lists.
  */
-export const TOOL_NAMES = ["mif_vault_search_concepts", "mif_vault_get_concept", "mif_vault_list_relationships", "mif_vault_list_concepts", "mif_vault_list_entities", "mif_vault_get_status"] as const;
+export const TOOL_NAMES = ["mif_vault_search_concepts", "mif_vault_get_concept", "mif_vault_list_relationships", "mif_vault_list_concepts", "mif_vault_list_entities", "mif_vault_get_status", "mif_vault_list_entity_types"] as const;
 
 /** Responses stay under this many characters by returning fewer items, never by cutting text. */
 export const CHARACTER_LIMIT = 25_000;
@@ -740,5 +741,7 @@ export function createServer(host: McpHost, version: string): McpServer {
 
   registerCatalogTools(server, host);
   registerExtras(server, host);
+  // The write tools and the capture prompt exist only while the vault allows writes; the lists are the same for every client either way.
+  if (host.writes().allowed) registerWriteTools(server, host);
   return server;
 }
