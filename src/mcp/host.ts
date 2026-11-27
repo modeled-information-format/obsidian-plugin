@@ -97,16 +97,18 @@ export interface OntologyView {
   /** The ontology's identifier (ontology.id in its definition). */
   id: string;
   version: string;
-  /**
-   * Where the ontology is addressed (plan M28, M31): the uri this vault's
-   * concepts declare for it; failing that, its canonical address in the
-   * mif-spec.dev catalog, when this definition is the one the catalog
-   * publishes; failing that, urn:mif:ontology:<id>.
-   */
+  /** The ontology's address as a resource: always urn:mif:ontology:<id> (plan M63). */
   uri: string;
+  /**
+   * Where the definition is published, for information: the uri this vault's concepts declare for
+   * it; failing that, its address in the mif-spec.dev catalog, when this definition is the one the
+   * catalog publishes (same sha256). Absent for an ontology published nowhere this vault knows of.
+   * It is not a resource address: the ontology is read at `uri`.
+   */
+  published_at?: string;
   /** Which of those it is. "local" also covers a bundle's edited copy of a catalog ontology. */
   address: "declared" | "catalog" | "local";
-  /** Why a "local" address was used. */
+  /** Why it counts as "local". */
   address_note?: string;
   description?: string;
   extends: string[];

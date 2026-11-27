@@ -263,7 +263,7 @@ describe("the endpoint", () => {
   beforeAll(async () => {
     const v = await vault();
     calls = v.calls;
-    endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1" });
+    endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1", structured: true });
     // The SDK client speaks the 2025 handshake unless told otherwise; pin the current revision.
     client = new Client({ name: "vitest", version: "0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
     await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: { Authorization: `Bearer ${TOKEN}` } } }));
@@ -388,6 +388,9 @@ describe("the endpoint", () => {
     expect(got.structuredContent!.relationship_counts).toEqual({ outgoing: {}, incoming: { "derived-from": 1 } });
     expect(textOf(got)).toContain("Relationships it declares (outgoing): none. Relationships other concepts declare to it (incoming): derived-from 1.");
     const policy = await call("mif_vault_list_relationships", { concept: POLICY, counts_only: true });
+    // Nothing is listed, but the totals and the types still say what the counts add up to.
+    expect(policy.structuredContent).toMatchObject({ total_count: 4, count: 0, types: ["derived-from", "relates-to"], relationships: [] });
+    expect((await call("mif_vault_list_relationships", { concept: POLICY, counts_only: true, direction: "incoming", types: ["relates-to"] })).structuredContent).toMatchObject({ total_count: 2, types: ["relates-to"] });
     // Counts are not filtered by freshness: the expired note's relationship is counted, though the listing leaves it out.
     expect(policy.structuredContent!.concepts).toEqual([
       { concept: { id: POLICY, path: POLICY_PATH, bundle: "", title: "API Rate Limit Policy", type: "semantic" }, relationship_counts: { outgoing: { "derived-from": 1, "relates-to": 1 }, incoming: { "relates-to": 2 } } },
@@ -568,7 +571,7 @@ describe("the endpoint", () => {
       freshness: { timeless: 3, expired: 1 },
       trust: { "(none)": 3, uncertain: 1 },
       entities: 1,
-      ontologies: [{ id: "gateway-ops", version: "1.0.0", uri: "https://example.test/ontologies/gateway-ops", address: "declared" }],
+      ontologies: [{ id: "gateway-ops", version: "1.0.0", uri: "urn:mif:ontology:gateway-ops", published_at: "https://example.test/ontologies/gateway-ops", address: "declared" }],
       duplicate_ids: [],
       awaiting_review: 1,
     });
@@ -708,12 +711,12 @@ describe("the endpoint", () => {
 
   it("lists every resource page by page, serves an ontology at its declared uri, and completes resource ids", async () => {
     const first = await client.listResources();
-    expect(first.resources.map((r) => r.uri)).toEqual([INCIDENT, RUNBOOK, OLD, POLICY, "urn:mif:entity:policy:rate-limit", "https://example.test/ontologies/gateway-ops"]);
+    expect(first.resources.map((r) => r.uri)).toEqual([INCIDENT, RUNBOOK, OLD, POLICY, "urn:mif:entity:policy:rate-limit", "urn:mif:ontology:gateway-ops"]);
     expect(first.resources[0]).toMatchObject({ name: "Rate Spike Incident 2026-01", mimeType: "text/markdown", description: "episodic · episodic/incident-2026-01-rate-spike.md" });
     expect(first.nextCursor).toBeUndefined();
     await expect(client.listResources({ cursor: "bogus" })).rejects.toThrow(/Unknown cursor/);
-    const ontology = JSON.parse(((await client.readResource({ uri: "https://example.test/ontologies/gateway-ops" })).contents[0] as { text: string }).text);
-    expect(ontology).toMatchObject({ id: "gateway-ops", version: "1.0.0", uri: "https://example.test/ontologies/gateway-ops", address: "declared", extends: [], namespaces: ["semantic", "semantic/policies"], bundles: [""] });
+    const ontology = JSON.parse(((await client.readResource({ uri: "urn:mif:ontology:gateway-ops" })).contents[0] as { text: string }).text);
+    expect(ontology).toMatchObject({ id: "gateway-ops", version: "1.0.0", uri: "urn:mif:ontology:gateway-ops", published_at: "https://example.test/ontologies/gateway-ops", address: "declared", extends: [], namespaces: ["semantic", "semantic/policies"], bundles: [""] });
     expect(ontology.entity_types).toEqual([
       { name: "guide", base: "procedural", subtype_of: [], description: "Any guide" },
       { name: "how-to-guide", base: "procedural", subtype_of: ["guide"] },
@@ -852,7 +855,7 @@ Body ${n}.
 const noteId = (n: number) => `urn:mif:00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 async function connect(v: Awaited<ReturnType<typeof vault>>) {
-  const endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1" });
+  const endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1", structured: true });
   const client = new Client({ name: "vitest", version: "0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
   await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: { Authorization: `Bearer ${TOKEN}` } } }));
   const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args })) as Called;
@@ -948,13 +951,15 @@ describe("ontologies no concept gives a uri", () => {
   };
   const PUBLISHED = "https://mif-spec.dev/ontologies/as-published.ontology.jsonld";
 
-  it("are served at the catalog's address when the copy is the catalog's own, and at urn:mif:ontology:<id> otherwise", async () => {
+  it("are all served at urn:mif:ontology:<id>, and say where they are published when the copy is the catalog's own", async () => {
     // The catalog is already cached in the plugin folder; no concept declares an ontology uri.
     const c = await connect(await vault({ notes: { "a.md": note(1) }, dot: { ...dot, ".obsidian/plugins/mif/ontology-cache/index.json": catalog } }));
     const listed = (await c.client.listResources()).resources.map((r) => r.uri);
-    expect(listed).toEqual([noteId(1), PUBLISHED, "urn:mif:ontology:edited-here", "urn:mif:ontology:only-local"]);
+    expect(listed).toEqual([noteId(1), "urn:mif:ontology:as-published", "urn:mif:ontology:edited-here", "urn:mif:ontology:only-local"]);
+    // The address an ontology is published at is information, not a resource: nothing is served there.
+    await expect(c.client.readResource({ uri: PUBLISHED })).rejects.toThrow();
     const read = async (uri: string) => JSON.parse(((await c.client.readResource({ uri })).contents[0] as { text: string }).text);
-    expect(await read(PUBLISHED)).toMatchObject({ id: "as-published", version: "2.0.0", uri: PUBLISHED, address: "catalog" });
+    expect(await read("urn:mif:ontology:as-published")).toMatchObject({ id: "as-published", version: "2.0.0", uri: "urn:mif:ontology:as-published", published_at: PUBLISHED, address: "catalog" });
     // An edited copy is not what the catalog's address names, so it is not served there.
     expect(await read("urn:mif:ontology:edited-here")).toMatchObject({ id: "edited-here", address: "local", address_note: "This copy differs from the one the mif-spec.dev catalog publishes under the same id." });
     await expect(c.client.readResource({ uri: "https://mif-spec.dev/ontologies/edited-here.ontology.jsonld" })).rejects.toThrow();
@@ -969,7 +974,7 @@ describe("ontologies no concept gives a uri", () => {
     ]);
     expect(textOf(graph)).toContain("  - edited-here 2.0.0 — urn:mif:ontology:edited-here (This copy differs");
     const done = await c.client.complete({ ref: { type: "ref/resource", uri: RESOURCE_TEMPLATE }, argument: { name: "id", value: "ontology:" } });
-    expect(done.completion.values).toEqual(["ontology:edited-here", "ontology:only-local"]);
+    expect(done.completion.values).toEqual(["ontology:as-published", "ontology:edited-here", "ontology:only-local"]);
     await c.close();
   });
 
@@ -981,7 +986,7 @@ describe("ontologies no concept gives a uri", () => {
     expect(addresses(allowed)).toEqual([["as-published", "local"], ["edited-here", "local"], ["only-local", "local"]]);
     await allowed.host.prepare();
     expect(addresses(allowed)).toEqual([["as-published", "catalog"], ["edited-here", "local"], ["only-local", "local"]]);
-    expect(allowed.host.ontologies()[0]!.uri).toBe(PUBLISHED);
+    expect(allowed.host.ontologies()[0]).toMatchObject({ uri: "urn:mif:ontology:as-published", published_at: PUBLISHED });
     expect(allowed.dotFiles.has(".obsidian/plugins/mif/ontology-cache/index.json")).toBe(true);
     // Downloads off: no request is made.
     network.clear();
@@ -1039,7 +1044,7 @@ describe("the settings switch", () => {
 describe("search without a vector store", () => {
   it("says search is unavailable and what to use instead", async () => {
     const v = await vault({ store: false });
-    const endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1" });
+    const endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1", structured: true });
     const client = new Client({ name: "vitest", version: "0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: { Authorization: `Bearer ${TOKEN}` } } }));
     const r = (await client.callTool({ name: "mif_vault_search_concepts", arguments: { query: "anything" } })) as Called;
@@ -1138,11 +1143,11 @@ describe("writes", () => {
       relationships: [{ type: "relates-to", target: "API Rate Limit Policy" }], citations: [{ title: "Gateway manual", url: "https://example.test/manual" }],
       entities: [{ urn: "urn:mif:entity:policy:rate-limit", name: "Rate limit" }],
     });
-    expect(textOf(r)).toContain("Created Burst Allowance [semantic/burst-allowance.md]");
+    expect(textOf(r)).toContain("Created Burst Allowance [semantic/Burst-Allowance.md]");
     expect(r.isError).toBeFalsy();
-    expect(r.structuredContent).toMatchObject({ operation: "create", changed: ["semantic/burst-allowance.md"], concept: { path: "semantic/burst-allowance.md", title: "Burst Allowance" } });
+    expect(r.structuredContent).toMatchObject({ operation: "create", changed: ["semantic/Burst-Allowance.md"], concept: { path: "semantic/Burst-Allowance.md", title: "Burst Allowance" } });
     expect(textOf(r)).toContain("trust: uncertain");
-    const text = v.mem.texts.get("semantic/burst-allowance.md")!;
+    const text = v.mem.texts.get("semantic/Burst-Allowance.md")!;
     expect(text).toMatch(/sourceType: agent_inferred/);
     expect(text).toMatch(/trustLevel: uncertain/);
     expect(text).toMatch(/agent: vitest/);
@@ -1156,12 +1161,12 @@ describe("writes", () => {
     expect(textOf(rels)).toContain("Burst Allowance");
     const status = await c.call("mif_vault_get_status", { report: "graph" });
     expect((status.structuredContent as { graph: { awaiting_review: number } }).graph.awaiting_review).toBe(2);
-    expect(v.host.reviewItems().map((i) => [i.concept.path, i.agent])).toContainEqual(["semantic/burst-allowance.md", "vitest 0"]);
+    expect(v.host.reviewItems().map((i) => [i.concept.path, i.agent])).toContainEqual(["semantic/Burst-Allowance.md", "vitest 0"]);
     expect(notices.some((n) => n.includes("vitest") && n.includes("Burst Allowance"))).toBe(true);
-    await vi.waitFor(() => expect([...v.dotFiles].find(([k]) => k.endsWith(AUDIT_LOG))?.[1]).toMatch(/vitest 0\tcreate-concept\tsemantic\/burst-allowance\.md\tdone/));
+    await vi.waitFor(() => expect([...v.dotFiles].find(([k]) => k.endsWith(AUDIT_LOG))?.[1]).toMatch(/vitest 0\tcreate-concept\tsemantic\/Burst-Allowance\.md\tdone/));
     // A second concept of the same title gets its own file; nothing is overwritten.
     const again = await c.call(W_CONCEPT, { operation: "create", title: "Burst Allowance", type: "semantic", body: "Again.", on_duplicate: "create" });
-    expect((again.structuredContent as { concept: { path: string } }).concept.path).not.toBe("semantic/burst-allowance.md");
+    expect((again.structuredContent as { concept: { path: string } }).concept.path).not.toBe("semantic/Burst-Allowance.md");
     await c.close();
   });
 
@@ -1190,22 +1195,22 @@ describe("writes", () => {
     expect(merge.isError).toBeFalsy();
     expect(merge.structuredContent).toMatchObject({ operation: "merge_needed", changed: [], concept: { path: POLICY_PATH } });
     expect(textOf(merge)).toMatch(/mif_vault_get_concept[\s\S]*mif_vault_edit_concept/);
-    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+    expect(v.mem.texts.has("semantic/Rate-Limits.md")).toBe(false);
     const cancelled = await c.call(W_CONCEPT, { ...args, on_duplicate: "cancel" });
     expect(cancelled.isError).toBeFalsy();
     expect(cancelled.structuredContent).toMatchObject({ operation: "cancelled", changed: [] });
-    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+    expect(v.mem.texts.has("semantic/Rate-Limits.md")).toBe(false);
 
     const asked = await asking(c.endpoint.port, W_CONCEPT, args);
     expect(asked.resultType).toBe("input_required");
     expect(JSON.stringify(asked.inputRequests)).toContain("API Rate Limit Policy");
     const declined = await asking(c.endpoint.port, W_CONCEPT, args, { duplicate: { action: "decline" } });
     expect(declined.isError).toBe(true);
-    expect(v.mem.texts.has("semantic/rate-limits.md")).toBe(false);
+    expect(v.mem.texts.has("semantic/Rate-Limits.md")).toBe(false);
     const replaced = await asking(c.endpoint.port, W_CONCEPT, args, { duplicate: { action: "accept", content: { choice: "supersede" } } });
     expect(replaced.isError).toBeFalsy();
     expect(replaced.structuredContent).toMatchObject({ operation: "supersede", superseded: { path: POLICY_PATH } });
-    expect(v.mem.texts.get("semantic/rate-limits.md")).toMatch(/agent: raw-test/);
+    expect(v.mem.texts.get("semantic/Rate-Limits.md")).toMatch(/agent: raw-test/);
     await c.close();
   });
 
@@ -1223,7 +1228,7 @@ describe("writes", () => {
     expect(textOf(r)).toContain("supersedes API Rate Limit Policy");
     expect(r.isError).toBeFalsy();
     const path = (r.structuredContent as { concept: { path: string } }).concept.path;
-    expect(path).toBe("semantic/api-rate-limit-policy-v2.md");
+    expect(path).toBe("semantic/API-Rate-Limit-Policy-v2.md");
     expect(v.mem.texts.get(path)).toMatch(/type: supersedes\n\s+target: \.?\/?(semantic\/)?rate-limit-policy\.md|type: supersedes/);
     expect(v.mem.texts.get(path)).toMatch(/type: semantic/);
     // It takes over what the old concept declared, with strength, and says so.
@@ -1319,7 +1324,7 @@ describe("writes", () => {
     ws.views.length = 0;
     ws.active = new MarkdownView(v.mem.files.get(POLICY_PATH)!, v.mem.texts.get(POLICY_PATH)!);
     expect((await c.call(W_CONCEPT, { operation: "supersede", supersedes: POLICY, title: "P2", body: "x", confirm: true })).isError).toBe(true);
-    expect(v.mem.texts.has("semantic/p2.md")).toBe(false);
+    expect(v.mem.texts.has("semantic/P2.md")).toBe(false);
     ws.active = null;
     await c.close();
   });
@@ -1580,6 +1585,26 @@ describe("live updates", () => {
   });
 });
 
+describe("a prompt run as a command", () => {
+  it("takes words a client split across the recall prompt's filters back into the topic, and keeps a real filter", async () => {
+    const c = await connect(await vault());
+    const text = async (args: Record<string, string>) => JSON.stringify((await c.client.getPrompt({ name: "mif_vault_recall", arguments: args })).messages);
+    // /…recall "rate limits" as Claude Code sends it.
+    const split = await text({ topic: '"rate', entity_type: 'limits"' });
+    expect(split).toContain("holds about: rate limits\\n");
+    // What the server cannot see, the model is told to look for: a client may pass only the first word.
+    expect(split).toContain("the client cut it short");
+    expect(split).not.toContain("Keep to");
+    const three = await text({ topic: "gateway", entity_type: "rate", namespace: "limits" });
+    expect(three).toContain("holds about: gateway rate limits");
+    // A filter that names something the vault has is still a filter.
+    const real = await text({ topic: "keys", entity_type: "how-to-guide", namespace: "_semantic" });
+    expect(real).toContain("holds about: keys\\n");
+    expect(real).toContain('entity type \\"how-to-guide\\" and namespace \\"_semantic\\"');
+    await c.close();
+  });
+});
+
 describe("curation prompts", () => {
   it("are offered only while the vault allows writes, and name only tools that exist", async () => {
     const off = await connect(await vault());
@@ -1601,6 +1626,8 @@ describe("curation prompts", () => {
     expect(links).toContain("mif_vault_write_relationship");
     const consolidate = await text("mif_vault_consolidate", { topic: "rate limiting incidents" });
     expect(consolidate).toContain("rate limiting incidents");
+    expect(consolidate).toContain("the client cut it short");
+    expect(await text("mif_vault_capture", { what: '"Burst' })).toMatch(/vault \\"test-vault\\": Burst\\n[^"]*the client cut it short/);
     expect(consolidate).toContain("derived-from");
     for (const body of [stale, links, consolidate]) {
       expect(body).toContain("review queue");
@@ -1676,5 +1703,47 @@ describe("the gap report as a task", () => {
     now += 60_001;
     expect(store.get(failed.taskId)).toBeUndefined();
     expect(store.cancel(slow.taskId)).toBe(false);
+  });
+});
+
+// --- Results are text by default --------------------------------------------------------
+
+describe("the shape of a result", () => {
+  it("is text only unless the structured copy is asked for: no structured content, no output schema, and JSON as text on request", async () => {
+    const v = await vault({ settings: { mcpAllowWrites: true, duplicateThreshold: 0.9 } });
+    const endpoint = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0.0.1" });
+    const client = new Client({ name: "vitest", version: "0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    await client.connect(new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: { Authorization: `Bearer ${TOKEN}` } } }));
+    const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args })) as Called;
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toEqual([...TOOL_NAMES, ...WRITE_TOOL_NAMES]);
+    for (const t of tools) expect(t.outputSchema, t.name).toBeUndefined();
+    // The text is what a model reads: the weighing in words is there, and nothing is sent twice.
+    const read = await call("mif_vault_get_concept", { concept: "Old Rate Limit", include_expired: true });
+    expect(read.structuredContent).toBeUndefined();
+    expect(textOf(read)).toMatch(/EXPIRED/i);
+    // A program asks for JSON and parses the text.
+    const json = await call("mif_vault_get_status", { response_format: "json" });
+    expect(json.structuredContent).toBeUndefined();
+    expect(JSON.parse(textOf(json))).toMatchObject({ report: "graph", graph: { concepts: 4, awaiting_review: 1 } });
+    // Writes, errors, resource links and tasks keep working without it.
+    const wrote = await call("mif_vault_write_concept", { operation: "create", title: "Text Only", type: "semantic", body: "x" });
+    expect(wrote.structuredContent).toBeUndefined();
+    expect(textOf(wrote)).toContain("Created Text Only [semantic/Text-Only.md]");
+    expect(wrote.content.some((c) => c.type === "resource_link")).toBe(true);
+    expect((await call("mif_vault_get_concept", { concept: "No Such Thing" })).isError).toBe(true);
+    const m = modern("tools/call", { name: "mif_vault_get_status", arguments: { report: "gaps" } }, "mif_vault_get_status");
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "mif_vault_get_status", arguments: { report: "gaps" }, _meta: { ...META, "io.modelcontextprotocol/clientCapabilities": { extensions: { "io.modelcontextprotocol/tasks": {} } } } } });
+    const started = JSON.parse((await raw(endpoint.port, { headers: m.headers, body })).body) as { result: { resultType: string; taskId: string } };
+    expect(started.result.resultType).toBe("task");
+    await vi.waitFor(async () => {
+      const g = modern("tasks/get", { taskId: started.result.taskId }, started.result.taskId);
+      const got = JSON.parse((await raw(endpoint.port, g)).body) as { result: { status: string; result?: { content: Array<{ text: string }>; structuredContent?: unknown } } };
+      expect(got.result.status).toBe("completed");
+      expect(got.result.result!.structuredContent).toBeUndefined();
+      expect(got.result.result!.content[0]!.text).toContain("Compared");
+    });
+    await client.close();
+    await endpoint.close();
   });
 });

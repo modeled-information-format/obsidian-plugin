@@ -312,7 +312,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
             freshness: z.record(z.string(), z.number()),
             trust: z.record(z.string(), z.number()),
             entities: z.number(),
-            ontologies: z.array(z.object({ id: z.string(), version: z.string(), uri: z.string(), address: z.enum(["declared", "catalog", "local"]), address_note: z.string().optional() })),
+            ontologies: z.array(z.object({ id: z.string(), version: z.string(), uri: z.string(), published_at: z.string().optional(), address: z.enum(["declared", "catalog", "local"]), address_note: z.string().optional() })),
             duplicate_ids: z.array(z.object({ id: z.string(), paths: z.array(z.string()) })),
             /** Concepts an MCP client wrote or edited that the user has not reviewed since. */
             awaiting_review: z.number(),
@@ -394,7 +394,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
           ontologies: host
             .ontologies()
             .filter((o) => o.bundles.some((b) => targets.includes(b)))
-            .map((o) => ({ id: o.id, version: o.version, uri: o.uri, address: o.address, ...(o.address_note ? { address_note: o.address_note } : {}) })),
+            .map((o) => ({ id: o.id, version: o.version, uri: o.uri, ...(o.published_at ? { published_at: o.published_at } : {}), address: o.address, ...(o.address_note ? { address_note: o.address_note } : {}) })),
           duplicate_ids: host.duplicateIds().filter((d) => d.paths.some((p) => concepts.some((c) => c.path === p))),
           awaiting_review: host.reviewQueue().filter((r) => concepts.some((c) => c.path === r.path)).length,
         };
@@ -407,7 +407,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
           `Freshness: ${tallyLine(graph.freshness)}.`,
           `Trust: ${tallyLine(graph.trust)}.`,
           graph.awaiting_review ? `${graph.awaiting_review} concept(s) were written or edited by an MCP client and are not yet reviewed by the user; they read as trust: uncertain.` : "",
-          graph.ontologies.length ? `Ontologies loaded, each readable as a resource at its address:\n${graph.ontologies.map((o) => `  - ${o.id} ${o.version} — ${o.uri}${o.address_note ? ` (${o.address_note})` : ""}`).join("\n")}` : "Ontologies loaded: none.",
+          graph.ontologies.length ? `Ontologies loaded, each readable as a resource at its urn:\n${graph.ontologies.map((o) => `  - ${o.id} ${o.version} — ${o.uri}${o.published_at ? `, published at ${o.published_at}` : ""}${o.address_note ? ` (${o.address_note})` : ""}`).join("\n")}` : "Ontologies loaded: none.",
           graph.duplicate_ids.length
             ? `${graph.duplicate_ids.length} id(s) are carried by more than one note, so those notes cannot be told apart by id; address them by path:\n${graph.duplicate_ids.map((d) => `  - ${d.id}: ${d.paths.join(", ")}`).join("\n")}`
             : "No id is carried by more than one note.",

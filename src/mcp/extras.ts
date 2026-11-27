@@ -6,7 +6,7 @@
 import { completable, ProtocolError, ProtocolErrorCode, ResourceNotFoundError, ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { McpHost } from "./host";
-import { countEdges, countsLine, TOOL_NAMES, weighingLine } from "./tools";
+import { countEdges, countsLine, TOOL_NAMES, typedInFull, weighingLine } from "./tools";
 import { WRITE_TOOL_NAMES } from "./write";
 
 /** Prompts, in the order `prompts/list` returns them. Same prefix as the tools (plan M24). */
@@ -14,8 +14,7 @@ export const PROMPT_NAMES = ["mif_vault_guide", "mif_vault_recall"] as const;
 
 /**
  * `urn:mif:<uuid>` names a concept, `urn:mif:entity:<type>:<slug>` an entity
- * (plan M23), and `urn:mif:ontology:<id>` an ontology that has no declared or
- * catalog address (plan M31).
+ * (plan M23), and `urn:mif:ontology:<id>` an ontology (plan M63).
  */
 export const RESOURCE_TEMPLATE = "urn:mif:{id}";
 
@@ -67,21 +66,6 @@ export function registerExtras(server: McpServer, host: McpHost): void {
     ...host.ontologies().map((o) => ({ uri: o.uri, name: `${o.id} ${o.version}`, description: o.description ?? "MIF ontology", mimeType: "application/json" })),
   ];
 
-  // An ontology at a declared or catalog address is its own resource; one at urn:mif:ontology:<id> is read through the urn:mif: template below.
-  for (const o of host.ontologies()) {
-    if (/^urn:mif:/i.test(o.uri)) continue;
-    server.registerResource(
-      `mif-ontology-${o.id}`,
-      o.uri,
-      { title: `Ontology ${o.id} ${o.version}`, description: o.description ?? `The MIF ontology ${o.id}: its entity types, namespaces and the ontologies it extends.`, mimeType: "application/json", cacheHint: { ttlMs: 60_000, cacheScope: "private" } },
-      (uri) => {
-        const now = host.ontologies().find((x) => x.uri === o.uri);
-        if (!now) throw new ResourceNotFoundError(uri.href, `The ontology at ${uri.href} is no longer loaded.`);
-        return { contents: [{ uri: o.uri, mimeType: "application/json", text: JSON.stringify(now, null, 2) }] };
-      },
-    );
-  }
-
   server.registerResource(
     "mif-record",
     new ResourceTemplate(RESOURCE_TEMPLATE, {
@@ -109,7 +93,7 @@ export function registerExtras(server: McpServer, host: McpHost): void {
     }),
     {
       title: "MIF concept or entity",
-      description: 'A concept at its canonical id, "urn:mif:<uuid>", as markdown with its weighing; an entity at "urn:mif:entity:<type>:<slug>", as JSON; or an ontology that has no other address at "urn:mif:ontology:<id>", as JSON. Ids come from the tools\' results.',
+      description: 'A concept at its canonical id, "urn:mif:<uuid>", as markdown with its weighing; an entity at "urn:mif:entity:<type>:<slug>", as JSON; or an ontology at "urn:mif:ontology:<id>", as JSON. Ids come from the tools\' results.',
       cacheHint: CACHE,
     },
     (uri) => {
@@ -126,7 +110,7 @@ export function registerExtras(server: McpServer, host: McpHost): void {
         if (!ontology) throw new ResourceNotFoundError(href, `No ontology is addressed as ${href} in this vault. ${TOOL_NAMES[5]} lists the loaded ontologies and their addresses.`);
         return { contents: [{ uri: href, mimeType: "application/json", text: JSON.stringify(ontology, null, 2) }] };
       }
-      if (!UUID.test(id)) throw new ResourceNotFoundError(href, `${href} is not a MIF id. A concept is urn:mif:<uuid>; an entity is urn:mif:entity:<type>:<slug>; an ontology without another address is urn:mif:ontology:<id>.`);
+      if (!UUID.test(id)) throw new ResourceNotFoundError(href, `${href} is not a MIF id. A concept is urn:mif:<uuid>; an entity is urn:mif:entity:<type>:<slug>; an ontology is urn:mif:ontology:<id>.`);
       const r = host.resolve(href, new Date());
       // Two notes with one id: name both, never pick one.
       if ("ambiguous" in r) throw new ResourceNotFoundError(href, `${href} is carried by more than one note: ${r.ambiguous.join("; ")}. Read one by its path with ${TOOL_NAMES[1]}.`);
@@ -182,11 +166,29 @@ export function registerExtras(server: McpServer, host: McpHost): void {
         namespace: completable(z.string().describe("Only this namespace or below it."), values((c) => c.namespace)).optional(),
       }),
     },
-    ({ topic, entity_type, namespace }) => {
+    (args) => {
       const [search, get, relate, list] = TOOL_NAMES;
+      // A client that fills a prompt's arguments from the words typed after a command (Claude Code does)
+      // splits a topic of several words across them, quotes and all: "rate limits" arrives as topic
+      // "rate and entity type limits". A filter that names nothing this vault has is part of the topic.
+      const unquote = (v: string | undefined) => v?.replace(/^["'\s]+|["'\s]+$/g, "") || undefined;
+      const vocab = host.vocabulary();
+      const same = (x: string, y: string) => x.toLowerCase() === y.toLowerCase();
+      let topic = unquote(args.topic) ?? args.topic;
+      let entity_type = unquote(args.entity_type);
+      let namespace = unquote(args.namespace);
+      if (entity_type && ![...vocab.entity_types, ...host.entityTypes().map((t) => t.name)].some((t) => same(t, entity_type!))) {
+        topic = `${topic} ${entity_type}`;
+        entity_type = undefined;
+      }
+      if (namespace && !vocab.namespaces.some((n) => same(n, namespace!) || n.toLowerCase().startsWith(`${namespace!.toLowerCase()}/`))) {
+        topic = `${topic} ${namespace}`;
+        namespace = undefined;
+      }
       const scope = [entity_type ? `entity type "${entity_type}"` : "", namespace ? `namespace "${namespace}"` : ""].filter(Boolean).join(" and ");
       const text = [
         `Recall what the MIF memory of the vault "${host.vault().name}" holds about: ${topic}`,
+        typedInFull("the topic, apart from a word that names an entity type or a namespace of this vault"),
         scope ? `Keep to ${scope}.` : "",
         "",
         `1. Find the concepts. If the topic names a title or a code, pass it to ${get}. Otherwise use ${search}${scope ? ` with the matching filter, or ${list} to list by those facts` : ""}. If search is unavailable, say so and use ${list}.`,

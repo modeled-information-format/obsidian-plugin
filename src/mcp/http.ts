@@ -73,6 +73,8 @@ export interface EndpointOptions {
   /** Read on every request, so a regenerated token takes effect at once. */
   token: () => string;
   version: string;
+  /** Also return structured content and declare output schemas; see ServerOptions. Off unless asked for. */
+  structured?: boolean;
   onError?: (error: Error) => void;
 }
 
@@ -83,7 +85,7 @@ export interface EndpointOptions {
 export function startEndpoint(http: Http, opts: EndpointOptions): Promise<McpEndpoint> {
   // Tasks outlive the request that starts them, so their store belongs to the endpoint, not to the per-request server.
   const tasks = new TaskStore();
-  const handler = createMcpHandler(() => createServer(opts.host, opts.version, tasks), { onerror: opts.onError });
+  const handler = createMcpHandler(() => createServer(opts.host, opts.version, tasks, { structured: opts.structured }), { onerror: opts.onError });
   const server: Server = http.createServer((req, res) => {
     void serve(req, res).catch((err: unknown) => {
       opts.onError?.(err instanceof Error ? err : new Error(String(err)));

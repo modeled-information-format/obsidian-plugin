@@ -330,15 +330,15 @@ export class VaultMcpHost implements McpHost {
     return [...by].filter(([, paths]) => paths.length > 1).map(([id, paths]) => ({ id: `urn:mif:${id}`, paths: paths.sort() })).sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  /** The ontology catalog gives ontologies their addresses; learn it before serving, when the user allows downloads. */
+  /** The ontology catalog says where ontologies are published; learn it before serving, when the user allows downloads. */
   async prepare(): Promise<void> {
     await this.manager.refreshOntologyCatalog();
   }
 
   ontologies(): OntologyView[] {
-    // An ontology's uri is the one this vault's concepts declare for it; failing that, its canonical
-    // address in the mif-spec.dev catalog, if this definition is the catalog's own (same sha256);
-    // failing that, urn:mif:ontology:<id> (owner decisions, plan M28 and M31).
+    // Every ontology is addressed as urn:mif:ontology:<id> (owner decision, plan M63). Where it is
+    // published is kept as information: the uri this vault's concepts declare for it; failing that,
+    // its address in the mif-spec.dev catalog, if this definition is the catalog's own (same sha256).
     const uris = new Map<string, string>();
     for (const a of this.manager.all()) {
       const o = a.isConcept ? a.frontmatter?.ontology : undefined;
@@ -375,7 +375,8 @@ export class VaultMcpHost implements McpHost {
         out.set(def.id, {
           id: def.id,
           version: def.version,
-          uri: declared ?? catalog ?? `urn:mif:ontology:${def.id}`,
+          uri: `urn:mif:ontology:${def.id}`,
+          ...(declared ?? catalog ? { published_at: declared ?? catalog } : {}),
           address: declared ? "declared" : catalog ? "catalog" : "local",
           ...(note ? { address_note: note } : {}),
           ...(def.description ? { description: def.description } : {}),
@@ -593,7 +594,7 @@ export class McpService {
     if (!mcp) return (this.status = { state: "failed", reason: "The MCP server's code (mcp.cjs) is missing from the plugin's folder. Reinstall the plugin's files." });
     if (!Number.isInteger(s.mcpPort) || s.mcpPort < 1024 || s.mcpPort > 65535) return (this.status = { state: "failed", reason: `Port ${s.mcpPort} is not between 1024 and 65535.` });
     try {
-      // Never fatal: with no catalog, ontologies the vault gives no uri are simply not addressable.
+      // Never fatal: with no catalog, where an ontology is published is simply not reported.
       await this.host.prepare?.().catch((err: unknown) => this.log("mcp-prepare-failed", { message: (err as Error).message }));
       this.endpoint = await mcp.startEndpoint(http, {
         host: this.host,

@@ -55,7 +55,7 @@ export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempoten
 export const responseFormat = z
   .enum(["markdown", "json"])
   .default("markdown")
-  .describe('"markdown" for reading, "json" for the same data as the structured result.');
+  .describe('"markdown" for reading, with freshness, trust and what to do next in words; "json" for the same data as JSON text, for a program.');
 export const detail = z
   .enum(["compact", "full"])
   .default("compact")
@@ -122,6 +122,17 @@ export const refOf = (c: ConceptRef): ConceptRef => ({ ...(c.id ? { id: c.id } :
 export const refLine = (c: ConceptRef, full = true) => (full ? `${c.title} (${c.id ?? "no id"}, ${c.path})` : `${c.title} [${c.path}]`);
 
 /** How many relationships of each type a concept declares (outgoing) and has pointing at it (incoming). */
+/** Quote marks a client left on an argument it split out of a quoted phrase. */
+export const unquote = (v: string) => v.replace(/^["'\s]+|["'\s]+$/g, "");
+
+/**
+ * For a prompt that takes free text. A client that runs a prompt as a typed command may pass only
+ * the first word of what was typed (Claude Code does, quotes or not), and the server cannot see the
+ * rest; the model can, because the client shows it the command as typed.
+ */
+export const typedInFull = (what: string) =>
+  `If this prompt was run as a typed command and more was typed after the command than appears above, the client cut it short: take everything that was typed as ${what}.`;
+
 export function countEdges(edges: EdgeView[]): Counts {
   const counts: Counts = { outgoing: {}, incoming: {} };
   for (const e of edges) counts[e.direction][e.type] = (counts[e.direction][e.type] ?? 0) + 1;
@@ -227,8 +238,18 @@ export function instructions(host: McpHost): string {
   ].join(" ");
 }
 
+export interface ServerOptions {
+  /**
+   * Also return each result's data as structured content, and declare output schemas. Off by default
+   * (plan M60): a client given both hands the model the structured copy and drops the text (Claude
+   * Code does), and the text is where a result states its weighing in words and what to do next.
+   * A program that wants the data asks for response_format "json" and gets it as text.
+   */
+  structured?: boolean;
+}
+
 /** `tasks`, when given, lets a client that declares the Tasks extension run the gap report as a task. */
-export function createServer(host: McpHost, version: string, tasks?: TaskStore): McpServer {
+export function createServer(host: McpHost, version: string, tasks?: TaskStore, opts: ServerOptions = {}): McpServer {
   // Lists are the same for every client and change only with the plugin's settings; a concept changes whenever its note is saved.
   const steady = { ttlMs: 60_000, cacheScope: "private" as const };
   const server = new McpServer(
@@ -240,6 +261,21 @@ export function createServer(host: McpHost, version: string, tasks?: TaskStore):
       cacheHints: { "tools/list": steady, "prompts/list": steady, "resources/templates/list": steady, "server/discover": steady, "resources/list": { ttlMs: 5_000, cacheScope: "private" } },
     },
   );
+  const textOnly = <T,>(result: T): T => {
+    if (opts.structured || !result || typeof result !== "object" || !("structuredContent" in result)) return result;
+    const { structuredContent: _data, ...rest } = result as Record<string, unknown>;
+    return rest as T;
+  };
+  if (!opts.structured) {
+    // Every tool is registered through here, so one place decides the shape of every result.
+    type Register = (name: string, config: Record<string, unknown>, cb: (...a: unknown[]) => unknown) => unknown;
+    const untyped = server as unknown as { registerTool: Register };
+    const register = untyped.registerTool.bind(server);
+    untyped.registerTool = (name, config, cb) => {
+      const { outputSchema: _schema, ...rest } = config;
+      return register(name, rest, async (...a) => textOnly(await cb(...a)));
+    };
+  }
   if (tasks) {
     // A tool with an output schema must return structured content, and the SDK (2.4.0) knows no task result:
     // let one through unchecked. This leans on an SDK method that is not part of its documented surface;
@@ -257,7 +293,7 @@ export function createServer(host: McpHost, version: string, tasks?: TaskStore):
     server.server.setRequestHandler("tasks/get", { params, result }, (p) => {
       const task = tasks.get(p.taskId);
       if (!task) throw unknown();
-      return { ...task };
+      return { ...task, ...(task.result === undefined ? {} : { result: textOnly(task.result) }) };
     });
     server.server.setRequestHandler("tasks/cancel", { params, result }, (p) => {
       if (!tasks.cancel(p.taskId)) throw unknown();
@@ -700,6 +736,10 @@ export function createServer(host: McpHost, version: string, tasks?: TaskStore):
       const types = [...new Set(rows.map((r) => r.edge.type))].sort();
       const window = rows.slice(args.offset, args.offset + Math.min(args.limit, 100));
       const filtered = !!(wanted || args.direction !== "both" || args.path);
+      const tallied =
+        args.counts_only && !goal && !setMode
+          ? summary.flatMap((c) => (["outgoing", "incoming"] as const).filter((d) => args.direction === "both" || args.direction === d).flatMap((d) => Object.entries(c.relationship_counts[d]).filter(([t]) => !wanted || wanted.has(t))))
+          : undefined;
       const out = fit(window, rows.length, args.offset, false, (items, p) => {
         const relationships = items.map((r) => {
           const other = r.edge.concept;
@@ -765,7 +805,9 @@ export function createServer(host: McpHost, version: string, tasks?: TaskStore):
           p.has_more ? `More: call again with offset ${p.next_offset}.` : "",
         ].filter(Boolean);
         return {
-          data: { concepts: summary, combine: args.combine, ...p, excluded_expired: excluded, types, relationships },
+          // With counts_only nothing is listed, so the totals come from the counts: the relationships of the
+          // concepts asked about, in the direction and of the types asked for. One between two of them counts for each.
+          data: { concepts: summary, combine: args.combine, ...p, ...(tallied ? { total_count: tallied.reduce((n, [, c]) => n + c, 0) } : {}), excluded_expired: excluded, types: tallied ? [...new Set(tallied.map(([t]) => t))].sort() : types, relationships },
           text: [...sections, ...notes].filter(Boolean).join("\n\n"),
         };
       });

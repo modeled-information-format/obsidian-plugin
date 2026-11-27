@@ -14,8 +14,8 @@
 import { Notice, TFile, type App } from "obsidian";
 import type { MifCli } from "./cliBridge";
 import {
-  addRelationship as addRelationshipText, analyze, applyEdit, conceptPath, entityReference, entitySlug, isoSeconds, linkTarget, newConceptText, relativeTarget, removeRelationship as removeRelationshipText,
-  slugify, syncCitations, syncMirror, titleForTarget, updateFrontmatter, updateRelationship as updateRelationshipText, type BaseType,
+  addRelationship as addRelationshipText, analyze, applyEdit, entityReference, entitySlug, isoSeconds, linkTarget, newConceptText, relativeTarget, removeRelationship as removeRelationshipText,
+  slugify, syncCitations, syncMirror, titledConceptPath, titleForTarget, updateFrontmatter, updateRelationship as updateRelationshipText, type BaseType,
 } from "./engine";
 import type { MifManager } from "./manager";
 import type { Author, ConceptEdit, ConceptRef, EntityTypeView, IngestView, NewConceptInput, Refused, RelationshipWrite, Unavailable } from "./mcp/host";
@@ -268,7 +268,9 @@ export class VaultWrites {
     const now = new Date();
     const oldBundlePath = input.supersedes === undefined ? undefined : this.manager.toBundlePath(root, input.supersedes);
     const folder = (input.folder ?? (oldBundlePath === undefined ? type : oldBundlePath.includes("/") ? oldBundlePath.slice(0, oldBundlePath.lastIndexOf("/")) : "")).replace(/^\/+|\/+$/g, "");
-    const bundlePath = conceptPath(folder, title, (p) => this.app.vault.getAbstractFileByPath(this.manager.toVaultPath(root, p)) !== null);
+    // The file keeps the title's capitals (plan M57); a name is taken if any file has it in any case.
+    const taken = new Set(this.app.vault.getFiles().map((f) => f.path.toLowerCase()));
+    const bundlePath = titledConceptPath(folder, title, (p) => taken.has(this.manager.toVaultPath(root, p).toLowerCase()));
     const path = this.manager.toVaultPath(root, bundlePath);
     const namespace = input.namespace ?? (typeof oldFm.namespace === "string" ? oldFm.namespace : undefined);
     const stamp = isoSeconds(now);

@@ -13,7 +13,7 @@
 import { acceptedContent, CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, inputRequired, inputResponse, type McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { Author, ConceptRef, ConceptView, McpHost, Refused } from "./host";
-import { fail, finish, refSchema, resolveOrFail, responseFormat, suggest, TOOL_NAMES, withLinks, type ToolResult } from "./tools";
+import { fail, finish, refSchema, resolveOrFail, responseFormat, suggest, TOOL_NAMES, typedInFull, unquote, withLinks, type ToolResult } from "./tools";
 
 /** The write tools, in the order `tools/list` returns them after the read tools. */
 export const WRITE_TOOL_NAMES = ["mif_vault_write_concept", "mif_vault_write_relationship", "mif_vault_write_reference", "mif_vault_ingest_concepts", "mif_vault_edit_concept"] as const;
@@ -499,7 +499,8 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
           content: {
             type: "text" as const,
             text: [
-              `Capture this into the MIF memory of the vault "${host.vault().name}": ${what}`,
+              `Capture this into the MIF memory of the vault "${host.vault().name}": ${unquote(what)}`,
+              typedInFull("what to capture"),
               "",
               `1. Check what the vault already holds: ${TOOL_NAMES[0]} for the topic, or ${TOOL_NAMES[3]} by title. If it is already there and still right, say so and stop.`,
               `2. Decide what it is: semantic (a fact or decision), episodic (something that happened), or procedural (how to do something). If it corrects or adds to a concept the vault holds, edit that concept with ${editConcept}; if it replaces one, supersede it; do not add a second concept that says the same thing.`,
@@ -576,7 +577,8 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
     },
     ({ topic }) =>
       say([
-        `Consolidate what the vault "${host.vault().name}" has recorded about: ${topic}`,
+        `Consolidate what the vault "${host.vault().name}" has recorded about: ${unquote(topic)}`,
+        typedInFull("the topic"),
         "",
         `1. Find the events: ${search} for the topic, keeping the episodic concepts among the results, and ${listConcepts} with type: "episodic" and title_contains for a word of the topic. Read each candidate with ${getConcept}. Drop the ones that are not about this subject.`,
         `2. Check what the vault already concludes: among the same search results, and with ${listConcepts} with type: "semantic", look for a semantic concept that already states the conclusion. If there is one, extend it with ${editConcept} instead of writing a second one.`,
