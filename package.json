@@ -1,6 +1,6 @@
 {
   "name": "obsidian-mif",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Author, validate, and sync MIF (Modeled Information Format) notes: live diagnostics with quick fixes, typed relationships, ontologies, freshness, citations, and JSON-LD export.",
   "type": "module",

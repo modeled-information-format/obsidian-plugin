@@ -1,7 +1,7 @@
 {
   "id": "mif",
   "name": "MIF",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0",
   "minAppVersion": "1.10.0",
   "description": "Author, validate, and sync MIF (Modeled Information Format) notes: live diagnostics with quick fixes, typed relationships, ontologies, freshness, citations, and JSON-LD export.",
   "author": "Modeled Information Format",
