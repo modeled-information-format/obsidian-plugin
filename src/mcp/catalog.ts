@@ -10,7 +10,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ConceptSummary, EdgeView, McpHost, Weighing } from "./host";
-import { asOf, cautious, detail, fail, finish, fit, hidden, page, parseAsOf, READ_ONLY, refLine, resolveOrFail, responseFormat, TOOL_NAMES, weighingBrief, weighingSchema, type ToolResult } from "./tools";
+import { asOf, cautious, detail, fail, finish, fit, hidden, page, parseAsOf, READ_ONLY, refLine, resolveOrFail, responseFormat, suggest, TOOL_NAMES, unknownValue, weighingLine, weighingSchema, withLinks, type ToolResult } from "./tools";
 
 const tally = (values: Array<string | undefined>): Record<string, number> => {
   const out: Record<string, number> = {};
@@ -23,7 +23,10 @@ const tallyLine = (t: Record<string, number>, top = 20) => {
 };
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.indexOf("/")) : "(vault root)");
 
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export function registerCatalogTools(server: McpServer, host: McpHost): void {
+  const vocab = host.vocabulary();
   const matching = (edges: EdgeView[], want: { type?: string; direction: "both" | "outgoing" | "incoming" }) =>
     edges.filter((e) => (want.direction === "both" || e.direction === want.direction) && (!want.type || e.type === want.type)).length;
 
@@ -40,15 +43,16 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         `cite the concepts you use. Find concepts by meaning with ${TOOL_NAMES[0]}; read one with ${TOOL_NAMES[1]}.`,
       inputSchema: z.object({
         title_contains: z.string().min(1).optional().describe('Only concepts whose title contains this text, ignoring case, e.g. "CON-P-1".'),
-        type: z.string().optional().describe('Only this concept type: "semantic", "episodic" or "procedural".'),
-        namespace: z.string().optional().describe('Only concepts in this namespace or below it, e.g. "constraints" matches "constraints/security".'),
-        entity_type: z.string().optional().describe('Only concepts whose entity type is exactly this, e.g. "constraint".'),
-        folder: z.string().optional().describe('Only concepts in this vault folder or below it, e.g. "07-Capability-Model".'),
-        freshness: z.array(z.string()).optional().describe('Only these freshness states: "fresh", "ageing", "stale", "expired", "not-yet-valid", "timeless". Naming "expired" or "not-yet-valid" includes them.'),
-        trust: z.array(z.string()).optional().describe('Only these trust levels as recorded in provenance, e.g. ["low_confidence"]. Use "(none)" for concepts that record none.'),
+        type: z.string().optional().describe('Only this concept type: "semantic", "episodic" or "procedural".').meta(suggest(vocab.types)),
+        namespace: z.string().optional().describe('Only concepts in this namespace or below it, e.g. "constraints" matches "constraints/security". The examples are namespaces this vault uses.').meta(suggest(vocab.namespaces)),
+        entity_type: z.string().optional().describe('Only concepts of this entity type, e.g. "constraint", and of the types the vault\'s ontologies declare as its subtypes. The examples are the entity types this vault uses.').meta(suggest(vocab.entity_types)),
+        include_subtypes: z.boolean().default(true).describe("With entity_type: also match its subtypes, at any depth, as the loaded ontologies declare them. False matches the named type only."),
+        folder: z.string().optional().describe('Only concepts in this vault folder or below it, e.g. "07-Capability-Model". The examples are this vault\'s top folders.').meta(suggest(vocab.folders)),
+        freshness: z.array(z.enum(["fresh", "ageing", "stale", "expired", "not-yet-valid", "timeless"])).optional().describe('Only these freshness states. Naming "expired" or "not-yet-valid" includes them.'),
+        trust: z.array(z.string().meta(suggest([...vocab.trust, "(none)"]))).optional().describe('Only these trust levels as recorded in provenance, e.g. ["low_confidence"]. Use "(none)" for concepts that record none. The examples are the levels this vault uses.'),
         relationship: z
           .object({
-            type: z.string().optional().describe("The relationship type to count; omit to count every type."),
+            type: z.string().optional().describe("The relationship type to count; omit to count every type. The examples are the relationship types this vault uses.").meta(suggest(vocab.relationship_types)),
             direction: z.enum(["both", "outgoing", "incoming"]).default("both").describe('"outgoing" counts relationships the concept declares, "incoming" those declared to it.'),
             min: z.number().int().min(0).default(1).describe("At least this many."),
             max: z.number().int().min(0).optional().describe("At most this many; 0 with min 0 finds concepts that have none."),
@@ -87,10 +91,21 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
       const at = parseAsOf(args.as_of);
       if (typeof at === "string") return fail(at);
       const full = args.detail === "full";
+      const ontologyTypes = host.ontologies().flatMap((o) => o.entity_types.map((t) => t.name));
+      for (const [what, given, valid] of [
+        ["concept type", args.type, vocab.types],
+        ["entity type", args.entity_type, [...vocab.entity_types, ...ontologyTypes]],
+        ["relationship type", args.relationship?.type, vocab.relationship_types],
+      ] as const) {
+        const bad = given === undefined ? undefined : unknownValue(what, given, [...new Set(valid)]);
+        if (bad) return bad;
+      }
+      // The named entity type and, unless asked otherwise, every type an ontology declares beneath it.
+      const entityTypes = args.entity_type === undefined ? undefined : new Set((args.include_subtypes ? host.subtypes(args.entity_type) : [args.entity_type]).map(norm));
       const needle = args.title_contains?.toLowerCase();
       const folder = args.folder?.replace(/^\/+|\/+$/g, "");
       const ns = args.namespace?.replace(/\/+$/, "");
-      const freshness = args.freshness ? new Set(args.freshness) : undefined;
+      const freshness = args.freshness ? new Set<string>(args.freshness) : undefined;
       const trust = args.trust ? new Set(args.trust) : undefined;
       const showHidden = args.include_expired || !!(freshness && (freshness.has("expired") || freshness.has("not-yet-valid")));
       let excluded = 0;
@@ -100,7 +115,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         if (needle && !c.title.toLowerCase().includes(needle)) continue;
         if (args.type && c.type !== args.type) continue;
         if (ns && c.namespace !== ns && !c.namespace?.startsWith(`${ns}/`)) continue;
-        if (args.entity_type && c.entity_type !== args.entity_type) continue;
+        if (entityTypes && !(c.entity_type && entityTypes.has(norm(c.entity_type)))) continue;
         if (folder && c.path !== folder && !c.path.startsWith(`${folder}/`)) continue;
         let count: number | undefined;
         if (args.relationship) {
@@ -144,7 +159,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
           ...(r.weighing && (full || cautious(r.weighing)) ? { weighing: r.weighing } : {}),
         }));
         const lines = items.map((r) => {
-          const note = r.weighing && full ? ` — ${weighingBrief(r.weighing)}` : cautious(r.weighing) ? ` — ${r.weighing!.freshness.toUpperCase()}` : "";
+          const note = r.weighing && full ? `\n      ${weighingLine(r.weighing).replace(/\n/g, "\n      ")}` : cautious(r.weighing) ? ` — ${r.weighing!.freshness.toUpperCase()}` : "";
           return `  - ${label(r.c)}${r.count === undefined ? "" : ` — ${r.count}`}${note}`;
         });
         const counted = args.relationship ? ` The number after each is its count of ${args.relationship.type ?? "typed"} relationships${args.relationship.direction === "both" ? "" : ` (${args.relationship.direction})`}.` : "";
@@ -156,7 +171,8 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         const head = rows.length ? `${rows.length} concept(s) match.${counted}` : "No concepts match these filters. Loosen one, or pass group_by to see what values exist.";
         return { data: { ...p, excluded_expired: excluded, concepts }, text: [[head, ...lines].join("\n"), ...notes].join("\n\n") };
       });
-      return finish(out, args.response_format);
+      const shown = new Set((out.data.concepts as Array<{ path: string }>).map((c) => c.path));
+      return withLinks(finish(out, args.response_format), window.filter((r) => shown.has(r.c.path)).map((r) => r.c));
     },
   );
 
@@ -170,7 +186,8 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         "Filter by type or name, or pass referenced_by to see the entities one concept names. Pass include_references to list the concepts that refer to each entity. " +
         `Entity references are evidence that a concept is about something, not that the entity record is complete; cite the concepts. Read a referring concept with ${TOOL_NAMES[1]}.`,
       inputSchema: z.object({
-        type: z.string().optional().describe('Only entities of this type, ignoring case, e.g. "policy".'),
+        type: z.string().optional().describe('Only entities of this type, ignoring case, e.g. "policy", and of the types the vault\'s ontologies declare as its subtypes. The examples are the entity types this vault\'s entities have.').meta(suggest([...new Set(host.entities().flatMap((e) => (e.type ? [e.type] : [])))].sort())),
+        include_subtypes: z.boolean().default(true).describe("With type: also match its subtypes, at any depth, as the loaded ontologies declare them. False matches the named type only."),
         name_contains: z.string().min(1).optional().describe("Only entities whose name or an alias contains this text, ignoring case."),
         referenced_by: z.string().min(1).optional().describe("Only entities this concept refers to (path, id, title or code)."),
         min_references: z.number().int().min(0).default(0).describe("Only entities at least this many concepts refer to."),
@@ -204,10 +221,15 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         if ("content" in c) return c;
         only = c.path;
       }
-      const type = args.type?.toLowerCase();
+      const all = host.entities();
+      if (args.type !== undefined) {
+        const bad = unknownValue("entity type", args.type, [...new Set([...all.flatMap((e) => (e.type ? [e.type] : [])), ...host.ontologies().flatMap((o) => o.entity_types.map((t) => t.name))])]);
+        if (bad && !all.some((e) => e.type && norm(e.type) === norm(args.type!))) return bad;
+      }
+      const types = args.type === undefined ? undefined : new Set((args.include_subtypes ? host.subtypes(args.type) : [args.type]).map(norm));
       const needle = args.name_contains?.toLowerCase();
-      const rows = host.entities().filter((e) => {
-        if (type && e.type?.toLowerCase() !== type) return false;
+      const rows = all.filter((e) => {
+        if (types && !(e.type && types.has(norm(e.type)))) return false;
         if (needle && ![e.name ?? "", ...e.aliases].some((n) => n.toLowerCase().includes(needle))) return false;
         if (only && !e.references.some((r) => r.concept.path === only)) return false;
         return e.references.length >= args.min_references;
@@ -237,7 +259,11 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         const head = rows.length ? `${rows.length} entit${rows.length === 1 ? "y" : "ies"} match.` : "No entities match. Pass group_by_type: true to see which types exist.";
         return { data: { ...p, entities }, text: [[head, ...lines].join("\n"), p.has_more ? `More: call again with offset ${p.next_offset}.` : ""].filter(Boolean).join("\n\n") };
       });
-      return finish(out, args.response_format);
+      const shown = new Set((out.data.entities as Array<{ urn: string }>).map((e) => e.urn));
+      const result = finish(out, args.response_format);
+      // Each entity is a resource at its urn; with include_references, so is each concept that refers to it.
+      const entityLinks = window.filter((e) => shown.has(e.urn)).map((e) => ({ type: "resource_link" as const, uri: e.urn, name: e.name ?? e.urn, mimeType: "application/json" }));
+      return withLinks({ ...result, content: [...result.content, ...entityLinks] }, args.include_references ? window.filter((e) => shown.has(e.urn)).flatMap((e) => e.references.map((r) => r.concept)) : []);
     },
   );
 
@@ -249,11 +275,22 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         "Report on this vault's MIF memory as a whole. report \"graph\": how many concepts, relationships and entities there are, by type, " +
         "how many concepts have no typed relationship, how many relationship targets do not resolve, and how fresh and trusted the concepts are. " +
         "report \"store\": whether semantic search covers the notes: concepts never ingested, changed since they were ingested, or refused. " +
-        "report \"gaps\": pairs of similar concepts with no typed relationship, and typed relationships whose two ends are unalike; this one is slow, since it compares every concept of a bundle. " +
+        "report \"gaps\": pairs of similar concepts with no typed relationship, and typed relationships whose two ends are unalike; it compares every concept of a bundle, so pass scope to report on one kind of concept (an entity type, a namespace, a folder). " +
         `Use it to judge how far to rely on the vault before answering from it, and as evidence when you report on its health. List concepts behind a number with ${TOOL_NAMES[3]}.`,
       inputSchema: z.object({
         report: z.enum(["graph", "store", "gaps"]).default("graph").describe('"graph" for counts and health, "store" for vector store coverage, "gaps" for missing and doubtful relationships (slow).'),
-        bundle: z.string().optional().describe('Only this bundle root; omit for every bundle. "" is the vault root. "gaps" needs one bundle when the vault has several.'),
+        bundle: z.string().optional().describe('Only this bundle root; omit for every bundle. "" is the vault root. "gaps" needs one bundle when the vault has several.').meta(suggest(vocab.bundles)),
+        scope: z
+          .object({
+            entity_type: z.string().optional().describe("Only concepts of this entity type and, unless include_subtypes is false, its subtypes. The examples are the entity types this vault uses.").meta(suggest(vocab.entity_types)),
+            include_subtypes: z.boolean().default(true).describe("With entity_type: also match its subtypes as the loaded ontologies declare them."),
+            type: z.string().optional().describe('Only this concept type: "semantic", "episodic" or "procedural".').meta(suggest(vocab.types)),
+            namespace: z.string().optional().describe("Only concepts in this namespace or below it. The examples are namespaces this vault uses.").meta(suggest(vocab.namespaces)),
+            folder: z.string().optional().describe("Only concepts in this vault folder or below it. The examples are this vault's top folders.").meta(suggest(vocab.folders)),
+            match: z.enum(["both", "either"]).default("both").describe('"both" keeps a pair only when both of its concepts are in scope; "either" when at least one is.'),
+          })
+          .optional()
+          .describe('For gaps: which concepts the report is about, e.g. { entity_type: "constraint" } for gaps among constraint records only. Without it every pair in the bundle is reported, which on a large vault is dominated by near-identical notes such as daily notes.'),
         limit: z.number().int().min(1).default(25).describe("For gaps and store: maximum pairs or paths to list per group; at most 100."),
         offset: z.number().int().min(0).default(0).describe("For gaps: pairs to skip, for the next page."),
         as_of: asOf,
@@ -274,6 +311,8 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
             freshness: z.record(z.string(), z.number()),
             trust: z.record(z.string(), z.number()),
             entities: z.number(),
+            ontologies: z.array(z.object({ id: z.string(), version: z.string(), uri: z.string(), address: z.enum(["declared", "catalog", "local"]), address_note: z.string().optional() })),
+            duplicate_ids: z.array(z.object({ id: z.string(), paths: z.array(z.string()) })),
           })
           .optional(),
         stores: z
@@ -298,6 +337,8 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
             thresholds: z.object({ duplicate: z.number(), similar: z.number(), mislink: z.number() }),
             unlinked_count: z.number(),
             mislink_count: z.number(),
+            unscoped_unlinked_count: z.number(),
+            unscoped_mislink_count: z.number(),
             has_more: z.boolean(),
             next_offset: z.number().optional(),
             unlinked: z.array(z.object({ a: z.string(), b: z.string(), cosine: z.number() })),
@@ -308,7 +349,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
       }),
       annotations: READ_ONLY,
     },
-    async (args): Promise<ToolResult> => {
+    async (args, ctx): Promise<ToolResult> => {
       const at = parseAsOf(args.as_of);
       if (typeof at === "string") return fail(at);
       const bundles = host.vault().bundles;
@@ -347,6 +388,11 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
           freshness: tally(weighings.map((w) => w?.freshness)),
           trust: tally(weighings.map((w) => w?.trust)),
           entities: host.entities().filter((e) => targets.includes(e.bundle)).length,
+          ontologies: host
+            .ontologies()
+            .filter((o) => o.bundles.some((b) => targets.includes(b)))
+            .map((o) => ({ id: o.id, version: o.version, uri: o.uri, address: o.address, ...(o.address_note ? { address_note: o.address_note } : {}) })),
+          duplicate_ids: host.duplicateIds().filter((d) => d.paths.some((p) => concepts.some((c) => c.path === p))),
         };
         const text = [
           `${graph.concepts} concept(s) in ${targets.length} bundle(s), ${graph.relationships} typed relationship(s), ${graph.entities} entit${graph.entities === 1 ? "y" : "ies"}.`,
@@ -356,8 +402,14 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
           `${graph.without_relationships} concept(s) have no typed relationship in either direction. ${graph.unresolved_targets} relationship target(s) do not resolve to a concept (an entity, another bundle, or a missing note).`,
           `Freshness: ${tallyLine(graph.freshness)}.`,
           `Trust: ${tallyLine(graph.trust)}.`,
+          graph.ontologies.length ? `Ontologies loaded, each readable as a resource at its address:\n${graph.ontologies.map((o) => `  - ${o.id} ${o.version} — ${o.uri}${o.address_note ? ` (${o.address_note})` : ""}`).join("\n")}` : "Ontologies loaded: none.",
+          graph.duplicate_ids.length
+            ? `${graph.duplicate_ids.length} id(s) are carried by more than one note, so those notes cannot be told apart by id; address them by path:\n${graph.duplicate_ids.map((d) => `  - ${d.id}: ${d.paths.join(", ")}`).join("\n")}`
+            : "No id is carried by more than one note.",
           `List the concepts behind any of these with ${TOOL_NAMES[3]}, for example freshness: ["stale"] or relationship: { min: 0, max: 0 }.`,
-        ].join("\n");
+        ]
+          .filter(Boolean)
+          .join("\n");
         return finish({ data: { report: "graph", graph, problems }, text }, args.response_format);
       }
 
@@ -387,17 +439,62 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
       }
 
       if (targets.length !== 1) return fail(`The gap report compares one bundle at a time. Pass bundle; this vault has: ${bundles.map((b) => `"${b}"`).join(", ")}.`);
-      const g = await host.gaps(targets[0]!);
+      // The comparison is one mif-cli run per concept: report progress to a caller that asked for it.
+      const token = ctx.mcpReq._meta?.progressToken;
+      const report =
+        token === undefined
+          ? undefined
+          : (done: number, total: number) => {
+              if (done === total || done % 10 === 0) void ctx.mcpReq.notify({ method: "notifications/progress", params: { progressToken: token, progress: done, total, message: `Compared ${done} of ${total} concepts` } }).catch(() => undefined);
+            };
+      const g = await host.gaps(targets[0]!, report);
       if ("unavailable" in g) return fail(`The gap report is unavailable. ${g.unavailable} ${TOOL_NAMES[0]} with similar_to gives the neighbours of one concept.`);
       const name = (c: { title: string } | undefined) => c?.title ?? "(not in the vault)";
+      // The comparison always covers the bundle; the scope chooses which of its pairs to report.
+      const scope = args.scope;
+      let inScope: ((path: string | undefined) => boolean) | undefined;
+      let scopeText = "";
+      if (scope && (scope.entity_type || scope.type || scope.namespace || scope.folder)) {
+        const ontologyTypes = host.ontologies().flatMap((o) => o.entity_types.map((t) => t.name));
+        for (const [what, given, valid] of [
+          ["concept type", scope.type, vocab.types],
+          ["entity type", scope.entity_type, [...new Set([...vocab.entity_types, ...ontologyTypes])]],
+        ] as const) {
+          const bad = given === undefined ? undefined : unknownValue(what, given, [...valid]);
+          if (bad) return bad;
+        }
+        const entityTypes = scope.entity_type === undefined ? undefined : new Set((scope.include_subtypes ? host.subtypes(scope.entity_type) : [scope.entity_type]).map(norm));
+        const ns = scope.namespace?.replace(/\/+$/, "");
+        const folder = scope.folder?.replace(/^\/+|\/+$/g, "");
+        const members = new Set(
+          host
+            .concepts()
+            .filter(
+              (c) =>
+                (!entityTypes || (c.entity_type !== undefined && entityTypes.has(norm(c.entity_type)))) &&
+                (!scope.type || c.type === scope.type) &&
+                (!ns || c.namespace === ns || !!c.namespace?.startsWith(`${ns}/`)) &&
+                (!folder || c.path === folder || c.path.startsWith(`${folder}/`)),
+            )
+            .map((c) => c.path),
+        );
+        inScope = (path) => path !== undefined && members.has(path);
+        scopeText = ` Scope: ${[scope.entity_type && `entity type ${scope.entity_type}`, scope.type && `type ${scope.type}`, ns && `namespace ${ns}`, folder && `folder ${folder}`].filter(Boolean).join(", ")}; ${members.size} concept(s); a pair is kept when ${scope.match === "both" ? "both of its concepts are" : "either of its concepts is"} in scope.`;
+      }
+      const keep = (p: (typeof g.unlinked)[number]) => !inScope || (scope!.match === "both" ? inScope(p.a?.path) && inScope(p.b?.path) : inScope(p.a?.path) || inScope(p.b?.path));
+      const scoped = { unlinked: g.unlinked.filter(keep), mislinks: g.mislinks.filter(keep) };
+      const total = { unlinked: g.unlinked.length, mislinks: g.mislinks.length };
+      g.unlinked = scoped.unlinked;
+      g.mislinks = scoped.mislinks;
       const pairs = (list: typeof g.unlinked) => list.slice(args.offset, args.offset + cap).map((p) => ({ a: name(p.a), b: name(p.b), cosine: p.cosine }));
       const unlinked = pairs(g.unlinked);
       const mislinks = pairs(g.mislinks);
       const has_more = args.offset + cap < Math.max(g.unlinked.length, g.mislinks.length);
       const thresholds = host.thresholds();
-      const gaps = { bundle: g.bundle, compared: g.compared, thresholds, unlinked_count: g.unlinked.length, mislink_count: g.mislinks.length, has_more, ...(has_more ? { next_offset: args.offset + cap } : {}), unlinked, mislinks };
+      const gaps = { bundle: g.bundle, compared: g.compared, thresholds, unlinked_count: g.unlinked.length, mislink_count: g.mislinks.length, unscoped_unlinked_count: total.unlinked, unscoped_mislink_count: total.mislinks, has_more, ...(has_more ? { next_offset: args.offset + cap } : {}), unlinked, mislinks };
       const text = [
-        `Compared ${g.compared} ingested concept(s) of bundle "${g.bundle}".`,
+        `Compared ${g.compared} ingested concept(s) of bundle "${g.bundle}".${scopeText}`,
+        inScope ? `In the whole bundle there are ${total.unlinked} unlinked pair(s) and ${total.mislinks} doubtful relationship(s).` : total.unlinked > 200 ? `That is a long list. Pass scope, for example { entity_type: "…" } or { folder: "…" }, to report on one kind of concept.` : "",
         `${g.unlinked.length} pair(s) are similar (cosine ${thresholds.similar} or more) and have no typed relationship in either direction${unlinked.length ? ":" : "."}`,
         ...unlinked.map((p) => `  - ${p.a} / ${p.b} — cosine ${p.cosine.toFixed(2)}`),
         `${g.mislinks.length} typed relationship(s) join concepts that are unalike (cosine ${thresholds.mislink} or less)${mislinks.length ? ":" : "."}`,

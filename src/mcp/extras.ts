@@ -3,7 +3,7 @@
 // and two prompts. Like catalog.ts, this module is imported by tools.ts and
 // imports from it, so those imports are used only inside registerExtras.
 
-import { completable, ResourceNotFoundError, ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
+import { completable, ProtocolError, ProtocolErrorCode, ResourceNotFoundError, ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { McpHost } from "./host";
 import { countEdges, countsLine, TOOL_NAMES, weighingLine } from "./tools";
@@ -11,8 +11,15 @@ import { countEdges, countsLine, TOOL_NAMES, weighingLine } from "./tools";
 /** Prompts, in the order `prompts/list` returns them. Same prefix as the tools (plan M24). */
 export const PROMPT_NAMES = ["mif_vault_guide", "mif_vault_recall"] as const;
 
-/** `urn:mif:<uuid>` names a concept and `urn:mif:entity:<type>:<slug>` an entity (plan M23). */
+/**
+ * `urn:mif:<uuid>` names a concept, `urn:mif:entity:<type>:<slug>` an entity
+ * (plan M23), and `urn:mif:ontology:<id>` an ontology that has no declared or
+ * catalog address (plan M31).
+ */
 export const RESOURCE_TEMPLATE = "urn:mif:{id}";
+
+/** Resources returned by one `resources/list` request; the rest follow by cursor. */
+export const RESOURCE_PAGE = 100;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A note changes whenever its author saves it, and nothing tells the client: keep cached copies short-lived and private. */
@@ -45,13 +52,56 @@ export function guide(host: McpHost): string {
 }
 
 export function registerExtras(server: McpServer, host: McpHost): void {
+  // Every resource the vault has, in a fixed order: concepts by path, then entities, then ontologies that have a uri.
+  const catalog = () => [
+    ...host.concepts().flatMap((c) => (c.id ? [{ uri: c.id, name: c.title, description: [c.type, c.entity_type, c.path].filter(Boolean).join(" · "), mimeType: "text/markdown" }] : [])),
+    ...host.entities().map((e) => ({ uri: e.urn, name: e.name ?? e.urn, description: [e.type, `${e.references.length} reference(s)`].filter(Boolean).join(" · "), mimeType: "application/json" })),
+    ...host.ontologies().map((o) => ({ uri: o.uri, name: `${o.id} ${o.version}`, description: o.description ?? "MIF ontology", mimeType: "application/json" })),
+  ];
+
+  // An ontology at a declared or catalog address is its own resource; one at urn:mif:ontology:<id> is read through the urn:mif: template below.
+  for (const o of host.ontologies()) {
+    if (/^urn:mif:/i.test(o.uri)) continue;
+    server.registerResource(
+      `mif-ontology-${o.id}`,
+      o.uri,
+      { title: `Ontology ${o.id} ${o.version}`, description: o.description ?? `The MIF ontology ${o.id}: its entity types, namespaces and the ontologies it extends.`, mimeType: "application/json", cacheHint: { ttlMs: 60_000, cacheScope: "private" } },
+      (uri) => {
+        const now = host.ontologies().find((x) => x.uri === o.uri);
+        if (!now) throw new ResourceNotFoundError(uri.href, `The ontology at ${uri.href} is no longer loaded.`);
+        return { contents: [{ uri: o.uri, mimeType: "application/json", text: JSON.stringify(now, null, 2) }] };
+      },
+    );
+  }
+
   server.registerResource(
     "mif-record",
-    // Not enumerable: a vault holds thousands of concepts, and the tools are how to find one. The template says how to address one you have found.
-    new ResourceTemplate(RESOURCE_TEMPLATE, { list: undefined }),
+    new ResourceTemplate(RESOURCE_TEMPLATE, {
+      // Listing is served page by page by the resources/list handler below; the SDK's own template listing has no cursor.
+      list: undefined,
+      complete: {
+        // What can follow "urn:mif:": a concept's uuid, found by the start of the uuid or by words in its title; or "entity:<type>:<slug>".
+        id: (typed) => {
+          const want = typed.toLowerCase();
+          const concepts = host.concepts().flatMap((c) => {
+            const uuid = c.id?.replace(/^urn:mif:/, "");
+            return uuid && (uuid.startsWith(want) || (want.length >= 2 && c.title.toLowerCase().includes(want))) ? [uuid] : [];
+          });
+          const entities = host.entities().flatMap((e) => {
+            const rest = e.urn.replace(/^urn:mif:/i, "");
+            return rest.toLowerCase().startsWith(want) || (want.length >= 2 && (e.name ?? "").toLowerCase().includes(want)) ? [rest] : [];
+          });
+          const ontologies = host.ontologies().flatMap((o) => {
+            const rest = o.uri.replace(/^urn:mif:/i, "");
+            return rest !== o.uri && rest.toLowerCase().startsWith(want) ? [rest] : [];
+          });
+          return [...concepts, ...entities, ...ontologies].slice(0, 100);
+        },
+      },
+    }),
     {
       title: "MIF concept or entity",
-      description: 'A concept at its canonical id, "urn:mif:<uuid>", as markdown with its weighing; or an entity at "urn:mif:entity:<type>:<slug>", as JSON. Ids come from the tools\' results.',
+      description: 'A concept at its canonical id, "urn:mif:<uuid>", as markdown with its weighing; an entity at "urn:mif:entity:<type>:<slug>", as JSON; or an ontology that has no other address at "urn:mif:ontology:<id>", as JSON. Ids come from the tools\' results.',
       cacheHint: CACHE,
     },
     (uri) => {
@@ -63,7 +113,12 @@ export function registerExtras(server: McpServer, host: McpHost): void {
         const data = { urn: entity.urn, name: entity.name, type: entity.type, aliases: entity.aliases, bundle: entity.bundle, recorded: entity.recorded, references: entity.references.map((r) => ({ path: r.concept.path, title: r.concept.title, id: r.concept.id, role: r.role })) };
         return { contents: [{ uri: href, mimeType: "application/json", text: JSON.stringify(data, null, 2) }] };
       }
-      if (!UUID.test(id)) throw new ResourceNotFoundError(href, `${href} is not a MIF id. A concept is urn:mif:<uuid>; an entity is urn:mif:entity:<type>:<slug>.`);
+      if (/^ontology:/i.test(id)) {
+        const ontology = host.ontologies().find((o) => o.uri.toLowerCase() === href.toLowerCase());
+        if (!ontology) throw new ResourceNotFoundError(href, `No ontology is addressed as ${href} in this vault. ${TOOL_NAMES[5]} lists the loaded ontologies and their addresses.`);
+        return { contents: [{ uri: href, mimeType: "application/json", text: JSON.stringify(ontology, null, 2) }] };
+      }
+      if (!UUID.test(id)) throw new ResourceNotFoundError(href, `${href} is not a MIF id. A concept is urn:mif:<uuid>; an entity is urn:mif:entity:<type>:<slug>; an ontology without another address is urn:mif:ontology:<id>.`);
       const r = host.resolve(href, new Date());
       // Two notes with one id: name both, never pick one.
       if ("ambiguous" in r) throw new ResourceNotFoundError(href, `${href} is carried by more than one note: ${r.ambiguous.join("; ")}. Read one by its path with ${TOOL_NAMES[1]}.`);
@@ -73,6 +128,19 @@ export function registerExtras(server: McpServer, host: McpHost): void {
       return { contents: [{ uri: href, mimeType: "text/markdown", text }] };
     },
   );
+
+  // resources/list, a page at a time. The cursor is opaque to the client: it is the offset of the next page.
+  server.server.setRequestHandler("resources/list", (request) => {
+    const cursor = request.params?.cursor;
+    let offset = 0;
+    if (cursor !== undefined) {
+      offset = Number(/^o(\d+)$/.exec(cursor)?.[1] ?? NaN);
+      if (!Number.isInteger(offset)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown cursor "${cursor}". Start again without a cursor.`);
+    }
+    const all = catalog();
+    const resources = all.slice(offset, offset + RESOURCE_PAGE);
+    return { resources, ...(offset + RESOURCE_PAGE < all.length ? { nextCursor: `o${offset + RESOURCE_PAGE}` } : {}) };
+  });
 
   server.registerPrompt(
     PROMPT_NAMES[0],

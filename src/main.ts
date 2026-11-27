@@ -1,6 +1,6 @@
 // MIF for Obsidian — authoring and Level 1 validation.
 
-import { MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { FileSystemAdapter, MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType, type Corpus, type OntologyDef } from "./engine";
 import { isFirstBodySection, renderCompressed } from "./compressionView";
@@ -22,8 +22,8 @@ import { ingestNotice, MifCli, problemText, SearchModal, type SearchFilters } fr
 import { COVERAGE_VIEW, CoverageView, GAPS_VIEW, GapsView } from "./storeViews";
 import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
-import { newToken } from "./mcp/http";
-import { McpService, VaultMcpHost } from "./mcpHost";
+import { newToken } from "./mcp/guard";
+import { McpService, mcpServing, SwitchMirror, VaultMcpHost, type McpModule } from "./mcpHost";
 
 export default class MifPlugin extends Plugin {
   override settings: MifSettings = DEFAULT_SETTINGS;
@@ -73,6 +73,7 @@ export default class MifPlugin extends Plugin {
       new VaultMcpHost(this.app, this.manager, this.cli, () => this.settings),
       () => this.settings,
       () => (Platform.isDesktopApp ? (window.require("http") as typeof import("node:http")) : undefined),
+      () => this.loadMcp(),
       this.manifest.version,
       (event, detail) => this.manager.debug(event, detail),
     );
@@ -174,6 +175,30 @@ export default class MifPlugin extends Plugin {
 
   addEntityReference(file: TFile): void {
     addEntityReference(this.app, this.manager, file);
+  }
+
+  /**
+   * The MCP server's code lives in mcp.cjs beside main.js and is loaded only
+   * here: on desktop, when a vault turns the server on. Mobile never reads it.
+   * It is named .cjs because Node decides how to load a .js file from the
+   * nearest package.json above it, and a vault can sit inside a project whose
+   * package.json says "type": "module"; .cjs is CommonJS wherever it is.
+   */
+  private loadMcp(): McpModule | undefined {
+    const adapter = this.app.vault.adapter;
+    if (!Platform.isDesktopApp || !(adapter instanceof FileSystemAdapter)) return undefined;
+    try {
+      const path = window.require("path") as typeof import("node:path");
+      const file = path.join(adapter.getBasePath(), this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`, "mcp.cjs");
+      // A reloaded plugin must get the file now on disk, not the copy Node cached at the last load.
+      const load = window.require;
+      delete load.cache[load.resolve(file)];
+      const mod = load(file) as Partial<McpModule>;
+      return typeof mod.startEndpoint === "function" ? (mod as McpModule) : undefined;
+    } catch (err) {
+      this.manager.debug("mcp-load-failed", { message: (err as Error).message });
+      return undefined;
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -904,22 +929,16 @@ class MifSettingTab extends PluginSettingTab {
     // wanted: after a start that failed (a port in use) it reads off, and the
     // description says why. The setting stays on, so a free port, or the
     // switch, starts it.
-    const mcpServing = () => s.mcpEnabled && this.plugin.mcp.status.state !== "failed";
-    let mcpToggle: { getValue(): boolean; setValue(on: boolean): unknown } | undefined;
-    let showingMcpToggle = false;
-    const showMcpToggle = () => {
-      if (!mcpToggle || mcpToggle.getValue() === mcpServing()) return;
-      showingMcpToggle = true;
-      mcpToggle.setValue(mcpServing());
-      showingMcpToggle = false;
-    };
+    const serving = () => mcpServing(s.mcpEnabled, this.plugin.mcp.status);
+    let mcpSwitch: SwitchMirror | undefined;
+    const showMcpToggle = () => mcpSwitch?.show(serving());
     const mcpSetting = new Setting(containerEl)
       .setName("MCP server (desktop)")
       .setDesc(mcpDesc())
       .addToggle((t) => {
-        mcpToggle = t;
-        t.setValue(mcpServing()).onChange(async (v) => {
-          if (showingMcpToggle) return;
+        mcpSwitch = new SwitchMirror(t);
+        t.setValue(serving()).onChange(async (v) => {
+          if (mcpSwitch?.showing) return;
           s.mcpEnabled = v;
           if (v && !s.mcpToken) s.mcpToken = newToken();
           await mcpApply();

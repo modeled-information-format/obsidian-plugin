@@ -310,6 +310,23 @@ export class MifManager extends Events {
     return [...missing];
   }
 
+  /** The mif-spec.dev catalog's canonical address for an ontology definition, when it is the one the catalog publishes. */
+  ontologyAddress(def: { id: string; sha256?: string }): string | undefined {
+    return this.store?.canonicalAddress(def);
+  }
+
+  /** Whether the known catalog lists an ontology id. */
+  ontologyInCatalog(id: string): boolean {
+    return this.store?.inCatalog(id) ?? false;
+  }
+
+  /** Learn the catalog (one request per session) when the download setting allows; the cached copy serves otherwise. */
+  async refreshOntologyCatalog(): Promise<void> {
+    if (!this.store || !this.settings().downloadOntologies) return;
+    const known = await this.store.refreshCatalog();
+    this.debug("ontology-catalog", { known, errors: this.store.status.errors });
+  }
+
   /** Download what concepts need, when the setting allows. */
   async ensureOntologies(): Promise<void> {
     if (!this.store || !this.settings().downloadOntologies) return;

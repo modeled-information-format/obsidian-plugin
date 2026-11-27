@@ -6,8 +6,8 @@ import type { App } from "obsidian";
 import type { MifCli } from "./cliBridge";
 import { trustOf } from "./engine";
 import type { MifManager } from "./manager";
-import { startEndpoint, type McpEndpoint } from "./mcp/http";
-import type { ConceptRef, ConceptSummary, ConceptView, EdgeView, EntityView, GapsView, McpHost, Resolved, SearchHit, SearchRequest, StoreView, Unavailable, Weighing } from "./mcp/host";
+import type { McpEndpoint, startEndpoint } from "./mcp/http";
+import type { ConceptRef, ConceptSummary, ConceptView, EdgeView, EntityView, GapsView, McpHost, OntologyView, Resolved, SearchHit, SearchRequest, StoreView, Unavailable, Vocabulary, Weighing } from "./mcp/host";
 import type { MifSettings } from "./settings";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -80,11 +80,10 @@ export class VaultMcpHost implements McpHost {
     const uuid = raw.replace(/^urn:mif:/i, "");
     let paths: string[] = [];
     if (UUID.test(uuid)) {
-      // The id index is per bundle; the same id in two bundles is ambiguous, never a silent pick.
-      for (const root of this.manager.bundleRoots()) {
-        const bundlePath = this.manager.bundleInfo(root)?.index?.byId.get(uuid.toLowerCase());
-        if (bundlePath !== undefined) paths.push(this.manager.toVaultPath(root, bundlePath));
-      }
+      // Every note is checked, not the bundle's id index: that index keeps one path per id, so it
+      // cannot show two notes carrying the same id. Two matches are ambiguous, never a silent pick.
+      const want = uuid.toLowerCase();
+      paths = this.manager.all().flatMap((a) => (a.isConcept && str(a.frontmatter?.id)?.toLowerCase() === want ? [a.path] : []));
     } else {
       const p = raw.replace(/^\/+/, "");
       if (this.manager.get(p)?.isConcept) paths = [p];
@@ -217,10 +216,123 @@ export class VaultMcpHost implements McpHost {
     };
   }
 
-  async gaps(bundle: string): Promise<GapsView | Unavailable> {
+  duplicateIds(): Array<{ id: string; paths: string[] }> {
+    const by = new Map<string, string[]>();
+    for (const a of this.manager.all()) {
+      const id = a.isConcept ? str(a.frontmatter?.id)?.toLowerCase() : undefined;
+      if (id && UUID.test(id)) by.set(id, [...(by.get(id) ?? []), a.path]);
+    }
+    return [...by].filter(([, paths]) => paths.length > 1).map(([id, paths]) => ({ id: `urn:mif:${id}`, paths: paths.sort() })).sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /** The ontology catalog gives ontologies their addresses; learn it before serving, when the user allows downloads. */
+  async prepare(): Promise<void> {
+    await this.manager.refreshOntologyCatalog();
+  }
+
+  ontologies(): OntologyView[] {
+    // An ontology's uri is the one this vault's concepts declare for it; failing that, its canonical
+    // address in the mif-spec.dev catalog, if this definition is the catalog's own (same sha256);
+    // failing that, urn:mif:ontology:<id> (owner decisions, plan M28 and M31).
+    const uris = new Map<string, string>();
+    for (const a of this.manager.all()) {
+      const o = a.isConcept ? a.frontmatter?.ontology : undefined;
+      if (o && typeof o === "object") {
+        const ref = o as Record<string, unknown>;
+        const id = str(ref.id);
+        const uri = str(ref.uri);
+        if (id && uri && !uris.has(id)) uris.set(id, uri);
+      }
+    }
+    const out = new Map<string, OntologyView>();
+    for (const bundle of this.manager.bundleRoots()) {
+      for (const def of this.manager.bundleInfo(bundle)?.corpus.values() ?? []) {
+        const seen = out.get(def.id);
+        if (seen) {
+          if (!seen.bundles.includes(bundle)) seen.bundles.push(bundle);
+          continue;
+        }
+        const namespaces: string[] = [];
+        const walk = (tree: unknown, prefix: string) => {
+          if (!tree || typeof tree !== "object" || Array.isArray(tree)) return;
+          for (const [k, v] of Object.entries(tree as Record<string, unknown>)) {
+            if (k === "children") walk(v, prefix);
+            else if (v && typeof v === "object" && !Array.isArray(v)) {
+              namespaces.push(prefix ? `${prefix}/${k}` : k);
+              walk((v as Record<string, unknown>).children, prefix ? `${prefix}/${k}` : k);
+            }
+          }
+        };
+        walk(def.namespaceTree, "");
+        const declared = uris.get(def.id);
+        const catalog = declared ? undefined : this.manager.ontologyAddress(def);
+        const note = declared || catalog ? undefined : this.manager.ontologyInCatalog(def.id) ? "This copy differs from the one the mif-spec.dev catalog publishes under the same id." : "Not listed in the mif-spec.dev catalog, or the catalog is not known.";
+        out.set(def.id, {
+          id: def.id,
+          version: def.version,
+          uri: declared ?? catalog ?? `urn:mif:ontology:${def.id}`,
+          address: declared ? "declared" : catalog ? "catalog" : "local",
+          ...(note ? { address_note: note } : {}),
+          ...(def.description ? { description: def.description } : {}),
+          extends: [...def.extends],
+          entity_types: def.entityTypes.map((t) => ({ name: t.name, base: t.base, subtype_of: [...(t.subtype_of ?? [])], ...(t.description ? { description: t.description } : {}) })),
+          namespaces,
+          bundles: [bundle],
+          source: def.source,
+        });
+      }
+    }
+    return [...out.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  subtypes(type: string): string[] {
+    const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const children = new Map<string, Set<string>>();
+    for (const o of this.ontologies()) {
+      for (const t of o.entity_types) {
+        for (const parent of t.subtype_of) children.set(norm(parent), (children.get(norm(parent)) ?? new Set()).add(t.name));
+      }
+    }
+    const found = new Map<string, string>([[norm(type), type]]);
+    const queue = [norm(type)];
+    while (queue.length) {
+      for (const child of children.get(queue.shift()!) ?? []) {
+        if (found.has(norm(child))) continue;
+        found.set(norm(child), child);
+        queue.push(norm(child));
+      }
+    }
+    return [...found.values()];
+  }
+
+  private vocab?: { at: number; value: Vocabulary };
+
+  vocabulary(): Vocabulary {
+    // Asked for on every request, to put the vault's own values into the tool schemas; a few seconds stale is fine.
+    if (this.vocab && Date.now() - this.vocab.at < 5_000) return this.vocab.value;
+    const count = () => new Map<string, number>();
+    const add = (m: Map<string, number>, v: string | undefined) => v && m.set(v, (m.get(v) ?? 0) + 1);
+    const types = count(), entityTypes = count(), namespaces = count(), relationships = count(), folders = count(), trust = count();
+    for (const a of this.manager.all()) {
+      if (!a.isConcept) continue;
+      const fm = (a.frontmatter ?? {}) as Record<string, unknown>;
+      add(types, str(fm.type));
+      add(namespaces, str(fm.namespace));
+      add(entityTypes, fm.entity && typeof fm.entity === "object" ? str((fm.entity as Record<string, unknown>).entity_type) : undefined);
+      add(trust, trustOf(a.frontmatter));
+      if (a.path.includes("/")) add(folders, a.path.slice(0, a.path.indexOf("/")));
+      for (const r of Array.isArray(fm.relationships) ? fm.relationships : []) add(relationships, r && typeof r === "object" ? str((r as Record<string, unknown>).type) : undefined);
+    }
+    const ranked = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v);
+    const value = { types: ranked(types), entity_types: ranked(entityTypes), namespaces: ranked(namespaces), relationship_types: ranked(relationships), folders: ranked(folders), trust: ranked(trust), bundles: this.manager.bundleRoots() };
+    this.vocab = { at: Date.now(), value };
+    return value;
+  }
+
+  async gaps(bundle: string, progress?: (done: number, total: number) => void): Promise<GapsView | Unavailable> {
     const down = await this.cliProblem();
     if (down) return down;
-    const report = await this.cli.gaps(bundle);
+    const report = await this.cli.gaps(bundle, progress);
     if (!("unlinked" in report)) return { unavailable: [report.title, report.detail].filter(Boolean).join(": ") };
     const pair = (p: { aPath?: string; bPath?: string; cosine: number }) => {
       const a = p.aPath ? this.ref(p.aPath) : undefined;
@@ -254,7 +366,36 @@ export class VaultMcpHost implements McpHost {
   }
 }
 
+/** What mcp.cjs exports: the server code, loaded apart from the plugin's main bundle. */
+export interface McpModule {
+  startEndpoint: typeof startEndpoint;
+}
+
 export type McpStatus = { state: "off" } | { state: "running"; url: string } | { state: "failed"; reason: string };
+
+/** Whether the settings switch should read on: the server is wanted and its last start did not fail. */
+export const mcpServing = (enabled: boolean, status: McpStatus): boolean => enabled && status.state !== "failed";
+
+/**
+ * Keeps the settings switch showing whether the server is serving, not only
+ * whether it is wanted. Obsidian's toggle calls its change handler when its
+ * value is set from code, so `showing` lets that handler tell a correction
+ * of the display from the user's own click.
+ */
+export class SwitchMirror {
+  showing = false;
+  constructor(private readonly toggle: { getValue(): boolean; setValue(on: boolean): unknown }) {}
+
+  show(serving: boolean): void {
+    if (this.toggle.getValue() === serving) return;
+    this.showing = true;
+    try {
+      this.toggle.setValue(serving);
+    } finally {
+      this.showing = false;
+    }
+  }
+}
 
 /**
  * Runs this vault's MCP endpoint according to its settings. One vault, one
@@ -273,6 +414,8 @@ export class McpService {
     private readonly settings: () => MifSettings,
     /** Node's http module on desktop; undefined where there is none (mobile). */
     private readonly http: () => typeof import("node:http") | undefined,
+    /** The server code from mcp.cjs; undefined when the file is missing or cannot be loaded. */
+    private readonly load: () => McpModule | undefined,
     private readonly version: string,
     private readonly log: (event: string, detail?: Record<string, unknown>) => void = () => undefined,
   ) {}
@@ -297,9 +440,13 @@ export class McpService {
     if (this.endpoint) return this.status;
     const http = this.http();
     if (!http) return (this.status = { state: "failed", reason: "The MCP server is desktop only." });
+    const mcp = this.load();
+    if (!mcp) return (this.status = { state: "failed", reason: "The MCP server's code (mcp.cjs) is missing from the plugin's folder. Reinstall the plugin's files." });
     if (!Number.isInteger(s.mcpPort) || s.mcpPort < 1024 || s.mcpPort > 65535) return (this.status = { state: "failed", reason: `Port ${s.mcpPort} is not between 1024 and 65535.` });
     try {
-      this.endpoint = await startEndpoint(http, {
+      // Never fatal: with no catalog, ontologies the vault gives no uri are simply not addressable.
+      await this.host.prepare?.().catch((err: unknown) => this.log("mcp-prepare-failed", { message: (err as Error).message }));
+      this.endpoint = await mcp.startEndpoint(http, {
         host: this.host,
         port: s.mcpPort,
         token: () => this.settings().mcpToken,

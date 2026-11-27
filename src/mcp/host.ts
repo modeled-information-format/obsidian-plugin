@@ -87,6 +87,43 @@ export interface GapsView {
   mislinks: GapPairView[];
 }
 
+/** An ontology the vault has loaded, from a bundle's .mif/ontologies/ or the mif-spec.dev catalog. */
+export interface OntologyView {
+  /** The ontology's identifier (ontology.id in its definition). */
+  id: string;
+  version: string;
+  /**
+   * Where the ontology is addressed (plan M28, M31): the uri this vault's
+   * concepts declare for it; failing that, its canonical address in the
+   * mif-spec.dev catalog, when this definition is the one the catalog
+   * publishes; failing that, urn:mif:ontology:<id>.
+   */
+  uri: string;
+  /** Which of those it is. "local" also covers a bundle's edited copy of a catalog ontology. */
+  address: "declared" | "catalog" | "local";
+  /** Why a "local" address was used. */
+  address_note?: string;
+  description?: string;
+  extends: string[];
+  entity_types: Array<{ name: string; base: string; subtype_of: string[]; description?: string }>;
+  namespaces: string[];
+  /** Bundles whose concepts can use it. */
+  bundles: string[];
+  /** Where the definition was loaded from. */
+  source: string;
+}
+
+/** The values the vault actually uses, most used first: what a caller can filter by. */
+export interface Vocabulary {
+  types: string[];
+  entity_types: string[];
+  namespaces: string[];
+  relationship_types: string[];
+  folders: string[];
+  trust: string[];
+  bundles: string[];
+}
+
 export interface EdgeView {
   type: string;
   direction: "outgoing" | "incoming";
@@ -128,6 +165,8 @@ export interface Unavailable {
 export type Resolved = { concept: ConceptView } | { ambiguous: string[] } | { missing: true };
 
 export interface McpHost {
+  /** Called once before the endpoint starts, for anything the host must fetch first. */
+  prepare?(): Promise<void>;
   vault(): { name: string; purpose: string; bundles: string[] };
   /**
    * A concept by urn:mif:<uuid>, bare uuid, vault path, bundle path
@@ -150,8 +189,15 @@ export interface McpHost {
   /** The concepts nearest in meaning to the one at a vault path. */
   similar(path: string, limit: number): Promise<SearchHit[] | Unavailable>;
   store(bundle: string): Promise<StoreView | Unavailable>;
-  /** Slow: one mif-cli run per concept of the bundle. */
-  gaps(bundle: string): Promise<GapsView | Unavailable>;
+  /** Slow: one mif-cli run per concept of the bundle; `progress` is called after each. */
+  gaps(bundle: string, progress?: (done: number, total: number) => void): Promise<GapsView | Unavailable>;
+  /** Every ontology the vault's bundles have loaded, sorted by id. */
+  ontologies(): OntologyView[];
+  /** An entity type and every type the loaded ontologies declare as its subtype, at any depth. Names compare without case or punctuation. */
+  subtypes(type: string): string[];
+  vocabulary(): Vocabulary;
+  /** Ids carried by more than one note, with the vault paths of each. */
+  duplicateIds(): Array<{ id: string; paths: string[] }>;
   /** The vault's cosine thresholds for duplicates, relationship gaps and mislinks. */
   thresholds(): { duplicate: number; similar: number; mislink: number };
 }

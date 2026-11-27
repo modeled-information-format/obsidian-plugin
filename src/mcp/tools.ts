@@ -6,11 +6,13 @@
 // instructions, so each tool description carries its own workflow, each
 // result states its weighing in words, and each error names the next step.
 //
-// Output is lean by default (the first evaluation found it too verbose):
-// lists give one line per item and state a concept's weighing only when it
-// calls for caution; `detail: "full"` adds it everywhere. Every view of a
-// concept counts its relationships by type and direction, so an agent can
-// see which relationships point at it without listing them.
+// Lists are compact by default (owner decision, plan M29): one line per
+// item, with a concept's weighing stated only where it calls for caution.
+// `detail: "full"` states every concept's weighing in full, and reading a
+// single concept always does (plan M8). Every view of a concept counts
+// its relationships by type and direction, so an agent can see which
+// relationships point at it without listing them. Concepts a result names
+// are also returned as resource links to their canonical ids (plan M16).
 
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
@@ -55,7 +57,7 @@ export const responseFormat = z
 export const detail = z
   .enum(["compact", "full"])
   .default("compact")
-  .describe('"compact" states freshness and trust only where a concept calls for caution; "full" states them for every concept and gives ids.');
+  .describe('"compact" (the default) gives one short line per concept and states freshness and trust only where a concept calls for caution; "full" states freshness, strength, trust, provenance, conformance level and open diagnostics for every concept, with its id and path.');
 export const asOf = z
   .string()
   .optional()
@@ -185,6 +187,27 @@ export function fit<T, P extends Record<string, unknown>>(items: T[], total: num
   }
 }
 
+/** Resource links to the concepts a result names, at their canonical ids; a concept with no valid id has no resource. */
+export function withLinks(result: ToolResult, concepts: Array<ConceptRef | undefined>): ToolResult {
+  const seen = new Set<string>();
+  const links = concepts.flatMap((c) => {
+    if (!c?.id || seen.has(c.id)) return [];
+    seen.add(c.id);
+    return [{ type: "resource_link" as const, uri: c.id, name: c.title, mimeType: "text/markdown" }];
+  });
+  return links.length ? { ...result, content: [...result.content, ...links] } : result;
+}
+
+/** The vault's own values for an argument, most used first, as JSON Schema examples: what a client or model can offer as suggestions. */
+export const suggest = (values: string[], most = 40) => ({ examples: values.slice(0, most) });
+
+/** An error naming the values the vault does have, when an argument names one it does not. */
+export function unknownValue(what: string, given: string, valid: string[]): ToolResult | undefined {
+  if (valid.some((v) => v.toLowerCase() === given.toLowerCase())) return undefined;
+  const near = valid.filter((v) => v.toLowerCase().includes(given.toLowerCase()) || given.toLowerCase().includes(v.toLowerCase()));
+  return fail(`No ${what} "${given}" in this vault.${near.length ? ` Did you mean: ${near.slice(0, 5).join(", ")}?` : ""} In use: ${valid.slice(0, 60).join(", ") || "none"}.`);
+}
+
 export const finish = (out: { data: Record<string, unknown>; text: string }, format: "markdown" | "json"): ToolResult => ({
   content: [{ type: "text", text: format === "json" ? JSON.stringify(out.data, null, 2) : out.text }],
   structuredContent: out.data,
@@ -203,7 +226,13 @@ export function instructions(host: McpHost): string {
 }
 
 export function createServer(host: McpHost, version: string): McpServer {
-  const server = new McpServer({ name: SERVER_NAME, version }, { instructions: instructions(host) });
+  // Lists are the same for every client and change only with the plugin's settings; a concept changes whenever its note is saved.
+  const steady = { ttlMs: 60_000, cacheScope: "private" as const };
+  const server = new McpServer(
+    { name: SERVER_NAME, version },
+    { instructions: instructions(host), cacheHints: { "tools/list": steady, "prompts/list": steady, "resources/templates/list": steady, "server/discover": steady, "resources/list": { ttlMs: 5_000, cacheScope: "private" } } },
+  );
+  const vocab = host.vocabulary();
 
   server.registerTool(
     TOOL_NAMES[0],
@@ -221,13 +250,13 @@ export function createServer(host: McpHost, version: string): McpServer {
         similar_to: z.string().min(1).optional().describe("A concept (path, id, title or code): return the concepts nearest to it in meaning, in place of a query."),
         min_cosine: z.number().min(0).max(1).optional().describe("Leave out results whose cosine similarity is below this, e.g. the vault's duplicate threshold."),
         mode: z.enum(["hybrid", "semantic"]).default("hybrid").describe('"hybrid" ranks by meaning and exact terms together (finds identifiers); "semantic" ranks by meaning alone.'),
-        entity_type: z.string().optional().describe('Only concepts whose entity type is exactly this, e.g. "how-to-guide".'),
-        folder: z.string().optional().describe('Only concepts in this vault folder or below it, e.g. "procedural".'),
-        bundle: z.string().optional().describe('Only this bundle root; omit to search every bundle. "" is the vault root.'),
+        entity_type: z.string().optional().describe('Only concepts whose entity type is exactly this, e.g. "how-to-guide". The examples are the entity types this vault uses.').meta(suggest(vocab.entity_types)),
+        folder: z.string().optional().describe('Only concepts in this vault folder or below it, e.g. "procedural". The examples are this vault\'s top folders.').meta(suggest(vocab.folders)),
+        bundle: z.string().optional().describe('Only this bundle root; omit to search every bundle. "" is the vault root. The examples are this vault\'s bundles.').meta(suggest(vocab.bundles)),
         include_expired: z.boolean().default(false).describe("Also return concepts that have expired or are not yet valid."),
         limit: z.number().int().min(1).default(10).describe("Maximum results to return; at most 50, and a larger number is treated as 50."),
         offset: z.number().int().min(0).default(0).describe("Results to skip, for the next page."),
-        detail: detail.describe('"compact" shortens each matching passage; "full" returns it whole, with ids and full weighing.'),
+        detail: detail.describe('"compact" (the default) shortens each matching passage and its weighing; "full" returns the passage whole, with the concept\'s id and full weighing.'),
         as_of: asOf,
         response_format: responseFormat,
       }),
@@ -254,6 +283,10 @@ export function createServer(host: McpHost, version: string): McpServer {
       if (typeof at === "string") return fail(at);
       const bundles = host.vault().bundles;
       if (args.bundle !== undefined && !bundles.includes(args.bundle)) return fail(`No bundle "${args.bundle}". Bundles in this vault: ${bundles.map((b) => `"${b}"`).join(", ")}.`);
+      if (args.entity_type !== undefined) {
+        const bad = unknownValue("entity type", args.entity_type, vocab.entity_types);
+        if (bad) return bad;
+      }
       const targets = args.bundle === undefined ? bundles : [args.bundle];
       const limit = Math.min(args.limit, 50);
       const want = args.offset + limit + 1;
@@ -327,7 +360,8 @@ export function createServer(host: McpHost, version: string): McpServer {
         const text = [results.length ? `Results for ${subject}:` : none, ...lines, ...notes].join("\n\n");
         return { data: { ...p, excluded_expired: excluded, thresholds, results }, text };
       });
-      return finish(out, args.response_format);
+      const shown = new Set((out.data.results as Array<{ concept?: ConceptRef }>).map((r) => r.concept?.path));
+      return withLinks(finish(out, args.response_format), window.filter((h) => shown.has(h.concept?.path)).map((h) => h.concept));
     },
   );
 
@@ -439,8 +473,8 @@ export function createServer(host: McpHost, version: string): McpServer {
         .filter(Boolean)
         .join("\n\n");
       const result = finish({ data, text: md }, args.response_format);
-      // One link, to the concept itself at its canonical id, so a client can attach or re-read it. Related concepts are named, not linked: a link per row would undo the compact listing.
-      return c.id ? { ...result, content: [...result.content, { type: "resource_link" as const, uri: c.id, name: c.title, mimeType: "text/markdown" }] } : result;
+      // A link to the concept itself at its canonical id, so a client can attach or re-read it.
+      return withLinks(result, [c]);
     },
   );
 
@@ -468,9 +502,9 @@ export function createServer(host: McpHost, version: string): McpServer {
           .describe('With several concepts: "each" lists every concept\'s relationships; "intersect" returns the concepts related to all of them; "union" to any of them; "subtract" to the first but none of the others. The filters (types, direction) say which relationships count.'),
         depth: z.number().int().min(1).max(3).default(1).describe("How many hops to follow. 1 is the concept's own relationships. Ignored when path is given."),
         direction: z.enum(["both", "outgoing", "incoming"]).default("both").describe('"outgoing" for relationships the concept declares, "incoming" for those other concepts declare to it.'),
-        types: z.array(z.string()).optional().describe('Only these relationship types, e.g. ["supersedes", "depends-on"].'),
+        types: z.array(z.string().meta(suggest(vocab.relationship_types))).optional().describe('Only these relationship types, e.g. ["supersedes", "depends-on"]. The examples are the relationship types this vault uses.'),
         path: z
-          .array(z.object({ type: z.string().min(1), direction: z.enum(["outgoing", "incoming"]).default("outgoing") }))
+          .array(z.object({ type: z.string().min(1).meta(suggest(vocab.relationship_types)), direction: z.enum(["outgoing", "incoming"]).default("outgoing") }))
           .min(1)
           .max(4)
           .optional()
@@ -512,6 +546,10 @@ export function createServer(host: McpHost, version: string): McpServer {
     async (args): Promise<ToolResult> => {
       const at = parseAsOf(args.as_of);
       if (typeof at === "string") return fail(at);
+      for (const type of [...(args.types ?? []), ...(args.path ?? []).map((step) => step.type)]) {
+        const bad = unknownValue("relationship type", type, vocab.relationship_types);
+        if (bad) return bad;
+      }
       const names = Array.isArray(args.concept) ? args.concept : [args.concept];
       const starts: ConceptView[] = [];
       for (const name of names) {
@@ -644,9 +682,9 @@ export function createServer(host: McpHost, version: string): McpServer {
         const line = (r: Row, i: number) => {
           const rel = relationships[i]!;
           const other = r.edge.concept ? label(r.edge.concept) : `${r.edge.target} (not a concept in this bundle)`;
-          const note = r.weighing && full ? ` — ${weighingBrief(r.weighing)}` : cautious(r.weighing) ? ` — ${r.weighing!.freshness.toUpperCase()}` : "";
+          const note = r.weighing && full ? `\n      ${weighingLine(r.weighing).replace(/\n/g, "\n      ")}` : cautious(r.weighing) ? ` — ${r.weighing!.freshness.toUpperCase()}` : "";
           const counts = rel.counts ? ` — ${countsBrief(rel.counts)}` : "";
-          return `  - ${other}${note}${counts}`;
+          return `  - ${other}${counts}${note}`;
         };
         const sections: string[] = [];
         if (setMode) {
@@ -695,7 +733,8 @@ export function createServer(host: McpHost, version: string): McpServer {
           text: [...sections, ...notes].filter(Boolean).join("\n\n"),
         };
       });
-      return finish(out, args.response_format);
+      const listedPaths = new Set((out.data.relationships as Array<{ path?: string }>).map((r) => r.path));
+      return withLinks(finish(out, args.response_format), [...starts, ...(goal ? [goal] : []), ...window.filter((r) => listedPaths.has(r.edge.concept?.path)).map((r) => r.edge.concept)]);
     },
   );
 

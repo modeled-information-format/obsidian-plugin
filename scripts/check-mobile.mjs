@@ -28,6 +28,20 @@ if (manifest.isDesktopOnly !== false) problems.push(`manifest.json isDesktopOnly
 if (versions[manifest.version] !== manifest.minAppVersion) {
   problems.push(`versions.json["${manifest.version}"] is ${versions[manifest.version]}, manifest minAppVersion is ${manifest.minAppVersion}`);
 }
+// The MCP server code (and with it the MCP SDK) belongs in mcp.cjs, which only desktop loads.
+// Its tool names are the marker: main.js must not contain them, and mcp.cjs must.
+const MARKER = "mif_vault_search_concepts";
+if (js.includes(MARKER)) problems.push(`main.js contains the MCP server code (found "${MARKER}"); it belongs in mcp.cjs only`);
+let mcpJs = "";
+try {
+  mcpJs = readFileSync("mcp.cjs", "utf8");
+} catch {
+  problems.push("mcp.cjs is missing: the build should emit it beside main.js");
+}
+if (mcpJs && !mcpJs.includes(MARKER)) problems.push("mcp.cjs does not contain the MCP server code");
+for (const m of mcpJs.matchAll(/\brequire\("([^"]+)"\)/g)) {
+  if (!builtinModules.includes(m[1]) && !m[1].startsWith("node:")) problems.push(`mcp.cjs requires "${m[1]}", which is not bundled`);
+}
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 if (pkg.version !== manifest.version) problems.push(`package.json version ${pkg.version} != manifest.json ${manifest.version}`);
 
@@ -35,4 +49,4 @@ if (problems.length) {
   console.error(`mobile check failed:\n  ${problems.join("\n  ")}`);
   process.exit(1);
 }
-console.log(`mobile check passed: main.js requires only "obsidian" at load; desktop-only lazy loads: ${lazyNode.join(", ") || "none"}`);
+console.log(`mobile check passed: main.js requires only "obsidian" at load and carries no MCP server code; desktop-only lazy loads: ${lazyNode.join(", ") || "none"}, mcp.cjs`);
