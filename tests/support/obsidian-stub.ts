@@ -54,6 +54,16 @@ export class MarkdownView {
   }
 }
 
+/** Obsidian's desktop file-system adapter. The in-memory vault's adapter is not one, so code that needs real paths says so. */
+export class FileSystemAdapter {
+  getBasePath() {
+    return "/";
+  }
+}
+
+/** Where the plugin thinks it runs. Tests that care set these. */
+export const Platform = { isDesktopApp: true, isMobile: false, isWin: false, isMacOS: false, isLinux: true };
+
 export class Vault {
   static recurseChildren() {}
 }

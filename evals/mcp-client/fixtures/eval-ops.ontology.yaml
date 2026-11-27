@@ -1,0 +1,17 @@
+ontology:
+  id: eval-ops
+  version: 1.0.0
+  description: A small ontology for the in-memory eval vault
+namespaces:
+  semantic:
+    children:
+      policies:
+        description: Policies
+entity_types:
+  - name: guide
+    base: procedural
+    description: Any guide
+  - name: how-to-guide
+    base: procedural
+    description: A guide for one task
+    subtype_of: [guide]

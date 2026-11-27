@@ -1585,6 +1585,25 @@ describe("live updates", () => {
   });
 });
 
+describe("arguments a tool does not have", () => {
+  it("are refused by name, never dropped, and a bundle filters the lists", async () => {
+    const c = await connect(await vault({ roots: ["", "sub"], notes: { "a.md": note(1), "sub/b.md": note(2), "sub/c.md": note(3) }, store: false }));
+    // A misplaced filter must not return the unfiltered answer as if it were the one asked for.
+    const stray = await c.call("mif_vault_list_concepts", { bundel: "sub" });
+    expect(stray.isError).toBe(true);
+    expect(textOf(stray)).toMatch(/bundel/);
+    expect((await c.call("mif_vault_get_concept", { concept: "a.md", sections: "x" })).isError).toBe(true);
+    const sub = await c.call("mif_vault_list_concepts", { bundle: "sub" });
+    expect(sub.structuredContent).toMatchObject({ total_count: 2 });
+    expect((await c.call("mif_vault_list_concepts", { bundle: "" })).structuredContent).toMatchObject({ total_count: 1 });
+    expect((await c.call("mif_vault_list_concepts", {})).structuredContent).toMatchObject({ total_count: 3 });
+    expect((await c.call("mif_vault_list_concepts", { bundle: "nope" })).isError).toBe(true);
+    expect((await c.call("mif_vault_list_entities", { bundle: "nope" })).isError).toBe(true);
+    expect((await c.call("mif_vault_list_entities", { bundle: "sub" })).isError).toBeFalsy();
+    await c.close();
+  });
+});
+
 describe("a prompt run as a command", () => {
   it("takes words a client split across the recall prompt's filters back into the topic, and keeps a real filter", async () => {
     const c = await connect(await vault());

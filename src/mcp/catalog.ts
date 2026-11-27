@@ -44,6 +44,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
         `cite the concepts you use. Find concepts by meaning with ${TOOL_NAMES[0]}; read one with ${TOOL_NAMES[1]}.`,
       inputSchema: z.object({
         title_contains: z.string().min(1).optional().describe('Only concepts whose title contains this text, ignoring case, e.g. "CON-P-1".'),
+        bundle: z.string().optional().describe('Only this bundle root; omit for every bundle. "" is the vault root.').meta(suggest(vocab.bundles)),
         type: z.string().optional().describe('Only this concept type: "semantic", "episodic" or "procedural".').meta(suggest(vocab.types)),
         namespace: z.string().optional().describe('Only concepts in this namespace or below it, e.g. "constraints" matches "constraints/security". The examples are namespaces this vault uses.').meta(suggest(vocab.namespaces)),
         entity_type: z.string().optional().describe('Only concepts of this entity type, e.g. "constraint", and of the types the vault\'s ontologies declare as its subtypes. The examples are the entity types this vault uses.').meta(suggest(vocab.entity_types)),
@@ -103,6 +104,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
       }
       // The named entity type and, unless asked otherwise, every type an ontology declares beneath it.
       const entityTypes = args.entity_type === undefined ? undefined : new Set((args.include_subtypes ? host.subtypes(args.entity_type) : [args.entity_type]).map(norm));
+      if (args.bundle !== undefined && !vocab.bundles.includes(args.bundle)) return fail(`No bundle "${args.bundle}". Bundles in this vault: ${vocab.bundles.map((b) => `"${b}"`).join(", ")}.`);
       const needle = args.title_contains?.toLowerCase();
       const folder = args.folder?.replace(/^\/+|\/+$/g, "");
       const ns = args.namespace?.replace(/\/+$/, "");
@@ -114,6 +116,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
       const rows: Row[] = [];
       for (const c of host.concepts()) {
         if (needle && !c.title.toLowerCase().includes(needle)) continue;
+        if (args.bundle !== undefined && c.bundle !== args.bundle) continue;
         if (args.type && c.type !== args.type) continue;
         if (ns && c.namespace !== ns && !c.namespace?.startsWith(`${ns}/`)) continue;
         if (entityTypes && !(c.entity_type && entityTypes.has(norm(c.entity_type)))) continue;
@@ -190,6 +193,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
         type: z.string().optional().describe('Only entities of this type, ignoring case, e.g. "policy", and of the types the vault\'s ontologies declare as its subtypes. The examples are the entity types this vault\'s entities have.').meta(suggest([...new Set(host.entities().flatMap((e) => (e.type ? [e.type] : [])))].sort())),
         include_subtypes: z.boolean().default(true).describe("With type: also match its subtypes, at any depth, as the loaded ontologies declare them. False matches the named type only."),
         name_contains: z.string().min(1).optional().describe("Only entities whose name or an alias contains this text, ignoring case."),
+        bundle: z.string().optional().describe('Only entities of this bundle root; omit for every bundle. "" is the vault root.').meta(suggest(vocab.bundles)),
         referenced_by: z.string().min(1).optional().describe("Only entities this concept refers to (path, id, title or code)."),
         min_references: z.number().int().min(0).default(0).describe("Only entities at least this many concepts refer to."),
         include_references: z.boolean().default(false).describe("List the concepts that refer to each entity, with the role each gives it."),
@@ -229,7 +233,9 @@ export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: T
       }
       const types = args.type === undefined ? undefined : new Set((args.include_subtypes ? host.subtypes(args.type) : [args.type]).map(norm));
       const needle = args.name_contains?.toLowerCase();
+      if (args.bundle !== undefined && !vocab.bundles.includes(args.bundle)) return fail(`No bundle "${args.bundle}". Bundles in this vault: ${vocab.bundles.map((b) => `"${b}"`).join(", ")}.`);
       const rows = all.filter((e) => {
+        if (args.bundle !== undefined && e.bundle !== args.bundle) return false;
         if (types && !(e.type && types.has(norm(e.type)))) return false;
         if (needle && ![e.name ?? "", ...e.aliases].some((n) => n.toLowerCase().includes(needle))) return false;
         if (only && !e.references.some((r) => r.concept.path === only)) return false;

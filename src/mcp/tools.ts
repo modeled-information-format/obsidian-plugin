@@ -266,13 +266,19 @@ export function createServer(host: McpHost, version: string, tasks?: TaskStore, 
     const { structuredContent: _data, ...rest } = result as Record<string, unknown>;
     return rest as T;
   };
-  if (!opts.structured) {
-    // Every tool is registered through here, so one place decides the shape of every result.
+  {
+    // Every tool is registered through here, so one place decides two things about all of them.
     type Register = (name: string, config: Record<string, unknown>, cb: (...a: unknown[]) => unknown) => unknown;
     const untyped = server as unknown as { registerTool: Register };
     const register = untyped.registerTool.bind(server);
     untyped.registerTool = (name, config, cb) => {
-      const { outputSchema: _schema, ...rest } = config;
+      // An argument a tool does not have is refused, by name. Dropped silently, a misspelt or
+      // misplaced filter returns the unfiltered answer as if it were the one asked for.
+      const input = config.inputSchema as { strict?: () => unknown } | undefined;
+      const strict: Record<string, unknown> = { ...config, ...(typeof input?.strict === "function" ? { inputSchema: input.strict() } : {}) };
+      if (opts.structured) return register(name, strict, cb);
+      // The shape of a result: text only, with no output schema declared (plan M60).
+      const { outputSchema: _schema, ...rest } = strict;
       return register(name, rest, async (...a) => textOnly(await cb(...a)));
     };
   }

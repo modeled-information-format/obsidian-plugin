@@ -46,6 +46,21 @@ const RUN = Date.now().toString(36);
 const PERSON = `Eval Probe Person ${RUN}`;
 const PERSON_SLUG = `eval-probe-person-${RUN}`;
 
+/** One id that two fixture notes carry (tests/fixtures/memories). */
+const SHARED_ID = "urn:mif:c3d4e5f6-7890-12cd-ef01-3456789012cd";
+const DELTA = "semantic/Eval-Probe-Delta.md";
+const NOTICE = "semantic/Eval-Probe-Notice.md";
+const noticeNote = `---
+id: 5e0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b
+type: semantic
+created: 2026-11-27T00:00:00Z
+title: Eval Probe Notice
+---
+# Eval Probe Notice
+
+Made by the evaluation while a client was listening.
+`;
+
 const prompt = (name, args = "") => `/mcp__${SERVER}__${name}${args ? ` ${args}` : ""}`;
 
 /** True when every key of `want` is in `got` with an equal value. The model may add nothing that matters. */
@@ -87,6 +102,8 @@ const json = (v) => {
     return {};
   }
 };
+
+const NEEDS_STORE = ["ingest", "search-query", "search-similar", "search-floor", "status-store", "status-gaps", "create-duplicate-cancel", "create-duplicate-asks", "create-duplicate-answered"];
 
 export const cases = [
   // ======================================================================================
@@ -333,6 +350,19 @@ export const cases = [
   }),
   directed("search-no-query", "search", "a search with neither a query nor a concept is refused", T.search, {}, (v) => refused(v)),
 
+  directed(
+    "search-unavailable",
+    "search",
+    "without mif-cli, search says so and names what to use instead",
+    T.search,
+    { query: "rate limit" },
+    (v) => {
+      refused(v);
+      has(v, "Search is unavailable", "mif-cli", /mif_vault_(list_concepts|get_concept)/);
+    },
+    { server: "memory" },
+  ),
+
   directed("get-by-id", "get concept", "reads a concept by its canonical id", T.get, { concept: POLICY_ID }, (v) => {
     ok(v);
     has(v, POLICY, "freshness: timeless", "600");
@@ -383,6 +413,15 @@ export const cases = [
   directed("get-ambiguous", "get concept", "lists the candidates when a title names several concepts", T.get, { concept: "rate" }, (v) => {
     refused(v);
     has(v, INCIDENT, POLICY);
+  }),
+
+  directed("get-shared-id", "get concept", "an id that two notes carry is never resolved to one of them", T.get, { concept: SHARED_ID }, (v) => {
+    refused(v);
+    has(v, "matches more than one concept", "_fixtures/memories/agriculture/ram-001-breeding-record.md", "_fixtures/memories/publishing/state-adoption-example.md");
+  }),
+  directed("get-stray-argument", "get concept", "an argument the tool does not have is refused by name, not dropped", T.get, { concept: POLICY, sections: "Rationale" }, (v) => {
+    refused(v);
+    has(v, "sections");
   }),
 
   directed("rel-both", "relationships", "lists a concept's relationships in both directions", T.rel, { concept: POLICY }, (v) => {
@@ -470,6 +509,19 @@ export const cases = [
   directed("list-relationship-count", "list concepts", "filters by how many relationships of a kind a concept has", T.list, { folder: "semantic", relationship: { type: "derived-from", direction: "outgoing", min: 1 } }, (v) => {
     ok(v);
     has(v, "API Rate Limit Policy");
+  }),
+  directed("list-by-bundle", "list concepts", "keeps to one bundle", T.list, { bundle: "", folder: "semantic", response_format: "json" }, (v) => {
+    ok(v);
+    const d = json(v);
+    v.check("that bundle's concepts are listed", d.total_count >= 1 && (d.concepts ?? []).every((c) => c.path.startsWith("semantic/")), [d.total_count, (d.concepts ?? []).map((c) => c.path)]);
+  }),
+  directed("list-bad-bundle", "list concepts", "refuses a bundle the vault does not have", T.list, { bundle: "nope" }, (v) => {
+    refused(v);
+    has(v, 'No bundle "nope"');
+  }),
+  directed("list-stray-argument", "list concepts", "a misspelt filter is refused, not answered unfiltered", T.list, { bundel: "" }, (v) => {
+    refused(v);
+    has(v, "bundel");
   }),
   directed("list-unknown-type", "list concepts", "names the vault's values when a filter matches nothing it has", T.list, { entity_type: "zzz-not-a-type" }, (v) => refused(v)),
 
@@ -887,6 +939,163 @@ export const cases = [
     { writes: true },
   ),
 
+  // ---- a note that is being edited is left alone ------------------------------------------
+  directed(
+    "busy-active-editor",
+    "writes",
+    "refuses to change the note that is open in the active editor, and says to try again",
+    T.wref,
+    { operation: "add_citation", concept: RUNBOOK, citation: { title: "Busy probe", url: "https://example.test/busy" } },
+    (v) => {
+      refused(v);
+      has(v, "is open in Obsidian with unsaved edits, or is the note being edited now", "try again");
+      v.check("the note is unchanged", !(v.note(RUNBOOK) ?? "").includes("Busy probe"));
+    },
+    { writes: true, before: (ctl) => ctl.openEditor(RUNBOOK), after: (ctl) => ctl.closeEditors() },
+  ),
+  directed(
+    "busy-unsaved-edits",
+    "writes",
+    "refuses to change a note that has unsaved edits in an editor that is not the active one",
+    T.wrel,
+    { operation: "add", from: RUNBOOK, target: INCIDENT, type: "relates-to" },
+    (v) => {
+      refused(v);
+      has(v, "unsaved edits");
+      v.check("the note is unchanged", !(v.note(RUNBOOK) ?? "").includes("incident-2026-01-rate-spike.md"));
+    },
+    // Only the in-memory vault can hold text in an editor that is not on disk.
+    { writes: true, server: "memory", before: (ctl) => ctl.openEditor(RUNBOOK, "typed but not saved"), after: (ctl) => ctl.closeEditors() },
+  ),
+  directed(
+    "busy-released",
+    "writes",
+    "the same change goes through once the note is no longer being edited",
+    T.wref,
+    { operation: "add_citation", concept: RUNBOOK, citation: { title: "Busy probe", url: "https://example.test/busy" } },
+    (v) => {
+      ok(v);
+      v.check("the citation was written", (v.note(RUNBOOK) ?? "").includes("https://example.test/busy"));
+    },
+    { writes: true },
+  ),
+
+  // ---- the user answers: a Claude Code hook answers the server's question as the case says ----
+  directed(
+    "answer-type-chosen",
+    "writes",
+    "a relationship with no type is written with the type the user picks",
+    T.wrel,
+    { operation: "add", from: "Eval Probe Gamma", target: INCIDENT },
+    (v) => {
+      const calls = v.traffic.of("tools/call", T.wrel);
+      v.check("the server asked, then got the answer", calls.some((c) => c.result?.resultType === "input_required") && calls.some((c) => !c.result?.isError && c.result?.resultType !== "input_required"), calls.map((c) => c.result?.resultType ?? (c.result?.isError ? `error: ${v.traffic.text(c).slice(0, 80)}` : "result")));
+      v.check("the relationship has the chosen type", /type: derived-from\n\s+target: \/episodic\/incident-2026-01-rate-spike\.md/.test(v.note(GAMMA) ?? ""), (v.note(GAMMA) ?? "").slice(0, 900));
+      if (v.elicitations.length) {
+        const q = v.elicitations[0];
+        v.check("the question names both concepts", /Eval Probe Gamma/.test(q.message ?? "") && /Rate Spike Incident/.test(q.message ?? ""), q.message);
+        v.check("the form offers the vault's relationship types", JSON.stringify(q.schema ?? {}).includes("derived-from"), q.schema);
+      }
+      v.fact("questions the hook saw", v.elicitations.length);
+    },
+    { writes: true, answer: { choice: "derived-from" } },
+  ),
+  directed(
+    "answer-removal-declined",
+    "writes",
+    "a removal the user says no to is not made",
+    T.wrel,
+    { operation: "remove", from: "Eval Probe Gamma", target: INCIDENT, type: "derived-from" },
+    (v) => {
+      v.check("the server asked", v.traffic.of("tools/call", T.wrel).some((c) => c.result?.resultType === "input_required"));
+      v.check("the relationship is still there", (v.note(GAMMA) ?? "").includes("incident-2026-01-rate-spike.md"));
+    },
+    { writes: true, answer: { confirm: false } },
+  ),
+  directed(
+    "answer-removal-agreed",
+    "writes",
+    "a removal the user agrees to is made",
+    T.wrel,
+    { operation: "remove", from: "Eval Probe Gamma", target: INCIDENT, type: "derived-from" },
+    (v) => {
+      const calls = v.traffic.of("tools/call", T.wrel);
+      v.check("the server asked, then got the answer", calls.some((c) => c.result?.resultType === "input_required") && calls.some((c) => !c.result?.isError && c.result?.resultType !== "input_required"), calls.map((c) => c.result?.resultType ?? (c.result?.isError ? `error: ${v.traffic.text(c).slice(0, 80)}` : "result")));
+      v.check("the relationship is gone", !(v.note(GAMMA) ?? "").includes("incident-2026-01-rate-spike.md"));
+      if (v.elicitations.length) v.check("the question says what will be removed", /Remove the derived-from relationship/.test(v.elicitations[0].message ?? ""), v.elicitations[0].message);
+    },
+    { writes: true, answer: { confirm: true } },
+  ),
+  directed(
+    "answer-supersede-agreed",
+    "writes",
+    "a supersession the user agrees to is made",
+    T.write,
+    { operation: "supersede", supersedes: "Eval Probe Gamma", title: "Eval Probe Delta", body: "Replaces Gamma." },
+    (v) => {
+      v.check("the server asked", v.traffic.of("tools/call", T.write).some((c) => c.result?.resultType === "input_required"));
+      v.check("the new concept exists and the old one is ended", (v.note(DELTA) ?? "").includes("Replaces Gamma.") && /validUntil: \d{4}/.test(v.note(GAMMA) ?? ""), [!!v.note(DELTA), /validUntil/.test(v.note(GAMMA) ?? "")]);
+    },
+    { writes: true, answer: { confirm: true } },
+  ),
+  directed(
+    "create-duplicate-answered",
+    "writes",
+    "a near-duplicate the user chooses to keep both of is written",
+    T.write,
+    { operation: "create", title: "API gateway rate limit policy", type: "semantic", body: "The public API gateway allows 600 requests per minute per API key.", summary: "The API gateway rate limit per key." },
+    (v) => {
+      v.check("the server asked", v.traffic.of("tools/call", T.write).some((c) => c.result?.resultType === "input_required"));
+      v.check("the concept was written", v.note("semantic/API-gateway-rate-limit-policy.md") !== undefined);
+      if (v.elicitations.length) v.check("the question names the concept it is close to", /API Rate Limit Policy/.test(v.elicitations[0].message ?? ""), v.elicitations[0].message);
+    },
+    { writes: true, answer: { choice: "create" } },
+  ),
+
+  // ---- notifications: what goes down the client's change subscription, and what it does next ----
+  {
+    id: "notify-resource-created",
+    area: "notifications",
+    what: "a concept created while a client listens is announced on its subscription",
+    writes: true,
+    input: "Using the mif vault tools, call mif_vault_get_status once with no arguments, then call mif_vault_list_entity_types once with no arguments, then reply with the single word DONE.",
+    during: (ctl) => ctl.create(NOTICE, noticeNote),
+    verify({ traffic, note, check, fact }) {
+      const listen = traffic.of("subscriptions/listen")[0];
+      check("the client opened a change subscription", !!listen);
+      check("the note was created", note(NOTICE) !== undefined);
+      const filter = listen?.params?.notifications ?? {};
+      const events = traffic.events().map((e) => e.method);
+      // A client is told only what it asked to hear.
+      check("resources/list_changed was sent if the client asked for it", !filter.resourcesListChanged || events.includes("notifications/resources/list_changed"), { filter, events });
+      fact("what the client asked to hear", filter);
+      fact("what the server sent", events);
+    },
+  },
+  {
+    id: "notify-writes-switched",
+    area: "notifications",
+    what: "switching writes off mid-session is announced, and Claude Code asks for the tool list again",
+    writes: true,
+    server: "memory",
+    input: "Using the mif vault tools, call mif_vault_get_status once with no arguments, then call mif_vault_list_entity_types once with no arguments, then call mif_vault_get_status once more, then reply with the single word DONE.",
+    during: (ctl) => ctl.set({ mcpAllowWrites: false }),
+    after: (ctl) => ctl.set({ mcpAllowWrites: true }),
+    verify({ traffic, check, fact }) {
+      const filter = traffic.of("subscriptions/listen")[0]?.params?.notifications ?? {};
+      const events = traffic.events();
+      const told = events.find((e) => e.method === "notifications/tools/list_changed");
+      check("tools/list_changed was sent if the client asked for it", !filter.toolsListChanged || !!told, { filter, events: events.map((e) => e.method) });
+      const lists = traffic.of("tools/list");
+      const again = told ? lists.find((t) => t.at >= told.at) : undefined;
+      // Claude Code's documentation says a headless session refreshes its tool list on this notice.
+      check("the client asked for the tool list again", !told || !!again, lists.map((t) => t.at - (told?.at ?? 0)));
+      check("the new list has only the read tools", !again || (again.result?.tools ?? []).length === 7, (again?.result?.tools ?? []).map((t) => t.name));
+      fact("prompts/list_changed was sent", events.some((e) => e.method === "notifications/prompts/list_changed"));
+      fact("the client asked for the prompt list again", !!told && traffic.of("prompts/list").some((t) => t.at >= told.at));
+    },
+  },
+
   // ======================================================================================
   // writes, agent: the guards, and a prompt carried through to a write
   // ======================================================================================
@@ -992,4 +1201,129 @@ export const cases = [
       check("nothing was written", note("semantic/Eval-Probe-Off.md") === undefined);
     },
   },
+
+  // ======================================================================================
+  // a vault whose write limit is three: run with --mode limit
+  // ======================================================================================
+  ...[1, 2, 3].map((n) => ({
+    ...directed(
+      `limit-write-${n}`,
+      "write limit",
+      `write ${n} of 3 is admitted`,
+      T.wref,
+      { operation: "add_citation", concept: RUNBOOK, citation: { title: `Limit probe ${n}`, url: `https://example.test/limit-${n}` } },
+      (v) => {
+        ok(v);
+        v.check("the citation was written", (v.note(RUNBOOK) ?? "").includes(`https://example.test/limit-${n}`));
+      },
+      { writes: true },
+    ),
+    mode: "limit",
+  })),
+  {
+    ...directed(
+      "limit-write-4",
+      "write limit",
+      "the fourth write in the window is refused, with when to try again",
+      T.wref,
+      { operation: "add_citation", concept: RUNBOOK, citation: { title: "Limit probe 4", url: "https://example.test/limit-4" } },
+      (v) => {
+        refused(v);
+        has(v, "This vault allows 3 writes in 10 minutes and that many have been made.", /Try again in about \d+ minute/);
+        v.check("nothing was written", !(v.note(RUNBOOK) ?? "").includes("limit-4"));
+      },
+      { writes: true },
+    ),
+    mode: "limit",
+  },
+  {
+    ...directed(
+      "limit-read-still-works",
+      "write limit",
+      "reads are not limited",
+      T.get,
+      { concept: RUNBOOK, include: ["citations"] },
+      (v) => {
+        ok(v);
+        has(v, "Limit probe 3");
+        lacks(v, "Limit probe 4");
+      },
+      { writes: true },
+    ),
+    mode: "limit",
+  },
+
+  // ======================================================================================
+  // a vault with two bundles: run with --mode bundles
+  // ======================================================================================
+  {
+    ...directed("bundles-status", "bundles", "the graph report covers both bundles, or one on request", T.status, { bundle: "_fixtures/rel", response_format: "json" }, (v) => {
+      ok(v);
+      const d = json(v);
+      v.check("only the bundle asked for is reported", JSON.stringify(d.graph?.bundles) === JSON.stringify(["_fixtures/rel"]) && d.graph?.concepts === 5, [d.graph?.bundles, d.graph?.concepts]);
+    }),
+    mode: "bundles",
+  },
+  {
+    ...directed("bundles-list", "bundles", "a list keeps to one bundle", T.list, { bundle: "_fixtures/rel", response_format: "json" }, (v) => {
+      ok(v);
+      const d = json(v);
+      v.check("five concepts, all of that bundle", d.total_count === 5 && (d.concepts ?? []).every((c) => c.path.startsWith("_fixtures/rel/")), [d.total_count, (d.concepts ?? []).map((c) => c.path)]);
+    }),
+    mode: "bundles",
+  },
+  {
+    ...directed("bundles-gaps-needs-one", "bundles", "the gap report asks which bundle when there are several", T.status, { report: "gaps" }, (v) => {
+      refused(v);
+      has(v, "The gap report compares one bundle at a time.", '"_fixtures/rel"');
+    }),
+    mode: "bundles",
+  },
+  {
+    ...directed(
+      "bundles-create-needs-one",
+      "bundles",
+      "a new concept is refused until the bundle is named",
+      T.write,
+      { operation: "create", title: "Eval Probe Nowhere", type: "semantic", body: "x", on_duplicate: "create" },
+      (v) => {
+        refused(v);
+        has(v, "This vault has several bundles; say which with bundle:");
+      },
+      { writes: true, server: "memory" },
+    ),
+    mode: "bundles",
+  },
+  {
+    ...directed(
+      "bundles-create",
+      "bundles",
+      "a new concept goes into the bundle named",
+      T.write,
+      { operation: "create", title: "Eval Probe Rel", type: "semantic", body: "In the second bundle.", bundle: "_fixtures/rel", on_duplicate: "create" },
+      (v) => {
+        ok(v);
+        v.check("the note is under that bundle's folder", (v.note("_fixtures/rel/semantic/Eval-Probe-Rel.md") ?? "").includes("In the second bundle."));
+      },
+      { writes: true, server: "memory" },
+    ),
+    mode: "bundles",
+  },
+  {
+    ...directed(
+      "bundles-cross-relationship",
+      "bundles",
+      "a relationship to a concept in another bundle names it by its id, not by a path",
+      T.wrel,
+      { operation: "add", from: "Eval Probe Rel", target: POLICY, type: "relates-to" },
+      (v) => {
+        ok(v);
+        v.check("the target is the concept's urn", (v.note("_fixtures/rel/semantic/Eval-Probe-Rel.md") ?? "").includes(`target: ${POLICY_ID}`), (v.note("_fixtures/rel/semantic/Eval-Probe-Rel.md") ?? "").match(/target: .*/g));
+      },
+      { writes: true, server: "memory" },
+    ),
+    mode: "bundles",
+  },
 ];
+
+for (const c of cases) if (NEEDS_STORE.includes(c.id)) c.needs = "store";
