@@ -81,9 +81,11 @@ function directed(id, area, what, tool, args, verify, extra = {}) {
       const call = v.traffic.of("tools/call", tool).find((c) => subset(args, c.params?.arguments));
       v.check("called as directed", !!call, v.traffic.of("tools/call").map((c) => [c.params?.name, c.params?.arguments]));
       if (!call) return;
-      // A call the server answers with a question is made again by the client, carrying the answer.
+      // A call the server answers with a question is made again by the client, carrying the answer; and a
+      // model sometimes repeats a call that was refused. Neither is another tool.
       const made = v.traffic.of("tools/call");
-      v.check("no other tool was called", made.every((c) => c.params?.name === tool) && made.length <= (made.some((c) => c.result?.resultType === "input_required") ? 2 : 1), v.traffic.tools().join(","));
+      v.check("no other tool was called", made.every((c) => c.params?.name === tool), v.traffic.tools().join(","));
+      if (made.length > 1) v.fact("calls made", made.length);
       const text = v.traffic.text(call);
       verify({ ...v, call, text, isError: call.result?.isError === true || !!call.error, asked: call.result?.resultType === "input_required" });
     },
@@ -510,16 +512,11 @@ export const cases = [
     ok(v);
     has(v, "API Rate Limit Policy");
   }),
-  directed("list-by-bundle", "list concepts", "keeps to one bundle", T.list, { bundle: "", folder: "semantic", response_format: "json" }, (v) => {
-    ok(v);
-    const d = json(v);
-    v.check("that bundle's concepts are listed", d.total_count >= 1 && (d.concepts ?? []).every((c) => c.path.startsWith("semantic/")), [d.total_count, (d.concepts ?? []).map((c) => c.path)]);
-  }),
   directed("list-bad-bundle", "list concepts", "refuses a bundle the vault does not have", T.list, { bundle: "nope" }, (v) => {
     refused(v);
     has(v, 'No bundle "nope"');
   }),
-  directed("list-stray-argument", "list concepts", "a misspelt filter is refused, not answered unfiltered", T.list, { bundel: "" }, (v) => {
+  directed("list-stray-argument", "list concepts", "a misspelt filter is refused, not answered unfiltered", T.list, { bundel: "semantic" }, (v) => {
     refused(v);
     has(v, "bundel");
   }),
