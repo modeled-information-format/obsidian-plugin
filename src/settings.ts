@@ -1,7 +1,7 @@
 export type SyncMode = "observe" | "sync";
 
 export interface MifSettings {
-  /** Observe validates and fixes on request; Sync also stamps `modified` on save. */
+  /** Both stamp `modified` once you leave a concept you edited. Observe otherwise validates and fixes on request; Sync also keeps the mirrored sections in step. */
   mode: SyncMode;
   /** Vault-relative bundle roots; "" is the vault root. Longest match wins. */
   bundleRoots: string[];

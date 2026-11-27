@@ -138,7 +138,7 @@ export default class MifPlugin extends Plugin {
       if (file) void this.manager.trackAccess(file);
       void this.manager.flushPendingStamps();
     }));
-    // Sync mode stamps a note once you have left it (see MifManager.scheduleStamp).
+    // An edited note is stamped once you have left it (see MifManager.scheduleStamp).
     this.registerEvent(workspace.on("active-leaf-change", () => void this.manager.flushPendingStamps()));
     this.registerEvent(workspace.on("layout-change", () => {
       this.scheduleExplorer();
@@ -152,7 +152,9 @@ export default class MifPlugin extends Plugin {
     this.scheduleExplorer();
     this.registerEvent(
       workspace.on("editor-change", (_editor, info) => {
-        if (info.file) this.manager.markDirty(info.file.path);
+        // Only typing counts as an edit to stamp. Obsidian also fires this when it reloads a note that
+        // changed on disk (a sync, a git checkout) into an open tab; that note is not the one being typed in.
+        if (info.file && workspace.activeEditor?.file?.path === info.file.path) this.manager.markDirty(info.file.path);
       }),
     );
     this.registerEvent(this.app.metadataCache.on("changed", () => void this.manager.noteActivity()));
@@ -777,7 +779,7 @@ class MifSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Mode")
-      .setDesc("Observe validates and offers fixes. Sync also updates `modified`, the ## Relationships mirror, and an existing ## Citations section of a concept you edited, once you leave it.")
+      .setDesc("Both modes update `modified` on a concept you edited, once you leave it. Observe otherwise validates and offers fixes. Sync also updates the ## Relationships mirror and an existing ## Citations section then.")
       .addDropdown((d) =>
         d.addOptions({ observe: "Observe", sync: "Sync" }).setValue(s.mode).onChange(async (value) => {
           s.mode = value as SyncMode;

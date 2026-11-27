@@ -132,6 +132,49 @@ describe("writes to open notes", () => {
   });
 });
 
+describe("Observe mode stamping", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("sets modified once you leave an edited concept, and leaves the rest of the note as written", async () => {
+    const v = memoryApp(relFixtures());
+    const manager = new MifManager(v.app as never, () => ({ ...DEFAULT_SETTINGS, mode: "observe" as const }));
+    await manager.loadBundles();
+    await manager.scanAll();
+    const { MarkdownView, notices } = await import("./support/obsidian-stub");
+    const file = v.files.get("a.md")!;
+    const modified = (text: string) => /^modified: (.*)$/m.exec(text)?.[1];
+    expect(modified(v.texts.get("a.md")!)).toBeUndefined();
+    const view = new MarkdownView(file, v.texts.get("a.md")!);
+    v.app.workspace.views = [view];
+    v.app.workspace.active = view;
+    const before = notices.length;
+    // The user types a line and, by hand, a relationship line the frontmatter does not have.
+    manager.markDirty("a.md");
+    v.texts.set("a.md", `${v.texts.get("a.md")!}\nA line typed in Obsidian.\n`);
+    await manager.analyzeFile(file as never);
+    manager.scheduleStamp(file as never);
+    await vi.advanceTimersByTimeAsync(2500);
+    // Still the active editor: nothing is written.
+    expect(modified(v.texts.get("a.md")!)).toBeUndefined();
+
+    v.app.workspace.active = null;
+    v.app.workspace.views = [];
+    const typed = v.texts.get("a.md")!;
+    await manager.flushPendingStamps();
+    const after = v.texts.get("a.md")!;
+    expect(modified(after)).toMatch(/^\d{4}-\d\d-\d\dT/);
+    // Only the date moved: the body and every other frontmatter line are as the user left them.
+    expect(after.replace(/^modified:.*\n/m, "")).toBe(typed);
+    expect(notices.length).toBe(before);
+    // A second pass with nothing new typed does not stamp again.
+    const stamped = v.texts.get("a.md")!;
+    await vi.advanceTimersByTimeAsync(60_000);
+    await manager.flushPendingStamps();
+    expect(v.texts.get("a.md")).toBe(stamped);
+  });
+});
+
 describe("Sync mode stamping", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

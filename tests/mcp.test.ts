@@ -1279,6 +1279,9 @@ describe("writes", () => {
     expect(textOf(added)).toContain("derived-from");
     expect(added.isError).toBeFalsy();
     expect(added.structuredContent).toMatchObject({ operation: "add", changed: [RUNBOOK_PATH] });
+    // A change an agent makes moves the note's modified date, as an edit in Obsidian does.
+    expect(before).not.toMatch(/^modified:/m);
+    expect(v.mem.texts.get(RUNBOOK_PATH)).toMatch(/^modified: \d{4}-\d\d-\d\dT/m);
     let text = v.mem.texts.get(RUNBOOK_PATH)!;
     expect(text).toContain("type: derived-from");
     expect(text).toContain("- derived-from [");

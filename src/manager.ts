@@ -890,21 +890,24 @@ export class MifManager extends Events {
     if (repaired) new Notice(`MIF: repaired damaged relationship lines in ${repaired} note${repaired > 1 ? "s" : ""} after the move.`);
   }
 
-  // --- Sync mode --------------------------------------------------------------
+  // --- Stamping an edited note (both modes) and keeping its mirrors (Sync mode) ----
 
   markDirty(path: string): void {
-    if (this.settings().mode === "sync" && this.rootFor(path) !== null) this.dirty.add(path);
+    if (this.rootFor(path) !== null) this.dirty.add(path);
   }
 
   /**
-   * After a user edit is saved, stamp `modified` and resync the mirror. The
-   * stamp never writes into a note while it is being edited: Obsidian saves
+   * After a user edit is saved, stamp `modified`; in Sync mode, resync the
+   * mirrored sections as well. A concept's `modified` is a fact about the
+   * note, so it follows an edit in either mode: a date that stays put while
+   * the text changes misleads whoever reads it, a person or an MCP client.
+   * The stamp never writes into a note while it is being edited: Obsidian saves
    * while you type, and a plugin write landing between keystrokes races the
    * editor. It waits until the note is no longer the active editor and no
    * open editor holds unsaved text for it, then runs (flushPendingStamps).
    */
   scheduleStamp(file: TFile): void {
-    if (this.settings().mode !== "sync" || !this.dirty.has(file.path)) return;
+    if (!this.dirty.has(file.path)) return;
     window.clearTimeout(this.stampTimers.get(file.path));
     this.stampTimers.set(
       file.path,
@@ -969,6 +972,8 @@ export class MifManager extends Events {
       // Skip when the only change since the last stamp is `modified` itself.
       if (this.ownWrites.get(file.path)?.replace(/^modified:.*$/m, "") === text.replace(/^modified:.*$/m, "")) return text;
       let out = updateFrontmatter(text, { modified: isoSeconds(new Date()) });
+      // Observe mode stops here: it records that the note changed, and leaves the rest of it as written.
+      if (this.settings().mode !== "sync") return out;
       const concept = toBundleConcept(file.path, out);
       if (concept && mirrorDrift(concept.frontmatter, concept.body)) out = syncMirror(out, titleFor);
       // An existing ## Citations section follows frontmatter too (never created here).

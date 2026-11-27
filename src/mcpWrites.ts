@@ -151,6 +151,12 @@ export class VaultWrites {
     }
     if (typeof next !== "string") return next;
     if (next === before) return refuse(`${path} already has that; nothing was changed.`);
+    // The note changed, so its modified date does: the same rule as for an edit made in Obsidian.
+    try {
+      next = updateFrontmatter(next, { modified: isoSeconds(new Date()) });
+    } catch (err) {
+      return refuse(`The change could not be made to ${path}: ${(err as Error).message}`);
+    }
     const added = errorsOf(next).filter((d) => !errorsOf(before).some((e) => e.code === d.code && e.message === d.message));
     if (added.length) {
       this.record(author, action, path, "refused: invalid");

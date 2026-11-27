@@ -44,9 +44,9 @@ tree.
 - `src/manager.ts` owns the vault model: bundles, per-file analysis, the
   relationship index, and every write to a note. All writes go through
   `MifManager.write`, which uses `Vault.process` and reads the result back.
-- Never write into a note while the user is editing it. Sync mode's
-  automatic stamp (`modified`, the `## Relationships` mirror, an existing
-  `## Citations` section) waits until the note is no longer the active
+- Never write into a note while the user is editing it. The automatic
+  stamp (`modified` in both modes; in Sync mode also the `## Relationships`
+  mirror and an existing `## Citations` section) waits until the note is no longer the active
   editor and no open editor holds unsaved text for it
   (`scheduleStamp`, `flushPendingStamps`). Automatic writes pass
   `{ background: true }`: they log refusals and mismatches to the debug log
