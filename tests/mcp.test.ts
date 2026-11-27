@@ -1292,6 +1292,11 @@ describe("writes", () => {
     expect(textOf(untyped)).toContain("relates-to");
     const asked = await asking(c.endpoint.port, W_REL, { operation: "add", from: INCIDENT, target: RUNBOOK });
     expect(asked.resultType).toBe("input_required");
+    // The form's own list is the list: the question does not spell the options out a second time.
+    const form = (asked.inputRequests as unknown as Record<string, { params: { message: string; requestedSchema: { properties: { choice: { enum: string[]; title: string } } } } }>).type!.params;
+    expect(form.message).toBe('Which relationship does "Rate Spike Incident 2026-01" have to "Rotate API Keys"?');
+    expect(form.requestedSchema.properties.choice.enum).toContain("relates-to");
+    expect(form.requestedSchema.properties.choice.title).toBe("Relationship type");
     const picked = await asking(c.endpoint.port, W_REL, { operation: "add", from: INCIDENT, target: RUNBOOK }, { type: { action: "accept", content: { choice: "relates-to" } } });
     expect(picked.isError).toBeFalsy();
     expect(v.mem.texts.get(INCIDENT_PATH)).toContain("rotate-api-keys.md");

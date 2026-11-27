@@ -69,7 +69,7 @@ function confirmed(ctx: ServerContext, given: boolean | undefined, message: stri
 }
 
 /** One of `options`, chosen by the user: the choice, or what to return to get it. */
-function chosen(ctx: ServerContext, key: string, argument: string, given: string | undefined, message: string, options: Array<{ value: string; label: string }>): string | Returned {
+function chosen(ctx: ServerContext, key: string, argument: string, given: string | undefined, message: string, options: Array<{ value: string; label: string }>, field = "Your choice"): string | Returned {
   const values = options.map((o) => o.value);
   if (given !== undefined) return values.includes(given) ? given : fail(`${argument} must be one of: ${values.join(", ")}.`);
   const listing = options.map((o) => `  - ${o.value}${o.label === o.value ? "" : `: ${o.label}`}`).join("\n");
@@ -79,7 +79,12 @@ function chosen(ctx: ServerContext, key: string, argument: string, given: string
     const picked = view.action === "accept" ? acceptedContent(ctx.mcpReq.inputResponses, key, z.object({ choice: z.string() }))?.choice : undefined;
     return picked !== undefined && values.includes(picked) ? picked : fail("The user did not choose, so nothing was changed.");
   }
-  return inputRequired({ inputRequests: { [key]: inputRequired.elicit({ message: `${message}\n${listing}`, requestedSchema: z.object({ choice: z.enum(values as [string, ...string[]]).describe("Your choice") }) }) } });
+  // The form lists the options itself. They are spelt out in the question only where an option needs
+  // explaining; a plain list there would show every option twice (seen in Claude Code's form).
+  const explained = options.some((o) => o.label !== o.value);
+  return inputRequired({
+    inputRequests: { [key]: inputRequired.elicit({ message: explained ? `${message}\n${listing}` : message, requestedSchema: z.object({ choice: z.enum(values as [string, ...string[]]).meta({ title: field }).describe(field) }) }) },
+  });
 }
 
 const isReturned = (v: unknown): v is Returned => typeof v === "object" && v !== null;
@@ -277,7 +282,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       if (from.path === target.path) return fail("A concept cannot declare a relationship to itself.");
       const author = authorOf(ctx);
       if (args.operation === "add") {
-        const type = chosen(ctx, "type", "type", args.type && args.type.trim() ? args.type : undefined, `Which relationship does "${from.title}" have to "${target.title}"?`, vocab.relationship_types.map((t) => ({ value: t, label: t })));
+        const type = chosen(ctx, "type", "type", args.type && args.type.trim() ? args.type : undefined, `Which relationship does "${from.title}" have to "${target.title}"?`, vocab.relationship_types.map((t) => ({ value: t, label: t })), "Relationship type");
         // A type this vault has not used before is allowed when the agent names it; only the choice among known types is offered to the user.
         const picked = args.type ?? type;
         if (isReturned(picked)) return picked;

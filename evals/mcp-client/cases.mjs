@@ -992,6 +992,7 @@ export const cases = [
         const q = v.elicitations[0];
         v.check("the question names both concepts", /Eval Probe Gamma/.test(q.message ?? "") && /Rate Spike Incident/.test(q.message ?? ""), q.message);
         v.check("the form offers the vault's relationship types", JSON.stringify(q.schema ?? {}).includes("derived-from"), q.schema);
+        v.check("the question does not list the options a second time", !/\n\s*- /.test(q.message ?? ""), q.message);
       }
       v.fact("questions the hook saw", v.elicitations.length);
     },
