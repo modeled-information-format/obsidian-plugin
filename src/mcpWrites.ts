@@ -15,10 +15,10 @@ import { Notice, TFile, type App } from "obsidian";
 import type { MifCli } from "./cliBridge";
 import {
   addRelationship as addRelationshipText, analyze, applyEdit, entityReference, entitySlug, isoSeconds, linkTarget, newConceptText, relativeTarget, removeRelationship as removeRelationshipText,
-  slugify, syncCitations, syncMirror, titledConceptPath, titleForTarget, updateFrontmatter, updateRelationship as updateRelationshipText, type BaseType,
+  slugify, syncCitations, syncMirror, titledConceptPath, titleForTarget, updateFrontmatter, updateRelationship as updateRelationshipText, type BaseType, type Edge,
 } from "./engine";
 import type { MifManager } from "./manager";
-import type { Author, ConceptEdit, ConceptRef, EntityTypeView, IngestView, NewConceptInput, Refused, RelationshipWrite, Unavailable } from "./mcp/host";
+import type { Author, ConceptEdit, ConceptRef, EntityTypeView, IngestView, NewConceptInput, Refused, RelationshipWrite, Repointed, Unavailable } from "./mcp/host";
 import type { MifSettings } from "./settings";
 
 const TYPES = ["semantic", "episodic", "procedural"];
@@ -188,6 +188,67 @@ export class VaultWrites {
     return edge ? edge.index : refuse(`${path} declares no ${match.type} relationship to ${match.target}. List its relationships to see what it declares.`);
   }
 
+  /**
+   * Every relationship, in any bundle, that names the concept at `path`, by the
+   * note that declares it. A "supersedes" relationship is history and is left out.
+   */
+  private pointing(path: string): Map<string, Edge[]> {
+    const out = new Map<string, Edge[]>();
+    const ctx = this.manager.indexFor(path);
+    if (!ctx) return out;
+    const add = (root: string, e: Edge) => {
+      if (e.type === "supersedes") return;
+      const from = this.manager.toVaultPath(root, e.from);
+      out.set(from, [...(out.get(from) ?? []), e]);
+    };
+    for (const e of ctx.index.incoming.get(ctx.bundlePath) ?? []) add(ctx.info.root, e);
+    // From another bundle a concept is named by its id, which that bundle's index cannot resolve.
+    const id = this.ref(path)?.id?.toLowerCase();
+    if (id) {
+      for (const root of this.manager.bundleRoots()) {
+        if (root === ctx.info.root) continue;
+        for (const edges of this.manager.indexOfRoot(root)?.outgoing.values() ?? []) {
+          for (const e of edges) if (e.resolved === undefined && e.target.toLowerCase() === id) add(root, e);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Point the relationships in `edges` at the concept at `to` (plan M68): each
+   * declaring note is changed once, under every rule a change obeys. A note that
+   * already declares the same type to `to` loses the old relationship instead
+   * of gaining a second. A note that cannot be changed now is reported, not forced.
+   */
+  private async retarget(edges: Map<string, Edge[]>, to: string, author: Author, skip: string[]): Promise<Repointed> {
+    const repointed: ConceptRef[] = [];
+    const left: string[] = [];
+    const name = this.ref(to)?.title ?? to;
+    for (const [from, list] of edges) {
+      if (from === to || skip.includes(from)) continue;
+      const target = this.target(from, to);
+      if (typeof target !== "string") {
+        left.push(`${from}: ${target.refused}`);
+        continue;
+      }
+      const already = new Set(list.filter((e) => typeof this.indexOf(from, { type: e.type, target: to }) === "number").map((e) => e.type));
+      const r = await this.change(from, author, "repoint-relationship", "", (text) => {
+        let next = text;
+        const titleFor = (t: string) => (t === target ? name : this.titleFor(from)(t));
+        // From the last relationship back, so a removal does not move one still to be changed.
+        for (const e of [...list].sort((a, b) => b.index - a.index)) {
+          next = already.has(e.type) ? removeRelationshipText(next, e.index, titleFor) : updateRelationshipText(next, e.index, { type: e.type, target, ...(e.strength === undefined ? {} : { strength: e.strength }) }, titleFor);
+        }
+        return next;
+      });
+      if ("refused" in r) left.push(`${from}: ${r.refused}`);
+      else repointed.push(r.concept);
+    }
+    if (repointed.length) new Notice(`MIF: ${author.agent} pointed the relationships of ${repointed.length} concept(s) at ${name}`);
+    return { repointed, left };
+  }
+
   async addRelationship(path: string, rel: RelationshipWrite, author: Author) {
     const target = this.target(path, rel.target);
     if (typeof target !== "string") return target;
@@ -255,7 +316,7 @@ export class VaultWrites {
     return ok ? { urn, created: true } : refuse(`The entity ${urn} could not be created.`);
   }
 
-  async createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef; carried: number } | Refused> {
+  async createConcept(input: NewConceptInput, author: Author): Promise<({ concept: ConceptRef; carried: number } & Repointed) | Refused> {
     const old = input.supersedes === undefined ? undefined : this.manager.get(input.supersedes);
     const oldFile = input.supersedes === undefined ? undefined : this.file(input.supersedes);
     if (input.supersedes !== undefined && (!old?.isConcept || !oldFile)) return refuse(`No concept at ${input.supersedes} to supersede.`);
@@ -358,7 +419,9 @@ export class VaultWrites {
     }
     this.manager.rebuildIndexes();
     this.record(author, oldFile ? "supersede-concept" : "create-concept", path, "done", oldFile ? `created ${title}, which supersedes ${typeof oldFm.title === "string" ? oldFm.title : input.supersedes}` : `created ${title}`);
-    return { concept: this.ref(path)!, carried };
+    // What other concepts declared to the old one now names the new one (plan M68).
+    const moved = input.supersedes === undefined ? { repointed: [], left: [] } : await this.retarget(this.pointing(input.supersedes), path, author, [input.supersedes]);
+    return { concept: this.ref(path)!, carried, ...moved };
   }
 
   /** A concept's provenance once an agent has changed its text: back to "uncertain", with the client on record. Its sourceType is kept. */
@@ -401,7 +464,7 @@ export class VaultWrites {
     });
   }
 
-  async mergeConcepts(into: string, from: string[], body: string, author: Author): Promise<{ concept: ConceptRef; merged: ConceptRef[]; warnings: string[] } | Refused> {
+  async mergeConcepts(into: string, from: string[], body: string, author: Author): Promise<({ concept: ConceptRef; merged: ConceptRef[]; warnings: string[] } & Repointed) | Refused> {
     const sources = [...new Set(from)];
     if (!this.file(into)) return refuse(`No concept at ${into}.`);
     if (!sources.length || sources.includes(into)) return refuse("A merge needs at least one other concept to merge in.");
@@ -484,7 +547,15 @@ export class VaultWrites {
       this.audit(`${author.agent}${author.agent_version ? ` ${author.agent_version}` : ""}`, "merged-into", s, into);
     }
     this.manager.rebuildIndexes();
-    return { concept: this.ref(into)!, merged: sources.flatMap((s) => this.ref(s) ?? []), warnings };
+    // What other concepts declared to a merged-in concept now names the one it was merged into (plan M68).
+    const repointed = new Map<string, ConceptRef>();
+    const left: string[] = [];
+    for (const s of sources) {
+      const moved = await this.retarget(this.pointing(s), into, author, sources);
+      for (const c of moved.repointed) repointed.set(c.path, c);
+      left.push(...moved.left);
+    }
+    return { concept: this.ref(into)!, merged: sources.flatMap((s) => this.ref(s) ?? []), warnings, repointed: [...repointed.values()], left };
   }
 
   /**
@@ -505,7 +576,8 @@ export class VaultWrites {
   /**
    * The user's rejection of an agent-written concept: it goes to the trash
    * (Obsidian's or the system's, as the vault is set), so it can be restored.
-   * A concept it superseded is valid again if this write is what ended it.
+   * A concept it superseded is valid again if this write is what ended it, and
+   * what other concepts declare to the rejected one is pointed back at it.
    */
   async reject(path: string): Promise<boolean> {
     const file = this.file(path);
@@ -514,6 +586,7 @@ export class VaultWrites {
     const from = (a.frontmatter?.temporal as { validFrom?: unknown } | undefined)?.validFrom;
     const ctx = this.manager.indexFor(path);
     const superseded = (ctx?.index.outgoing.get(ctx.bundlePath) ?? []).flatMap((e) => (e.type === "supersedes" && e.resolved !== undefined ? [this.manager.toVaultPath(ctx!.info.root, e.resolved)] : []));
+    const pointing = superseded.length === 1 ? this.pointing(path) : new Map<string, Edge[]>();
     await this.app.fileManager.trashFile(file);
     for (const old of superseded) {
       const oldFile = this.file(old);
@@ -524,6 +597,7 @@ export class VaultWrites {
       await this.manager.analyzeFile(oldFile, { quiet: true });
     }
     this.manager.rebuildIndexes();
+    if (superseded.length === 1 && this.file(superseded[0]!)) await this.retarget(pointing, superseded[0]!, { agent: "user" }, [path]);
     this.audit("user", "review-reject", path, "moved to trash");
     return true;
   }

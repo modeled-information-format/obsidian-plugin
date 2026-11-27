@@ -24,6 +24,7 @@ const INCIDENT = "episodic/incident-2026-01-rate-spike.md";
 const ALPHA = "semantic/Eval-Probe-Alpha.md";
 const BETA = "semantic/Eval-Probe-Beta.md";
 const GAMMA = "semantic/Eval-Probe-Gamma.md";
+const POINTER = "semantic/Eval-Probe-Pointer.md";
 
 const T = {
   search: "mif_vault_search_concepts",
@@ -876,6 +877,19 @@ export const cases = [
     { writes: true },
   ),
   directed(
+    "create-pointer",
+    "writes",
+    "creates a concept that points at both probes, for the re-pointing checks",
+    T.write,
+    { operation: "create", title: "Eval Probe Pointer", type: "semantic", body: "Points at the probes.", on_duplicate: "create", relationships: [{ type: "relates-to", target: "Eval Probe Beta" }, { type: "derived-from", target: "Eval Probe Alpha" }] },
+    (v) => {
+      ok(v);
+      const text = v.note(POINTER) ?? "";
+      v.check("it points at both probes", text.includes("target: /semantic/Eval-Probe-Beta.md") && text.includes("target: /semantic/Eval-Probe-Alpha.md"), text.slice(0, 1200));
+    },
+    { writes: true },
+  ),
+  directed(
     "merge",
     "writes",
     "merges one concept into another: text, relationships, and the merged one kept but ended",
@@ -889,6 +903,9 @@ export const cases = [
       v.check("it took over what the other declared", alpha.includes("target: /procedural/rotate-api-keys.md"), alpha.slice(0, 1200));
       v.check("it supersedes the other", /type: supersedes\n\s+target: \/semantic\/Eval-Probe-Beta\.md/.test(alpha));
       v.check("the merged concept is kept, with its validity ended", /validUntil: \d{4}/.test(beta) && beta.includes("A second probe."));
+      const pointer = v.note(POINTER) ?? "";
+      v.check("what pointed at the merged concept now points at the survivor", !pointer.includes("Eval-Probe-Beta.md") && /type: relates-to\n\s+target: \/semantic\/Eval-Probe-Alpha\.md/.test(pointer), pointer.slice(0, 1200));
+      has(v, "now point at Eval Probe Alpha", "Eval Probe Pointer");
     },
     { writes: true },
   ),
@@ -919,6 +936,10 @@ export const cases = [
       v.check("it took over the old one's relationships", gamma.includes("rate-limit-policy.md") && gamma.includes("rotate-api-keys.md"), gamma.slice(0, 1200));
       v.check("the old one is kept, with its validity ended", /validUntil: \d{4}/.test(alpha) && alpha.includes("Alpha and Beta, merged"));
       v.check("the new one is agent-written and unverified", /sourceType: agent_inferred/.test(gamma) && /trustLevel: uncertain/.test(gamma));
+      const pointer = v.note(POINTER) ?? "";
+      v.check("what pointed at the old concept now points at the new one", !pointer.includes("Eval-Probe-Alpha.md") && /type: relates-to\n\s+target: \/semantic\/Eval-Probe-Gamma\.md/.test(pointer) && /type: derived-from\n\s+target: \/semantic\/Eval-Probe-Gamma\.md/.test(pointer), pointer.slice(0, 1200));
+      v.check("its mirrored section names the new one", pointer.includes("[Eval Probe Gamma](/semantic/Eval-Probe-Gamma.md)"), pointer.slice(-500));
+      has(v, "now point at Eval Probe Gamma", "Eval Probe Pointer");
     },
     { writes: true },
   ),

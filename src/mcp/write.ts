@@ -12,7 +12,7 @@
 
 import { acceptedContent, CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, inputRequired, inputResponse, type McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
-import type { Author, ConceptRef, ConceptView, McpHost, Refused } from "./host";
+import type { Author, ConceptRef, ConceptView, McpHost, Refused, Repointed } from "./host";
 import { fail, finish, refSchema, resolveOrFail, responseFormat, suggest, TOOL_NAMES, typedInFull, unquote, withLinks, type ToolResult } from "./tools";
 
 /** The write tools, in the order `tools/list` returns them after the read tools. */
@@ -31,6 +31,10 @@ const writeOutSchema = () => z.object({
   superseded: refSchema.optional(),
   /** Concepts merged into `concept`, each kept with its validity ended. */
   merged: z.array(refSchema).optional(),
+  /** Concepts whose relationships to a superseded or merged concept now name its replacement. */
+  repointed: z.array(refSchema).optional(),
+  /** Concepts that still point at the old one, each with why it could not be changed. */
+  not_repointed: z.array(z.string()).optional(),
   urn: z.string().optional(),
   created: z.boolean().optional(),
   duplicates: z.array(z.object({ path: z.string(), title: z.string(), cosine: z.number() })).optional(),
@@ -38,6 +42,12 @@ const writeOutSchema = () => z.object({
 });
 
 type Returned = ToolResult | ReturnType<typeof inputRequired>;
+
+/** What became of the relationships other concepts declared to a concept that was set aside. */
+const repointedLines = (r: Repointed, old: string, next: string): string[] => [
+  ...(r.repointed.length ? [`Relationships that ${r.repointed.length} other concept(s) declared to ${old} now point at ${next}: ${r.repointed.map((c) => `${c.title} [${c.path}]`).join(", ")}.`] : []),
+  ...(r.left.length ? [`${r.left.length} concept(s) still point at ${old}, because they could not be changed now: ${r.left.join(" ")}`] : []),
+];
 
 /** What the client sent about itself with the request. The SDK types it as an open object. */
 const envelope = (ctx: ServerContext): Record<string, unknown> => ctx.mcpReq.envelope ?? {};
@@ -110,7 +120,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       title: "Write a MIF concept",
       description:
         "Add to this vault's memory: operation \"create\" writes a new concept; \"supersede\" writes one that replaces an existing concept, " +
-        "which stays in the vault with its validity ended, so history is kept, and whose relationships the new concept takes over. Supersede when what the vault holds is no longer right; to correct or extend a concept's text, use " + editConcept + ". " +
+        "which stays in the vault with its validity ended, so history is kept; the new concept takes over the relationships it declared, and relationships other concepts declared to it are pointed at the new concept. Supersede when what the vault holds is no longer right; to correct or extend a concept's text, use " + editConcept + ". " +
         "Give the whole text as markdown in body, and declare the concept's relationships, citations and entity references in the same call so it does not arrive unlinked. " +
         "Before creating, the vault is checked for a near-duplicate; if one is found the user is asked whether to keep both, merge into it, supersede it, or stop. " +
         "What you write is saved as agent-written and unverified (freshness and trust are stated to whoever recalls it) until the user reviews it in Obsidian, and your client's name is recorded. " +
@@ -210,7 +220,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       }
       if (old) {
         // The user chose "supersede" when asked about the duplicate: that is their agreement.
-        const agreed = args.operation === "create" ? true : confirmed(ctx, args.confirm, `Replace "${old.title}" with a new concept "${args.title}"? "${old.title}" stays in the vault with its validity ended now.`);
+        const agreed = args.operation === "create" ? true : confirmed(ctx, args.confirm, `Replace "${old.title}" with a new concept "${args.title}"? "${old.title}" stays in the vault with its validity ended now, and relationships other concepts declare to it are pointed at "${args.title}".`);
         if (agreed !== true) return agreed;
       }
       const full = host.admit();
@@ -239,11 +249,12 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       if ("refused" in r) return refused(r);
       return done(
         old ? "supersede" : "create",
-        { concept: r.concept, changed: old ? [r.concept.path, old.path] : [r.concept.path], ...(old ? { superseded: refOf(old) } : {}), ...(duplicates.length ? { duplicates } : {}), warnings },
+        { concept: r.concept, changed: old ? [r.concept.path, old.path, ...r.repointed.map((c) => c.path)] : [r.concept.path], ...(old ? { superseded: refOf(old), repointed: r.repointed, not_repointed: r.left } : {}), ...(duplicates.length ? { duplicates } : {}), warnings },
         [
           old ? `Created ${r.concept.title} [${r.concept.path}], which supersedes ${old.title} [${old.path}]. ${old.title} is kept, with its validity ended now.` : `Created ${r.concept.title} [${r.concept.path}].`,
           `It is saved as written by ${author.agent} and unverified, and waits in the user's review queue in Obsidian. Until they review it, recall states it as trust: uncertain.`,
-          r.carried ? `It took over ${r.carried} relationship(s) that ${old?.title ?? "the old concept"} declared${relationships.length ? `, and declares the ${relationships.length} you gave` : ""}. Relationships that other concepts declare to the old one still point at it.` : relationships.length ? `It declares ${relationships.length} relationship(s).` : `It declares no relationships; add some with ${writeRelationship} so it can be found from related concepts.`,
+          r.carried ? `It took over ${r.carried} relationship(s) that ${old?.title ?? "the old concept"} declared${relationships.length ? `, and declares the ${relationships.length} you gave` : ""}.` : relationships.length ? `It declares ${relationships.length} relationship(s).` : `It declares no relationships; add some with ${writeRelationship} so it can be found from related concepts.`,
+          ...(old ? repointedLines(r, old.title, r.concept.title) : []),
           ...warnings,
         ],
         args.response_format,
@@ -428,7 +439,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       title: "Edit or merge MIF concepts",
       description:
         "Change the text of a concept the vault already holds: operation \"edit\" replaces its whole text (body), or one section (section and text), or its summary or tags; " +
-        "\"merge\" combines other concepts into it: it takes the merged text you write as its body, takes over their relationships, citations and entity references, and supersedes each of them, which is kept with its validity ended. " +
+        "\"merge\" combines other concepts into it: it takes the merged text you write as its body, takes over their relationships, citations and entity references, and supersedes each of them, which is kept with its validity ended; relationships other concepts declared to them are pointed at it. " +
         "Edit to correct or extend what a concept says while it stays the same claim; when the claim itself has changed, supersede it with " + writeConcept + ", so the old one stays on record. " +
         "Read the concept first and write the new text whole: what you send replaces what is there. The Relationships and Citations sections are rebuilt from the concept's frontmatter and are not yours to write. " +
         "An edited or merged concept goes back to the user's review queue as unverified (trust: uncertain) under your client's name, whatever trust it had, so say that to anyone relying on it as evidence.",
@@ -467,8 +478,8 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
         if ("refused" in r) return refused(r);
         return done(
           "merge",
-          { concept: r.concept, merged: r.merged, changed: [concept.path, ...r.merged.map((m) => m.path)], warnings: r.warnings },
-          [`Merged ${r.merged.map((m) => m.title).join(", ")} into ${r.concept.title} [${r.concept.path}]. Each merged concept is kept, superseded, with its validity ended now.`, review, ...r.warnings],
+          { concept: r.concept, merged: r.merged, changed: [concept.path, ...r.merged.map((m) => m.path), ...r.repointed.map((c) => c.path)], repointed: r.repointed, not_repointed: r.left, warnings: r.warnings },
+          [`Merged ${r.merged.map((m) => m.title).join(", ")} into ${r.concept.title} [${r.concept.path}]. Each merged concept is kept, superseded, with its validity ended now.`, review, ...repointedLines(r, "a merged concept", r.concept.title), ...r.warnings],
           args.response_format,
           [r.concept, ...r.merged],
         );

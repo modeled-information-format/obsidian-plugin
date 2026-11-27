@@ -1237,12 +1237,23 @@ describe("writes", () => {
     expect(v.mem.texts.get(path)).toContain("- derived-from [Rate Spike Incident 2026-01]");
     expect(v.mem.texts.get(path)!.match(/type: supersedes/g)).toHaveLength(1);
     expect(v.mem.texts.get(POLICY_PATH)).toMatch(/validUntil: /);
+    // What another concept declared to the old one now names the new one, in its frontmatter and its mirror (M68).
+    const OLD_PATH = "semantic/old-limit.md";
+    expect(v.mem.texts.get(OLD_PATH)).toMatch(/type: relates-to\n\s+target: \/semantic\/API-Rate-Limit-Policy-v2\.md/);
+    expect(v.mem.texts.get(OLD_PATH)).toContain("- relates-to [API Rate Limit Policy v2](/semantic/API-Rate-Limit-Policy-v2.md)");
+    expect(v.mem.texts.get(OLD_PATH)).not.toContain("/semantic/rate-limit-policy.md");
+    expect(textOf(r)).toMatch(/2 other concept\(s\) declared to API Rate Limit Policy now point at API Rate Limit Policy v2: Rotate API Keys \[procedural\/rotate-api-keys\.md\], Old Rate Limit \[semantic\/old-limit\.md\]/);
+    expect(r.structuredContent).toMatchObject({ repointed: [{ path: "procedural/rotate-api-keys.md" }, { path: OLD_PATH }], not_repointed: [] });
+    expect((r.structuredContent as { changed: string[] }).changed).toContain(OLD_PATH);
     const old = await c.call("mif_vault_get_concept", { concept: POLICY_PATH });
     expect(textOf(old)).toMatch(/expired/i);
     // Rejecting the new concept in review moves it to the trash and makes the old one valid again.
     expect(await v.host.reject(path)).toBe(true);
     expect(v.mem.trashed).toContain(path);
     expect(v.mem.texts.get(POLICY_PATH)).not.toMatch(/validUntil/);
+    // ...and what was pointed at the rejected concept points at the restored one again.
+    expect(v.mem.texts.get(OLD_PATH)).toMatch(/type: relates-to\n\s+target: \/semantic\/rate-limit-policy\.md/);
+    expect(v.mem.texts.get(OLD_PATH)).not.toContain("API-Rate-Limit-Policy-v2");
     await c.close();
   });
 
@@ -1442,10 +1453,17 @@ describe("writes", () => {
     expect((await c.call(W_EDIT, { operation: "merge", concept: POLICY, merge_from: [POLICY], body: "x" })).isError).toBe(true);
     await c.call(W_REL, { operation: "add", from: "Old Rate Limit", target: INCIDENT, type: "derived-from", strength: 0.5 });
     await c.call(W_REL, { operation: "add", from: "Old Rate Limit", target: RUNBOOK, type: "documents", strength: 0.5 });
+    // Another concept points at the one about to be merged in.
+    await c.call(W_REL, { operation: "add", from: INCIDENT, target: "Old Rate Limit", type: "relates-to" });
+    expect(v.mem.texts.get(INCIDENT_PATH)).toContain("/semantic/old-limit.md");
     const r = await c.call(W_EDIT, { operation: "merge", concept: POLICY, merge_from: ["Old Rate Limit"], body: "The limit is 100 requests per minute. Until 2026-02 it was 50." });
+    // What pointed at the merged-in concept now names the one it was merged into (M68), once.
+    expect(v.mem.texts.get(INCIDENT_PATH)).not.toContain("/semantic/old-limit.md");
+    expect(v.mem.texts.get(INCIDENT_PATH)!.match(/type: relates-to\n\s+target: \/semantic\/rate-limit-policy\.md/g)).toHaveLength(1);
+    expect(r.structuredContent).toMatchObject({ repointed: [{ path: INCIDENT_PATH }] });
     expect(textOf(r)).toContain("Merged Old Rate Limit into API Rate Limit Policy [semantic/rate-limit-policy.md]");
     expect(r.isError).toBeFalsy();
-    expect(r.structuredContent).toMatchObject({ operation: "merge", changed: [POLICY_PATH, "semantic/old-limit.md"], concept: { path: POLICY_PATH }, merged: [{ path: "semantic/old-limit.md" }], warnings: [] });
+    expect(r.structuredContent).toMatchObject({ operation: "merge", changed: [POLICY_PATH, "semantic/old-limit.md", INCIDENT_PATH], concept: { path: POLICY_PATH }, merged: [{ path: "semantic/old-limit.md" }], warnings: [] });
     const text = v.mem.texts.get(POLICY_PATH)!;
     expect(text).toContain("# API Rate Limit Policy\n\nThe limit is 100 requests per minute. Until 2026-02 it was 50.");
     // What the merged concept declared is carried over; its relationship to the survivor is not.

@@ -105,7 +105,8 @@ Agents can only read until you turn **Settings → MIF → Allow MCP writes**
 on. With it on, an agent can:
 
 - create a concept, or supersede one (the old concept is kept, with its
-  validity ended);
+  validity ended, and relationships that other concepts declared to it are
+  pointed at the new one);
 - edit a concept's text, or merge concepts into one;
 - add, change or remove a typed relationship;
 - add a citation, record an entity, or add an entity reference;
@@ -133,7 +134,8 @@ trust is "uncertain".
 2. For each concept: open it, read it, then either
    - choose a trust level and **Promote** ("User stated" is the default), or
    - **Reject**, which moves it to the trash. If it superseded a concept,
-     that concept becomes valid again.
+     that concept becomes valid again, and relationships that were pointed
+     at the rejected concept point at it again.
 
 ## Use several vaults
 

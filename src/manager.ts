@@ -552,6 +552,11 @@ export class MifManager extends Events {
     this.trigger("changed", null);
   }
 
+  /** The index of the bundle at `root`, once built. */
+  indexOfRoot(root: string): BundleIndex | undefined {
+    return this.bundles.get(root)?.index;
+  }
+
   indexFor(path: string): { info: BundleInfo; index: BundleIndex; bundlePath: string } | undefined {
     const root = this.rootFor(path);
     const info = root === null ? undefined : this.bundles.get(root);

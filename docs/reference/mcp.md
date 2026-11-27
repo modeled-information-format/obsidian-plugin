@@ -91,8 +91,8 @@ Offered only while **Allow MCP writes** is on.
 
 | Tool | Operations | Asks the user |
 |---|---|---|
-| `mif_vault_write_concept` | `create`: a new concept, with its relationships, citations and entity references in the same call. `supersede`: a new concept that replaces an existing one, which is kept with its validity ended; the new one takes over the relationships the old one declared. | Before superseding. When the vault already holds something close: keep both, merge, supersede, or write nothing. |
-| `mif_vault_edit_concept` | `edit`: the whole text, one section, the summary or the tags. `merge`: other concepts into this one; each is kept, superseded, with its validity ended. | No. |
+| `mif_vault_write_concept` | `create`: a new concept, with its relationships, citations and entity references in the same call. `supersede`: a new concept that replaces an existing one, which is kept with its validity ended; the new one takes over the relationships the old one declared, and relationships other concepts declared to the old one are pointed at the new one. | Before superseding. When the vault already holds something close: keep both, merge, supersede, or write nothing. |
+| `mif_vault_edit_concept` | `edit`: the whole text, one section, the summary or the tags. `merge`: other concepts into this one; each is kept, superseded, with its validity ended, and relationships other concepts declared to it are pointed at this one. | No. |
 | `mif_vault_write_relationship` | `add`, `update` (type, strength), `remove`. | Which type, when `add` gives none. Before `update` and `remove`. |
 | `mif_vault_write_reference` | `add_citation`, `create_entity`, `add_entity_reference` (by urn or by name). | Which entity, when a name matches several. |
 | `mif_vault_ingest_concepts` | Embeds a bundle's new and changed concepts. Changes the vector store and no note. | No. |

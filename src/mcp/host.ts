@@ -182,6 +182,14 @@ export interface Refused {
   refused: string;
 }
 
+/** What a supersession or merge did to the relationships other concepts declared to the concept set aside. */
+export interface Repointed {
+  /** Concepts whose relationships now name the replacement. */
+  repointed: ConceptRef[];
+  /** Concepts that could not be changed now, each with the reason. */
+  left: string[];
+}
+
 export interface RelationshipWrite {
   type: string;
   /** Vault path of the concept the relationship points at. */
@@ -296,7 +304,7 @@ export interface McpHost {
   /** Count one write against the limit; refused once the window is full. */
   admit(): Refused | undefined;
   /** `carried`: for a superseding concept, how many relationships it took over from the one it replaces. */
-  createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef; carried: number } | Refused>;
+  createConcept(input: NewConceptInput, author: Author): Promise<({ concept: ConceptRef; carried: number } & Repointed) | Refused>;
   addRelationship(path: string, rel: RelationshipWrite, author: Author): Promise<{ concept: ConceptRef } | Refused>;
   /** Change the type or strength of the relationship `path` declares to `match.target`. */
   updateRelationship(path: string, match: { type: string; target: string }, next: { type?: string; strength?: number }, author: Author): Promise<{ concept: ConceptRef } | Refused>;
@@ -314,7 +322,7 @@ export interface McpHost {
    * Merge the concepts at `from` into the one at `into`: it takes `body` as its text and their relationships,
    * citations and entity references, and supersedes each of them; each is kept with its validity ended.
    */
-  mergeConcepts(into: string, from: string[], body: string, author: Author): Promise<{ concept: ConceptRef; merged: ConceptRef[]; warnings: string[] } | Refused>;
+  mergeConcepts(into: string, from: string[], body: string, author: Author): Promise<({ concept: ConceptRef; merged: ConceptRef[]; warnings: string[] } & Repointed) | Refused>;
   /** Bring a bundle's vector store up to date. Changes the store only, never a note. */
   ingest(bundle: string, author: Author, progress?: (done: number, total: number) => void): Promise<IngestView | Unavailable>;
   /** Concepts an agent wrote or edited that nobody has reviewed since: trustLevel uncertain, and either sourceType agent_inferred or sourceRef "mcp:mif-vault". */

@@ -177,9 +177,10 @@ made; a decision that reverses an earlier one says so.
 | M48 | An entity can be recorded only as a type its bundle has: one of five core types (Person, Organization, Technology, Concept, File) or a type a loaded ontology defines; `mif_vault_list_entity_types` lists them (owner, 2026-11-26). | The core five are the ones the plugin's own "New entity" dialog offers, and are in the plugin. `mif-base` is not shipped with the plugin (it is downloaded when a concept declares an ontology) and defines no entity types, so it could not be the floor. |
 | M49 | A citation's `accessed` date is written as `YYYY-MM-DD` in UTC (owner, 2026-11-26). | MIF's citation schema types `accessed` and `date` as `format: date`, so the value cannot carry a time or a zone; the plugin reports anything else as an error. Writing a zoned timestamp there needs a change to the MIF specification first. |
 | M53 | A superseding concept takes over the relationships the old one declared, with their strength (owner, 2026-11-26). | All but the old one's own `supersedes`, and not one the new concept already declares. Relationships that other concepts declare to the old one are left pointing at it. |
-| M56 | A relationship another concept declares to a superseded concept is left pointing at it (owner, 2026-11-26). | The old record shows as expired and superseded, and a reader follows `supersedes` to the new one. A supersession changes two notes, never the rest of the vault. |
+| M56 | A relationship another concept declares to a superseded concept is left pointing at it (owner, 2026-11-26). Reversed by M68. | The old record shows as expired and superseded, and a reader follows `supersedes` to the new one. A supersession changes two notes, never the rest of the vault. |
 | M57 | A concept an agent creates is named for its title with the capitals kept, words joined by hyphens (owner, 2026-11-26). | `API-Rate-Limit-Policy.md`, not `api-rate-limit-policy.md`. A name counts as taken if any file has it in any case. The plugin's own "New concept" command is unchanged. |
 | M67 | A concept's `modified` date follows every change to it: an edit made in Obsidian, in either mode, and a change an MCP client makes (owner, 2026-11-27). | Found in the owner's client check: a note edited in Obsidian kept its old `modified`, because only Sync mode stamped it. Observe mode now sets `modified` once the user leaves an edited concept, under the same never-while-typing rule, and still leaves the mirrored sections alone; only Sync rewrites those. Only typing in the active editor counts as an edit: Obsidian reloading a note that changed on disk (a sync, a git checkout) into an open tab is not stamped. That an MCP client's change also moves the date, and the typing-only rule, were added with it and are not the owner's wording. |
+| M68 | When a concept is superseded, or merged into another, each relationship another concept declared to it is pointed at its replacement, in that concept's frontmatter and mirrored section; rejecting the replacement in review points them back. A "supersedes" relationship is never moved. A note that is being edited is left as it is and reported. Reverses M56 (owner, 2026-11-27). | The owner reopened M56: a reader following a relationship should arrive at what is valid now, not at an expired record. The old concept stays reachable through `supersedes`. |
 
 ### Live updates and tasks
 
@@ -220,15 +221,20 @@ made; a decision that reverses an earlier one says so.
   is the client's. The project records what Claude Code does and tests
   against it.
 
-## Follow-ups
+## Closed questions
 
-- Whether relationships that point at a superseded concept should be
-  re-pointed at its replacement.
-- Whether to propose `urn:mif:ontology:<id>` to the MIF specification.
+Each was raised while the work was done and closed by the owner on
+2026-11-27. None is outstanding.
+
+- Relationships that point at a superseded concept: re-pointed at its
+  replacement (M68).
+- Proposing `urn:mif:ontology:<id>` to the MIF specification: no action.
+  It stays the plugin's own convention (M59).
 - A citation's `accessed` date cannot carry a time zone, because MIF types
-  it as a date. Changing that needs a change to the specification.
+  it as a date: no action. It is written as a date.
 - The Tasks extension: Claude Code declares it on discovery and not on tool
-  calls, so the gap report is never a task for it.
+  calls, so the gap report is never a task for it: no action. The server
+  serves a task to any client that asks for one.
 
 ## Relationships
 
