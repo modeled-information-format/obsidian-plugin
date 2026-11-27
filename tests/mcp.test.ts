@@ -14,7 +14,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { MifCli } from "../src/cliBridge";
 import { MifManager } from "../src/manager";
 import { MAX_BODY, newToken, refusal, sameToken, startEndpoint, type McpEndpoint } from "../src/mcp/http";
-import { CHARACTER_LIMIT, sectionOf, TOOL_NAMES } from "../src/mcp/tools";
+import { CHARACTER_LIMIT, countEdges, countsLine, sectionOf, TOOL_NAMES } from "../src/mcp/tools";
 import { McpService, VaultMcpHost } from "../src/mcpHost";
 import { DEFAULT_SETTINGS, type MifSettings } from "../src/settings";
 import { memoryApp } from "./support/obsidian-stub";
@@ -24,6 +24,9 @@ const POLICY = "urn:mif:7b3c1e90-5a2f-4c8d-9e10-2f6a4b8c1d3e";
 const INCIDENT = "urn:mif:a1d2c3b4-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
 const RUNBOOK = "urn:mif:c4b5a6d7-8f90-4123-a456-7b8c9d0e1f23";
 const OLD = "urn:mif:0d0d0d0d-1111-4222-8333-444444444444";
+const POLICY_PATH = "semantic/rate-limit-policy.md";
+const INCIDENT_PATH = "episodic/incident-2026-01-rate-spike.md";
+const RUNBOOK_PATH = "procedural/rotate-api-keys.md";
 
 // A concept that stopped being valid on 2026-02-01 and points at the policy.
 const OLD_LIMIT = `---
@@ -174,6 +177,19 @@ describe("request guards", () => {
   });
 });
 
+describe("relationship counts", () => {
+  it("count by direction and type, most frequent first", () => {
+    const c = countEdges([
+      { type: "relates-to", direction: "outgoing", target: "a" },
+      { type: "relates-to", direction: "outgoing", target: "b" },
+      { type: "constrains", direction: "outgoing", target: "c" },
+      { type: "briefed-in", direction: "incoming", target: "d" },
+    ]);
+    expect(c).toEqual({ outgoing: { "relates-to": 2, constrains: 1 }, incoming: { "briefed-in": 1 } });
+    expect(countsLine(c)).toBe("Relationships it declares (outgoing): relates-to 2, constrains 1. Relationships other concepts declare to it (incoming): briefed-in 1.");
+  });
+});
+
 describe("sectionOf", () => {
   const body = "# T\n\nintro\n\n## A\n\none\n\n### A1\n\ndeep\n\n## B\n\ntwo\n";
   it("returns a heading's text down to the next heading of its level", () => {
@@ -266,27 +282,28 @@ describe("the endpoint", () => {
 
   it("lists typed relationships both ways and leaves expired ends out unless asked", async () => {
     const r = await call("mif_vault_list_relationships", { concept: POLICY });
-    const rels = r.structuredContent!.relationships as Array<{ type: string; direction: string; concept?: { id: string }; strength?: number; hop: number }>;
-    expect(rels.map((e) => [e.direction, e.type, e.concept?.id])).toEqual([
-      ["outgoing", "derived-from", INCIDENT],
-      ["outgoing", "relates-to", RUNBOOK],
-      ["incoming", "relates-to", RUNBOOK],
+    const rels = r.structuredContent!.relationships as Array<{ type: string; direction: string; path?: string; title?: string; strength?: number; hop: number }>;
+    expect(rels.map((e) => [e.direction, e.type, e.path])).toEqual([
+      ["outgoing", "derived-from", INCIDENT_PATH],
+      ["outgoing", "relates-to", RUNBOOK_PATH],
+      ["incoming", "relates-to", RUNBOOK_PATH],
     ]);
+    expect(rels[0]!.title).toBe("Rate Spike Incident 2026-01");
     expect(rels[0]!.strength).toBe(0.9);
     expect(r.structuredContent).toMatchObject({ total_count: 3, count: 3, has_more: false, excluded_expired: 1, types: ["derived-from", "relates-to"] });
     expect(textOf(r)).toContain("include_expired: true");
     const all = await call("mif_vault_list_relationships", { concept: POLICY, include_expired: true });
-    expect((all.structuredContent!.relationships as Array<{ concept?: { id: string } }>).map((e) => e.concept?.id)).toContain(OLD);
+    expect((all.structuredContent!.relationships as Array<{ path?: string }>).map((e) => e.path)).toContain("semantic/old-limit.md");
     const past = await call("mif_vault_list_relationships", { concept: POLICY, as_of: "2026-01-20" });
     expect(past.structuredContent!.excluded_expired).toBe(0);
   });
 
   it("follows relationships to a depth, filters by type and direction, and pages", async () => {
     const two = await call("mif_vault_list_relationships", { concept: INCIDENT, depth: 2 });
-    const rels = two.structuredContent!.relationships as Array<{ hop: number; type: string; from: { id: string }; concept?: { id: string } }>;
-    expect(rels.filter((e) => e.hop === 1).map((e) => [e.type, e.concept?.id])).toEqual([["derived-from", POLICY]]);
-    expect(rels.filter((e) => e.hop === 2).every((e) => e.from.id === POLICY)).toBe(true);
-    expect(rels.filter((e) => e.hop === 2).map((e) => e.concept?.id)).toContain(RUNBOOK);
+    const rels = two.structuredContent!.relationships as Array<{ hop: number; type: string; from: string; path?: string }>;
+    expect(rels.filter((e) => e.hop === 1).map((e) => [e.type, e.path])).toEqual([["derived-from", POLICY_PATH]]);
+    expect(rels.filter((e) => e.hop === 2).every((e) => e.from === POLICY_PATH)).toBe(true);
+    expect(rels.filter((e) => e.hop === 2).map((e) => e.path)).toContain(RUNBOOK_PATH);
     const typed = await call("mif_vault_list_relationships", { concept: POLICY, types: ["derived-from"], direction: "outgoing" });
     expect(typed.structuredContent).toMatchObject({ total_count: 1 });
     const paged = await call("mif_vault_list_relationships", { concept: POLICY, limit: 2 });
@@ -295,6 +312,105 @@ describe("the endpoint", () => {
     expect(rest.structuredContent).toMatchObject({ count: 1, has_more: false });
     const none = await call("mif_vault_list_relationships", { concept: INCIDENT, direction: "outgoing" });
     expect(textOf(none)).toContain("no typed relationships");
+  });
+
+  it("finds a concept by its title, or by a word or code in it, and lists the candidates when several match", async () => {
+    const exact = await call("mif_vault_get_concept", { concept: "rotate api keys", include_body: false });
+    expect(exact.structuredContent).toMatchObject({ concept: { id: RUNBOOK } });
+    expect(exact.structuredContent!.text).toBeUndefined();
+    const word = await call("mif_vault_list_relationships", { concept: "Incident", counts_only: true });
+    expect(word.structuredContent).toMatchObject({ concepts: [{ concept: { id: INCIDENT } }], relationships: [] });
+    const many = await call("mif_vault_get_concept", { concept: "Rate" });
+    expect(many.isError).toBe(true);
+    expect(textOf(many)).toContain("semantic/rate-limit-policy.md — API Rate Limit Policy");
+    expect(textOf(many)).toContain("episodic/incident-2026-01-rate-spike.md");
+    expect((await call("mif_vault_get_concept", { concept: "no such title" })).isError).toBe(true);
+  });
+
+  it("counts a concept's relationships by type and direction, including those other concepts declare to it", async () => {
+    const got = await call("mif_vault_get_concept", { concept: INCIDENT, include_body: false });
+    expect(got.structuredContent!.relationship_counts).toEqual({ outgoing: {}, incoming: { "derived-from": 1 } });
+    expect(textOf(got)).toContain("Relationships it declares (outgoing): none. Relationships other concepts declare to it (incoming): derived-from 1.");
+    const policy = await call("mif_vault_list_relationships", { concept: POLICY, counts_only: true });
+    // Counts are not filtered by freshness: the expired note's relationship is counted, though the listing leaves it out.
+    expect(policy.structuredContent!.concepts).toEqual([
+      { concept: { id: POLICY, path: POLICY_PATH, bundle: "", title: "API Rate Limit Policy", type: "semantic" }, relationship_counts: { outgoing: { "derived-from": 1, "relates-to": 1 }, incoming: { "relates-to": 2 } } },
+    ]);
+    expect(policy.structuredContent).toMatchObject({ count: 0, relationships: [] });
+    // A filter that matches nothing still says what the concept has.
+    const none = await call("mif_vault_list_relationships", { concept: INCIDENT, types: ["supersedes"] });
+    expect(textOf(none)).toContain("its counts show what it does have");
+    expect(textOf(none)).toContain("incoming): derived-from 1");
+  });
+
+  it("lists relationships compactly by default and in full on request", async () => {
+    const compact = await call("mif_vault_list_relationships", { concept: POLICY, include_expired: true });
+    const text = textOf(compact);
+    // A title only one concept has is a complete handle, so the path is left out.
+    expect(text).toContain("declares derived-from → (1)\n  - Rate Spike Incident 2026-01\n");
+    expect(text).not.toContain("[episodic/incident-2026-01-rate-spike.md]");
+    expect(text).toContain("relates-to declared to it by ← (2)");
+    expect(text).toContain("  - Old Rate Limit — EXPIRED");
+    expect(text).not.toContain("urn:mif:a1d2c3b4");
+    expect(text).not.toContain("trust:");
+    const rows = compact.structuredContent!.relationships as Array<{ id?: string; weighing?: { freshness: string } }>;
+    expect(rows.every((r) => r.id === undefined)).toBe(true);
+    expect(rows.filter((r) => r.weighing).map((r) => r.weighing!.freshness)).toEqual(["expired"]);
+    const full = await call("mif_vault_list_relationships", { concept: POLICY, detail: "full" });
+    expect(textOf(full)).toContain(`Rate Spike Incident 2026-01 (${INCIDENT}, episodic/incident-2026-01-rate-spike.md) — timeless, trust not recorded`);
+    expect((full.structuredContent!.relationships as Array<{ weighing?: unknown; id?: string }>).every((r) => r.weighing && r.id)).toBe(true);
+    expect(text.length).toBeLessThan(textOf(full).length);
+  });
+
+  it("answers for several concepts in one call, and says what they share or do not", async () => {
+    const each = await call("mif_vault_list_relationships", { concept: [INCIDENT, "Rotate API Keys"] });
+    expect((each.structuredContent!.concepts as Array<{ concept: { id: string } }>).map((c) => c.concept.id)).toEqual([INCIDENT, RUNBOOK]);
+    expect(each.structuredContent).toMatchObject({ combine: "each", total_count: 3 });
+    expect(textOf(each)).toContain("Rate Spike Incident 2026-01 [episodic/incident-2026-01-rate-spike.md]: 1 relationship(s).");
+    expect(textOf(each)).toContain("Rotate API Keys [procedural/rotate-api-keys.md]: 2 relationship(s).");
+    const shared = await call("mif_vault_list_relationships", { concept: [INCIDENT, RUNBOOK], combine: "intersect" });
+    expect((shared.structuredContent!.relationships as Array<{ path?: string }>).map((r) => r.path)).toEqual([POLICY_PATH]);
+    expect(textOf(shared)).toContain("1 concept(s) have a relationship with all of: Rate Spike Incident 2026-01, Rotate API Keys.\n  - API Rate Limit Policy");
+    const only = await call("mif_vault_list_relationships", { concept: [POLICY, INCIDENT], combine: "subtract", direction: "outgoing" });
+    expect((only.structuredContent!.relationships as Array<{ path?: string }>).map((r) => r.path)).toEqual([INCIDENT_PATH, RUNBOOK_PATH]);
+    const none = await call("mif_vault_list_relationships", { concept: [INCIDENT, RUNBOOK], combine: "subtract" });
+    expect(none.structuredContent).toMatchObject({ total_count: 0, relationships: [] });
+    const any = await call("mif_vault_list_relationships", { concept: [INCIDENT, POLICY], combine: "union", types: ["relates-to"] });
+    expect((any.structuredContent!.relationships as Array<{ path?: string }>).map((r) => r.path)).toEqual([RUNBOOK_PATH]);
+    expect((await call("mif_vault_list_relationships", { concept: [POLICY, POLICY], combine: "intersect" })).isError).toBe(true);
+    expect((await call("mif_vault_list_relationships", { concept: [POLICY, "no such concept"] })).isError).toBe(true);
+  });
+
+  it("follows a chain of relationship types, one per hop", async () => {
+    const r = await call("mif_vault_list_relationships", { concept: INCIDENT, path: [{ type: "derived-from", direction: "incoming" }, { type: "relates-to" }] });
+    const rows = r.structuredContent!.relationships as Array<{ hop: number; type: string; direction: string; from: string; path?: string }>;
+    expect(rows).toEqual([
+      { hop: 1, from: INCIDENT_PATH, type: "derived-from", direction: "incoming", path: POLICY_PATH, title: "API Rate Limit Policy", strength: 0.9 },
+      { hop: 2, from: POLICY_PATH, type: "relates-to", direction: "outgoing", path: RUNBOOK_PATH, title: "Rotate API Keys" },
+    ]);
+    expect(textOf(r)).toContain("hop 2, API Rate Limit Policy: declares relates-to → (1)\n  - Rotate API Keys");
+    const dead = await call("mif_vault_list_relationships", { concept: INCIDENT, path: [{ type: "relates-to" }] });
+    expect(dead.structuredContent).toMatchObject({ total_count: 0 });
+    expect((await call("mif_vault_list_relationships", { concept: [INCIDENT, POLICY], combine: "intersect", path: [{ type: "relates-to" }] })).isError).toBe(true);
+  });
+
+  it("adds each related concept's own counts on request, to compare them in one call", async () => {
+    const r = await call("mif_vault_list_relationships", { concept: POLICY, direction: "outgoing", neighbor_counts: true });
+    const rows = r.structuredContent!.relationships as Array<{ path?: string; counts?: unknown }>;
+    expect(rows.map((x) => [x.path, x.counts])).toEqual([
+      [INCIDENT_PATH, { outgoing: {}, incoming: { "derived-from": 1 } }],
+      [RUNBOOK_PATH, { outgoing: { "relates-to": 1 }, incoming: { "relates-to": 1 } }],
+    ]);
+    expect(textOf(r)).toContain("  - Rotate API Keys — declares: relates-to 1; declared to it: relates-to 1");
+    const plain = await call("mif_vault_list_relationships", { concept: POLICY, direction: "outgoing" });
+    expect((plain.structuredContent!.relationships as Array<{ counts?: unknown }>).every((x) => x.counts === undefined)).toBe(true);
+  });
+
+  it("cuts long text at max_chars and says so", async () => {
+    const r = await call("mif_vault_get_concept", { concept: POLICY, max_chars: 200 });
+    expect(r.structuredContent).toMatchObject({ truncated: true });
+    expect(String(r.structuredContent!.text).length).toBe(200);
+    expect(textOf(r)).toContain("The text was cut at 200 characters");
   });
 
   it("searches through the plugin's mif-cli bridge and weighs each hit", async () => {
@@ -313,6 +429,13 @@ describe("the endpoint", () => {
     const all = await call("mif_vault_search_concepts", { query: "rate limits", include_expired: true, mode: "semantic", limit: 1 });
     expect(calls.at(-1)).toEqual(expect.arrayContaining(["--mode", "semantic"]));
     expect(all.structuredContent).toMatchObject({ count: 1, has_more: true, next_offset: 1 });
+  });
+
+  it("treats a limit above the maximum as the maximum, without rejecting the call", async () => {
+    const r = await call("mif_vault_list_relationships", { concept: POLICY, limit: 500 });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ count: 3, has_more: false });
+    expect((await call("mif_vault_search_concepts", { query: "rate limits", limit: 500 })).isError).toBeFalsy();
   });
 
   it("rejects arguments outside the schema", async () => {

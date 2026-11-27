@@ -898,17 +898,33 @@ class MifSettingTab extends PluginSettingTab {
       const status = await this.plugin.mcp.sync();
       if (status.state === "failed") new Notice(`MIF: ${status.reason}`, 10_000);
       mcpSetting.setDesc(mcpDesc());
+      showMcpToggle();
+    };
+    // The switch shows whether the server is serving, not only whether it is
+    // wanted: after a start that failed (a port in use) it reads off, and the
+    // description says why. The setting stays on, so a free port, or the
+    // switch, starts it.
+    const mcpServing = () => s.mcpEnabled && this.plugin.mcp.status.state !== "failed";
+    let mcpToggle: { getValue(): boolean; setValue(on: boolean): unknown } | undefined;
+    let showingMcpToggle = false;
+    const showMcpToggle = () => {
+      if (!mcpToggle || mcpToggle.getValue() === mcpServing()) return;
+      showingMcpToggle = true;
+      mcpToggle.setValue(mcpServing());
+      showingMcpToggle = false;
     };
     const mcpSetting = new Setting(containerEl)
       .setName("MCP server (desktop)")
       .setDesc(mcpDesc())
-      .addToggle((t) =>
-        t.setValue(s.mcpEnabled).onChange(async (v) => {
+      .addToggle((t) => {
+        mcpToggle = t;
+        t.setValue(mcpServing()).onChange(async (v) => {
+          if (showingMcpToggle) return;
           s.mcpEnabled = v;
           if (v && !s.mcpToken) s.mcpToken = newToken();
           await mcpApply();
-        }),
-      );
+        });
+      });
     if (!Platform.isDesktopApp) mcpSetting.setDisabled(true);
     new Setting(containerEl)
       .setName("MCP port")

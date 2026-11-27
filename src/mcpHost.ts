@@ -89,11 +89,43 @@ export class VaultMcpHost implements McpHost {
       const p = raw.replace(/^\/+/, "");
       if (this.manager.get(p)?.isConcept) paths = [p];
       else paths = this.manager.bundleRoots().map((root) => this.manager.toVaultPath(root, p)).filter((v) => this.manager.get(v)?.isConcept);
+      if (paths.length === 0) paths = this.byTitle(raw);
     }
     paths = [...new Set(paths)].sort();
-    if (paths.length > 1) return { ambiguous: paths };
+    if (paths.length > 1) return { ambiguous: paths.slice(0, 12).map((v) => `${v} — ${this.ref(v)?.title ?? ""}`) };
     const concept = paths[0] === undefined ? undefined : this.view(paths[0], asOf);
     return concept ? { concept } : { missing: true };
+  }
+
+  /**
+   * Concepts a title reference names, most specific reading first: the whole
+   * title, then the reference as a word of the title ("C08" is a word of
+   * "C08 Supply Chain" but not of "C08.01 Planning"), then any title that
+   * contains it. The first reading that matches anything decides.
+   */
+  private byTitle(ref: string): string[] {
+    const want = ref.trim().toLowerCase();
+    if (want.length < 2) return [];
+    const titled = this.manager.all().flatMap((a) => {
+      const t = a.isConcept ? str(a.frontmatter?.title) : undefined;
+      return t ? [{ path: a.path, title: t.toLowerCase() }] : [];
+    });
+    const exact = titled.filter((c) => c.title === want);
+    if (exact.length) return exact.map((c) => c.path);
+    const escaped = want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const word = new RegExp(`(^|[^\\w.-])${escaped}($|[^\\w.-])`);
+    const worded = titled.filter((c) => word.test(c.title));
+    if (worded.length) return worded.map((c) => c.path);
+    return titled.filter((c) => c.title.includes(want)).map((c) => c.path);
+  }
+
+  uniqueTitles(): Set<string> {
+    const seen = new Map<string, number>();
+    for (const a of this.manager.all()) {
+      const t = a.isConcept ? str(a.frontmatter?.title)?.toLowerCase() : undefined;
+      if (t) seen.set(t, (seen.get(t) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, n]) => n === 1).map(([t]) => t));
   }
 
   edges(path: string): EdgeView[] {

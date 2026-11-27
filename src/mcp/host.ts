@@ -75,15 +75,20 @@ export interface Unavailable {
   unavailable: string;
 }
 
+/** `ambiguous` lists the candidates as "path — title", so the caller can pick one. */
 export type Resolved = { concept: ConceptView } | { ambiguous: string[] } | { missing: true };
 
 export interface McpHost {
   vault(): { name: string; purpose: string; bundles: string[] };
   /**
-   * A concept by urn:mif:<uuid>, bare uuid, vault path, or bundle path
-   * ("/semantic/x.md"). `asOf` is the instant freshness is judged at.
+   * A concept by urn:mif:<uuid>, bare uuid, vault path, bundle path
+   * ("/semantic/x.md"), or title: the whole title, a code that stands as a
+   * word in exactly one title ("CON-P-92"), or text only one title contains.
+   * `asOf` is the instant freshness is judged at.
    */
   resolve(ref: string, asOf: Date): Resolved;
+  /** Lower-cased titles that exactly one concept carries; such a title names its concept on its own. */
+  uniqueTitles(): Set<string>;
   /** Typed relationships of the concept at a vault path, one hop, both directions. */
   edges(path: string): EdgeView[];
   /** A concept's weighing, for the far end of an edge or a search hit. */
