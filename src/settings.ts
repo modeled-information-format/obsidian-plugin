@@ -34,6 +34,14 @@ export interface MifSettings {
   similarThreshold: number;
   /** Cosine similarity at or below which a typed relationship is reported as a possible mislink. */
   mislinkThreshold: number;
+  /** Desktop only: serve this vault's MIF graph to MCP clients on localhost. Off until turned on for this vault. */
+  mcpEnabled: boolean;
+  /** The localhost port this vault's MCP server listens on; each open vault needs its own. */
+  mcpPort: number;
+  /** Bearer token MCP clients must send; generated the first time the server is turned on. */
+  mcpToken: string;
+  /** One line telling an agent what this vault's memory is for. */
+  mcpPurpose: string;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -54,6 +62,10 @@ export const DEFAULT_SETTINGS: MifSettings = {
   duplicateThreshold: 0.55,
   similarThreshold: 0.55,
   mislinkThreshold: 0.1,
+  mcpEnabled: false,
+  mcpPort: 27182,
+  mcpToken: "",
+  mcpPurpose: "",
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

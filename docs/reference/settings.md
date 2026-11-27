@@ -66,4 +66,8 @@ diataxis_type: reference
 | Duplicate threshold | `duplicateThreshold` | 0.55 | Cosine similarity at or above which a new concept is reported as a likely duplicate |
 | Similar threshold | `similarThreshold` | 0.55 | Cosine similarity at or above which two unrelated concepts are a relationship gap |
 | Mislink threshold | `mislinkThreshold` | 0.1 | Cosine similarity at or below which a typed relationship is reported as a possible mislink |
+| MCP server (desktop) | `mcpEnabled` | off | Serve this vault's MIF concepts, typed relationships, and semantic search to MCP clients on `127.0.0.1`. Read-only. Per vault; off until turned on |
+| MCP port | `mcpPort` | 27182 | The localhost port this vault's MCP server listens on. Each open vault needs its own. If the port is in use the server stays off and says so; it never moves to another port |
+| MCP token | `mcpToken` | generated | Bearer token an MCP client must send. Generated the first time the server is turned on; **Regenerate** replaces it at once |
+| Vault purpose | `mcpPurpose` | empty | One line telling an agent what this vault's memory is for |
 | Developer commands | `showDevCommands` | off | Show the spike commands and write a developer log to the plugin folder |

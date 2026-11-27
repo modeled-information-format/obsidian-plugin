@@ -22,6 +22,8 @@ import { ingestNotice, MifCli, problemText, SearchModal, type SearchFilters } fr
 import { COVERAGE_VIEW, CoverageView, GAPS_VIEW, GapsView } from "./storeViews";
 import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
+import { newToken } from "./mcp/http";
+import { McpService, VaultMcpHost } from "./mcpHost";
 
 export default class MifPlugin extends Plugin {
   override settings: MifSettings = DEFAULT_SETTINGS;
@@ -30,6 +32,7 @@ export default class MifPlugin extends Plugin {
   /** Read-only API for other plugins and DataviewJS: app.plugins.plugins.mif.api */
   api!: MifApi;
   cli!: MifCli;
+  mcp!: McpService;
   private statusEl?: HTMLElement;
 
   override async onload(): Promise<void> {
@@ -64,6 +67,16 @@ export default class MifPlugin extends Plugin {
     this.api = new MifApi(this.manager);
     this.cli = new MifCli(this.app, this.manager, () => this.settings);
     this.register(() => this.cli.dispose());
+    // The MCP server: desktop only, off until this vault turns it on. Node's
+    // http is reached lazily, so the plugin still loads on mobile.
+    this.mcp = new McpService(
+      new VaultMcpHost(this.app, this.manager, this.cli, () => this.settings),
+      () => this.settings,
+      () => (Platform.isDesktopApp ? (window.require("http") as typeof import("node:http")) : undefined),
+      this.manifest.version,
+      (event, detail) => this.manager.debug(event, detail),
+    );
+    this.register(() => void this.mcp.dispose());
     // Bases (Obsidian 1.10+): a "MIF table" view with level, freshness, trust.
     registerMifBasesView(this, this.api, this.manager);
 
@@ -86,6 +99,11 @@ export default class MifPlugin extends Plugin {
       void this.manager.ensureOntologies();
       this.registerVaultEvents();
       this.refreshStatus();
+      if (this.settings.mcpEnabled) {
+        void this.mcp.sync().then((status) => {
+          if (status.state === "failed") new Notice(`MIF: ${status.reason}`, 10_000);
+        });
+      }
       // Learn the mif-cli version once, so its commands can say when it is too old;
       // then catch up on what was added or changed while the plugin was not running.
       if (Platform.isDesktopApp && "bin" in this.cli.lookup()) {
@@ -869,6 +887,67 @@ class MifSettingTab extends PluginSettingTab {
     threshold("Duplicate threshold", "Cosine similarity, 0 to 1, at or above which a new concept is reported as a likely duplicate of an existing one.", "duplicateThreshold");
     threshold("Similar threshold", "Cosine similarity at or above which two concepts with no typed relationship appear in the relationship gap report and the related panel offers to link them.", "similarThreshold");
     threshold("Mislink threshold", "Cosine similarity at or below which a typed relationship appears in the gap report as a possible mislink.", "mislinkThreshold");
+
+    const mcpStatus = () => {
+      const st = this.plugin.mcp.status;
+      return st.state === "running" ? `Running at ${st.url}.` : st.state === "failed" ? st.reason : "Off.";
+    };
+    const mcpDesc = () => `Serve this vault's concepts, typed relationships, and semantic search to MCP clients on this computer only (127.0.0.1). Read-only. Each vault has its own port and token. ${mcpStatus()}`;
+    const mcpApply = async () => {
+      await this.plugin.saveSettings();
+      const status = await this.plugin.mcp.sync();
+      if (status.state === "failed") new Notice(`MIF: ${status.reason}`, 10_000);
+      mcpSetting.setDesc(mcpDesc());
+    };
+    const mcpSetting = new Setting(containerEl)
+      .setName("MCP server (desktop)")
+      .setDesc(mcpDesc())
+      .addToggle((t) =>
+        t.setValue(s.mcpEnabled).onChange(async (v) => {
+          s.mcpEnabled = v;
+          if (v && !s.mcpToken) s.mcpToken = newToken();
+          await mcpApply();
+        }),
+      );
+    if (!Platform.isDesktopApp) mcpSetting.setDisabled(true);
+    new Setting(containerEl)
+      .setName("MCP port")
+      .setDesc("The port this vault's MCP server listens on. Two open vaults need two different ports. If the port is in use, the server stays off.")
+      .addText((t) => {
+        t.setValue(String(s.mcpPort));
+        t.inputEl.addEventListener("blur", () => {
+          const n = Number(t.getValue());
+          if (!Number.isInteger(n) || n < 1024 || n > 65535 || n === s.mcpPort) return void t.setValue(String(s.mcpPort));
+          s.mcpPort = n;
+          void mcpApply();
+        });
+      });
+    new Setting(containerEl)
+      .setName("MCP token")
+      .setDesc("An MCP client must send this token. Regenerate replaces it at once; clients using the old one stop working.")
+      .addButton((b) =>
+        b.setButtonText("Copy client command").onClick(async () => {
+          if (!s.mcpToken) return void new Notice("MIF: turn the MCP server on first; that creates the token.");
+          const name = `mif-vault-${slugify(this.app.vault.getName()) || "vault"}`;
+          await navigator.clipboard.writeText(`claude mcp add --transport http ${name} http://127.0.0.1:${s.mcpPort}/mcp --header "Authorization: Bearer ${s.mcpToken}"`);
+          new Notice("MIF: copied the command that adds this vault to Claude Code. It contains the token.");
+        }),
+      )
+      .addButton((b) =>
+        b.setButtonText("Regenerate").onClick(async () => {
+          s.mcpToken = newToken();
+          await mcpApply();
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Vault purpose")
+      .setDesc("One line telling an agent what this vault's memory is for, so it can choose between vaults.")
+      .addText((t) =>
+        t.setValue(s.mcpPurpose).onChange(async (v) => {
+          s.mcpPurpose = v;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName("Developer commands")
