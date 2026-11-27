@@ -38,6 +38,55 @@ export interface ConceptView extends ConceptRef {
   body: string;
 }
 
+/** A concept as it appears in a listing: identity plus what it can be filtered by. */
+export interface ConceptSummary extends ConceptRef {
+  namespace?: string;
+  entity_type?: string;
+}
+
+/** An entity record from a bundle's .mif/entities/, or one only referenced by concepts. */
+export interface EntityView {
+  urn: string;
+  name?: string;
+  /** Declared type, e.g. "Person"; or the type segment of the urn. */
+  type?: string;
+  aliases: string[];
+  bundle: string;
+  /** False when concepts reference the urn but no entity record exists. */
+  recorded: boolean;
+  references: Array<{ concept: ConceptRef; role?: string }>;
+}
+
+/** How a bundle's vector store stands against its notes. */
+export interface StoreView {
+  bundle: string;
+  /** Documents the store holds, when mif-cli could say. */
+  stored?: number;
+  current: number;
+  /** Vault paths of concepts changed since they were ingested. */
+  changed: string[];
+  /** Vault paths of concepts never ingested. */
+  never: string[];
+  refused: Array<{ path: string; reason: string }>;
+  /** Stored documents whose note is gone. */
+  orphans: number;
+}
+
+export interface GapPairView {
+  a?: ConceptRef;
+  b?: ConceptRef;
+  cosine: number;
+}
+
+export interface GapsView {
+  bundle: string;
+  compared: number;
+  /** Similar concepts with no typed relationship in either direction. */
+  unlinked: GapPairView[];
+  /** Typed relationships whose two ends are unalike. */
+  mislinks: GapPairView[];
+}
+
 export interface EdgeView {
   type: string;
   direction: "outgoing" | "incoming";
@@ -94,4 +143,15 @@ export interface McpHost {
   /** A concept's weighing, for the far end of an edge or a search hit. */
   weigh(path: string, asOf: Date): Weighing | undefined;
   search(request: SearchRequest): Promise<SearchHit[] | Unavailable>;
+  /** Every concept in the vault, sorted by path. */
+  concepts(): ConceptSummary[];
+  /** Entity records and referenced entities of every bundle, sorted by urn. */
+  entities(): EntityView[];
+  /** The concepts nearest in meaning to the one at a vault path. */
+  similar(path: string, limit: number): Promise<SearchHit[] | Unavailable>;
+  store(bundle: string): Promise<StoreView | Unavailable>;
+  /** Slow: one mif-cli run per concept of the bundle. */
+  gaps(bundle: string): Promise<GapsView | Unavailable>;
+  /** The vault's cosine thresholds for duplicates, relationship gaps and mislinks. */
+  thresholds(): { duplicate: number; similar: number; mislink: number };
 }

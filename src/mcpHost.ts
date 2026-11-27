@@ -7,7 +7,7 @@ import type { MifCli } from "./cliBridge";
 import { trustOf } from "./engine";
 import type { MifManager } from "./manager";
 import { startEndpoint, type McpEndpoint } from "./mcp/http";
-import type { ConceptRef, ConceptView, EdgeView, McpHost, Resolved, SearchHit, SearchRequest, Unavailable, Weighing } from "./mcp/host";
+import type { ConceptRef, ConceptSummary, ConceptView, EdgeView, EntityView, GapsView, McpHost, Resolved, SearchHit, SearchRequest, StoreView, Unavailable, Weighing } from "./mcp/host";
 import type { MifSettings } from "./settings";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -140,6 +140,94 @@ export class VaultMcpHost implements McpHost {
       ...(ctx.index.outgoing.get(ctx.bundlePath) ?? []).map((e) => edge("outgoing", e, e.resolved)),
       ...(ctx.index.incoming.get(ctx.bundlePath) ?? []).map((e) => edge("incoming", e, e.from)),
     ];
+  }
+
+  concepts(): ConceptSummary[] {
+    return this.manager.all().flatMap((a) => {
+      const ref = a.isConcept ? this.ref(a.path) : undefined;
+      if (!ref) return [];
+      const fm = (a.frontmatter ?? {}) as Record<string, unknown>;
+      const entity = fm.entity && typeof fm.entity === "object" ? (fm.entity as Record<string, unknown>) : undefined;
+      return [{ ...ref, ...(str(fm.namespace) ? { namespace: str(fm.namespace) } : {}), ...(str(entity?.entity_type) ? { entity_type: str(entity?.entity_type) } : {}) }];
+    });
+  }
+
+  entities(): EntityView[] {
+    const out: EntityView[] = [];
+    for (const bundle of this.manager.bundleRoots()) {
+      for (const [urn, e] of this.manager.entityIndex(bundle)) {
+        const references = e.refs.flatMap((r) => {
+          const concept = this.ref(r.path);
+          return concept ? [{ concept, ...(r.role ? { role: r.role } : {}) }] : [];
+        });
+        const name = e.record?.name ?? e.refs.find((r) => r.name)?.name;
+        // urn:mif:entity:<type>:<slug>
+        const type = e.record?.type ?? e.record?.typeSegment ?? urn.split(":")[3];
+        out.push({ urn, ...(name ? { name } : {}), ...(type ? { type } : {}), aliases: e.record?.aliases ?? [], bundle, recorded: !!e.record, references });
+      }
+    }
+    return out.sort((a, b) => a.urn.localeCompare(b.urn));
+  }
+
+  thresholds() {
+    return this.manager.similarity();
+  }
+
+  private async cliProblem(): Promise<Unavailable | undefined> {
+    const why = this.cli.unavailable() ?? (await this.cli.checkVersion());
+    return why ? { unavailable: `This needs mif-cli: ${why}` } : undefined;
+  }
+
+  private hit(h: { id: string; path?: string; title?: string; cosine?: number; heading?: string; text?: string }): SearchHit {
+    const concept = h.path ? this.ref(h.path) : undefined;
+    return {
+      id: h.id,
+      ...(concept ? { concept } : {}),
+      ...(h.title ? { title: h.title } : {}),
+      ...(h.cosine === undefined ? {} : { cosine: h.cosine }),
+      ...(h.heading ? { heading: h.heading } : {}),
+      ...(h.text ? { passage: h.text } : {}),
+    };
+  }
+
+  async similar(path: string, limit: number): Promise<SearchHit[] | Unavailable> {
+    const down = await this.cliProblem();
+    if (down) return down;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file || !("extension" in file)) return { unavailable: `No note at ${path}.` };
+    const hits = await this.cli.similar(file as never, limit);
+    if (!Array.isArray(hits)) return { unavailable: [hits.title, hits.detail].filter(Boolean).join(": ") };
+    return hits.map((h) => this.hit(h));
+  }
+
+  async store(bundle: string): Promise<StoreView | Unavailable> {
+    const down = await this.cliProblem();
+    if (down) return down;
+    if (!(await this.cli.hasStore(bundle))) return { unavailable: "Nothing ingested yet: this bundle has no vector store. Ask the user to run “Ingest this bundle into the vector store” in Obsidian." };
+    const status = await this.cli.status(bundle);
+    const at = (state: string) => status.coverage.rows.filter((r) => r.state === state).map((r) => this.manager.toVaultPath(bundle, r.path));
+    return {
+      bundle,
+      ...(status.stats ? { stored: status.stats.count } : {}),
+      current: at("current").length,
+      changed: at("changed"),
+      never: at("never"),
+      refused: this.cli.refusals(bundle).map((r) => ({ path: r.path, reason: [r.problem.title, r.problem.detail].filter(Boolean).join(": ") })),
+      orphans: status.prunable.length,
+    };
+  }
+
+  async gaps(bundle: string): Promise<GapsView | Unavailable> {
+    const down = await this.cliProblem();
+    if (down) return down;
+    const report = await this.cli.gaps(bundle);
+    if (!("unlinked" in report)) return { unavailable: [report.title, report.detail].filter(Boolean).join(": ") };
+    const pair = (p: { aPath?: string; bPath?: string; cosine: number }) => {
+      const a = p.aPath ? this.ref(p.aPath) : undefined;
+      const b = p.bPath ? this.ref(p.bPath) : undefined;
+      return { ...(a ? { a } : {}), ...(b ? { b } : {}), cosine: p.cosine };
+    };
+    return { bundle, compared: report.compared, unlinked: report.unlinked.map(pair), mislinks: report.mislinks.map(pair) };
   }
 
   async search(request: SearchRequest): Promise<SearchHit[] | Unavailable> {

@@ -14,6 +14,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { MifCli } from "../src/cliBridge";
 import { MifManager } from "../src/manager";
 import { MAX_BODY, newToken, refusal, sameToken, startEndpoint, type McpEndpoint } from "../src/mcp/http";
+import { guide, PROMPT_NAMES, RESOURCE_TEMPLATE } from "../src/mcp/extras";
 import { CHARACTER_LIMIT, countEdges, countsLine, sectionOf, TOOL_NAMES } from "../src/mcp/tools";
 import { McpService, VaultMcpHost } from "../src/mcpHost";
 import { DEFAULT_SETTINGS, type MifSettings } from "../src/settings";
@@ -43,6 +44,17 @@ provenance:
   "@type": Provenance
   sourceType: agent_inferred
   trustLevel: uncertain
+citations:
+  - "@type": Citation
+    citationType: specification
+    citationRole: source
+    title: Gateway manual
+    url: https://example.test/manual
+entities:
+  - entity:
+      "@id": urn:mif:entity:policy:rate-limit
+    name: Rate limit
+    role: subject
 relationships:
   - type: relates-to
     target: /semantic/rate-limit-policy.md
@@ -96,7 +108,14 @@ async function vault(opts: { store?: boolean } = {}) {
     const a = args.slice(2);
     if (a[0] === "--version") return cb(null, "mif-cli 0.13.0\n", "");
     calls.push(a);
-    cb(null, a[0] === "search" ? searchOutput : "", "");
+    const out: Record<string, string> = {
+      search: searchOutput,
+      // Every concept's neighbours, nearest first; a concept's own row is ignored by the callers.
+      "find-similar": `0.8000  ${RUNBOOK}\n0.4000  ${INCIDENT}\n`,
+      "corpus-stats": "count=3 dim=384 db=/v/.mif/vectors.db passages=9 documents_without_passages=0 documents_without_text=0\n",
+      prune: "would prune 0 documents, 4 found under /v (db=/v/.mif/vectors.db)\n",
+    };
+    cb(null, out[a[0]!] ?? "", "");
   };
   const cli = new MifCli(v.app as never, manager, () => settings, exec as never, () => ({ path: "", home: "/h", windows: false, isExecutable: () => false }));
   return { host: new VaultMcpHost(v.app as never, manager, cli, () => settings), settings, calls };
@@ -146,6 +165,10 @@ describe("tool names", () => {
       expect(OTHER_SERVERS).not.toContain(name.replace(/^mif_vault_/, ""));
     }
     expect(new Set(TOOL_NAMES).size).toBe(TOOL_NAMES.length);
+    for (const name of PROMPT_NAMES) {
+      expect(name).toMatch(/^mif_vault_[a-z_]+$/);
+      expect(TOOL_NAMES as readonly string[]).not.toContain(name);
+    }
   });
 });
 
@@ -406,6 +429,167 @@ describe("the endpoint", () => {
     expect((plain.structuredContent!.relationships as Array<{ counts?: unknown }>).every((x) => x.counts === undefined)).toBe(true);
   });
 
+  it("lists concepts by their facts, and by how many relationships of a kind they have", async () => {
+    const all = await call("mif_vault_list_concepts", {});
+    expect(all.structuredContent).toMatchObject({ total_count: 3, excluded_expired: 1 });
+    expect((all.structuredContent!.concepts as Array<{ title: string }>).map((c) => c.title)).toEqual(["API Rate Limit Policy", "Rate Spike Incident 2026-01", "Rotate API Keys"]);
+    expect(textOf(all)).toContain("include_expired: true");
+    const typed = await call("mif_vault_list_concepts", { type: "procedural" });
+    expect((typed.structuredContent!.concepts as Array<{ path: string }>).map((c) => c.path)).toEqual([RUNBOOK_PATH]);
+    const titled = await call("mif_vault_list_concepts", { title_contains: "RATE", namespace: "_semantic", include_expired: true });
+    expect((titled.structuredContent!.concepts as Array<{ title: string }>).map((c) => c.title)).toEqual(["API Rate Limit Policy", "Old Rate Limit"]);
+    const stale = await call("mif_vault_list_concepts", { freshness: ["expired"], detail: "full" });
+    expect(stale.structuredContent!.concepts).toMatchObject([{ path: "semantic/old-limit.md", id: OLD, weighing: { freshness: "expired", trust: "uncertain" } }]);
+    // The vault-wide question no relationship listing can answer: who has two or more of a kind.
+    const many = await call("mif_vault_list_concepts", { relationship: { type: "relates-to", direction: "incoming", min: 2 } });
+    expect(many.structuredContent!.concepts).toMatchObject([{ path: POLICY_PATH, relationships: 2 }]);
+    expect(textOf(many)).toContain("  - API Rate Limit Policy — 2");
+    const none = await call("mif_vault_list_concepts", { relationship: { direction: "outgoing", min: 0, max: 0 } });
+    expect((none.structuredContent!.concepts as Array<{ path: string }>).map((c) => c.path)).toEqual([INCIDENT_PATH]);
+    const ranked = await call("mif_vault_list_concepts", { relationship: { min: 0 }, sort: "relationships", limit: 1 });
+    expect(ranked.structuredContent).toMatchObject({ concepts: [{ path: POLICY_PATH, relationships: 4 }], has_more: true, next_offset: 1 });
+    const grouped = await call("mif_vault_list_concepts", { group_by: "type", include_expired: true });
+    expect(grouped.structuredContent).toMatchObject({ total_count: 4, groups: { semantic: 2, episodic: 1, procedural: 1 }, concepts: [] });
+    expect((await call("mif_vault_list_concepts", { entity_type: "nothing" })).structuredContent).toMatchObject({ total_count: 0 });
+  });
+
+  it("lists the entities concepts refer to, and who refers to them", async () => {
+    const r = await call("mif_vault_list_entities", { include_references: true });
+    expect(r.structuredContent!.entities).toEqual([
+      { urn: "urn:mif:entity:policy:rate-limit", name: "Rate limit", type: "policy", bundle: "", recorded: false, reference_count: 1, references: [{ path: "semantic/old-limit.md", title: "Old Rate Limit", role: "subject" }] },
+    ]);
+    expect(textOf(r)).toContain("no entity record, only referenced");
+    expect((await call("mif_vault_list_entities", { referenced_by: POLICY })).structuredContent).toMatchObject({ total_count: 0 });
+    expect((await call("mif_vault_list_entities", { referenced_by: OLD, name_contains: "rate", type: "Policy" })).structuredContent).toMatchObject({ total_count: 1 });
+    expect((await call("mif_vault_list_entities", { group_by_type: true })).structuredContent).toMatchObject({ groups: { policy: 1 } });
+  });
+
+  it("traces a concept to its sources on request", async () => {
+    const r = await call("mif_vault_get_concept", { concept: OLD, include_body: false, include: ["citations", "provenance", "entities"] });
+    expect(r.structuredContent).toMatchObject({
+      citations: [{ title: "Gateway manual", url: "https://example.test/manual" }],
+      provenance: { sourceType: "agent_inferred", trustLevel: "uncertain" },
+      entities: [{ urn: "urn:mif:entity:policy:rate-limit", name: "Rate limit", role: "subject" }],
+    });
+    expect(textOf(r)).toContain("Citations (1):\n  - Gateway manual · specification · source · https://example.test/manual");
+    expect(textOf(r)).toContain("Provenance: sourceType agent_inferred; trustLevel uncertain");
+    const bare = await call("mif_vault_get_concept", { concept: INCIDENT, include_body: false, include: ["citations"] });
+    expect(bare.structuredContent).toMatchObject({ citations: [] });
+    expect(bare.structuredContent!.provenance).toBeUndefined();
+    expect(textOf(bare)).toContain("Citations: none recorded.");
+  });
+
+  it("finds the shortest chain of relationships between two concepts", async () => {
+    const r = await call("mif_vault_list_relationships", { concept: INCIDENT, path_to: "Rotate API Keys" });
+    const rows = r.structuredContent!.relationships as Array<{ hop: number; from: string; path?: string; type: string }>;
+    expect(rows.map((x) => [x.hop, x.from, x.type, x.path])).toEqual([
+      [1, INCIDENT_PATH, "derived-from", POLICY_PATH],
+      [2, POLICY_PATH, "relates-to", RUNBOOK_PATH],
+    ]);
+    expect(textOf(r)).toContain("Rate Spike Incident 2026-01 and Rotate API Keys are 2 relationship(s) apart.");
+    const blocked = await call("mif_vault_list_relationships", { concept: INCIDENT, path_to: RUNBOOK, types: ["relates-to"] });
+    expect(blocked.structuredContent).toMatchObject({ total_count: 0 });
+    expect(textOf(blocked)).toContain("No chain of typed relationships within 6 hops");
+    expect((await call("mif_vault_list_relationships", { concept: [INCIDENT, POLICY], path_to: RUNBOOK })).isError).toBe(true);
+  });
+
+  it("finds the concepts nearest to one, and applies a cosine floor", async () => {
+    const r = await call("mif_vault_search_concepts", { similar_to: "API Rate Limit Policy" });
+    expect(calls.at(-1)!.slice(0, 2)).toEqual(["find-similar", POLICY]);
+    expect((r.structuredContent!.results as Array<{ id: string; cosine: number }>).map((h) => [h.id, h.cosine])).toEqual([[RUNBOOK, 0.8], [INCIDENT, 0.4]]);
+    expect(r.structuredContent!.thresholds).toEqual({ duplicate: 0.55, similar: 0.55, mislink: 0.1 });
+    expect(textOf(r)).toContain("Results for concepts similar to API Rate Limit Policy:");
+    const close = await call("mif_vault_search_concepts", { similar_to: POLICY, min_cosine: 0.55 });
+    expect((close.structuredContent!.results as Array<{ id: string }>).map((h) => h.id)).toEqual([RUNBOOK]);
+    expect(textOf(close)).toContain("cosine 0.55 or more as a likely duplicate");
+    const far = await call("mif_vault_search_concepts", { query: "rate limits", min_cosine: 0.99 });
+    expect(textOf(far)).toContain("at cosine 0.99 or more");
+    expect((await call("mif_vault_search_concepts", {})).isError).toBe(true);
+    expect((await call("mif_vault_search_concepts", { query: "x", similar_to: POLICY })).isError).toBe(true);
+  });
+
+  it("reports on the graph, the vector store and relationship gaps", async () => {
+    const graph = await call("mif_vault_get_status", {});
+    expect(graph.structuredContent!.graph).toEqual({
+      bundles: [""],
+      concepts: 4,
+      by_type: { semantic: 2, episodic: 1, procedural: 1 },
+      by_entity_type: { "(none)": 4 },
+      relationships: 4,
+      by_relationship_type: { "relates-to": 3, "derived-from": 1 },
+      unresolved_targets: 0,
+      without_relationships: 0,
+      freshness: { timeless: 3, expired: 1 },
+      trust: { "(none)": 3, uncertain: 1 },
+      entities: 1,
+    });
+    expect(textOf(graph)).toContain("4 concept(s) in 1 bundle(s), 4 typed relationship(s), 1 entity.");
+    const store = await call("mif_vault_get_status", { report: "store", limit: 2 });
+    expect(store.structuredContent!.stores).toMatchObject([{ bundle: "", stored: 3, current: 0, changed_count: 0, never_count: 4, orphans: 0 }]);
+    expect(((store.structuredContent!.stores as Array<{ never: string[] }>)[0]!).never).toHaveLength(2);
+    expect(textOf(store)).toContain("4 never ingested");
+    expect(textOf(store)).toContain("Never ingested (first 2)");
+    const gaps = await call("mif_vault_get_status", { report: "gaps" });
+    expect(gaps.structuredContent!.gaps).toMatchObject({ compared: 4, mislink_count: 0, thresholds: { similar: 0.55 } });
+    const unlinked = (gaps.structuredContent!.gaps as { unlinked: Array<{ a: string; b: string; cosine: number }> }).unlinked;
+    expect(unlinked.map((p) => [p.a, p.b].sort().join(" / "))).toContain("Rate Spike Incident 2026-01 / Rotate API Keys");
+    expect(unlinked.map((p) => [p.a, p.b].sort().join(" / "))).not.toContain("API Rate Limit Policy / Rotate API Keys");
+    expect(textOf(gaps)).toContain("Similarity is a prompt to look, not proof");
+    expect((await call("mif_vault_get_status", { bundle: "nope" })).isError).toBe(true);
+  });
+
+  it("names only tools and prompts that exist, in every description and in the guide", async () => {
+    const known = new Set<string>([...TOOL_NAMES, ...PROMPT_NAMES]);
+    const { tools } = await client.listTools();
+    const { prompts } = await client.listPrompts();
+    const guideText = ((await client.getPrompt({ name: "mif_vault_guide" })).messages[0]!.content as { text: string }).text;
+    const texts = [...tools.map((t) => `${t.description} ${JSON.stringify(t.inputSchema)}`), ...prompts.map((p) => p.description ?? ""), guideText, (await client.discover()).instructions ?? ""];
+    for (const text of texts) for (const m of text.matchAll(/mif_vault_[a-z_]+/g)) expect(known.has(m[0]), m[0]).toBe(true);
+    // The guide covers every tool, so a client that shows it leaves none undiscovered.
+    for (const name of TOOL_NAMES) expect(guideText).toContain(name);
+    expect(guideText).toContain("evidence, not fact");
+  });
+
+  it("serves a concept and an entity as resources at their canonical ids", async () => {
+    const { resourceTemplates } = await client.listResourceTemplates();
+    expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual([RESOURCE_TEMPLATE]);
+    const concept = await client.readResource({ uri: POLICY });
+    expect(concept.contents).toHaveLength(1);
+    expect(concept.contents[0]).toMatchObject({ uri: POLICY, mimeType: "text/markdown" });
+    const text = (concept.contents[0] as { text: string }).text;
+    expect(text).toMatch(/^# API Rate Limit Policy\n\nurn:mif:7b3c1e90-5a2f-4c8d-9e10-2f6a4b8c1d3e · semantic\/rate-limit-policy\.md · semantic/);
+    expect(text).toContain("freshness: timeless");
+    expect(text).toContain("incoming): relates-to 2");
+    expect(text).toContain("## Rationale");
+    const entity = await client.readResource({ uri: "urn:mif:entity:policy:rate-limit" });
+    expect(JSON.parse((entity.contents[0] as { text: string }).text)).toMatchObject({ urn: "urn:mif:entity:policy:rate-limit", name: "Rate limit", recorded: false, references: [{ path: "semantic/old-limit.md", role: "subject" }] });
+    await expect(client.readResource({ uri: "urn:mif:00000000-0000-4000-8000-000000000000" })).rejects.toThrow(/No concept/);
+    await expect(client.readResource({ uri: "urn:mif:entity:policy:none" })).rejects.toThrow(/No entity/);
+    await expect(client.readResource({ uri: "urn:mif:not-an-id" })).rejects.toThrow(/not a MIF id/);
+  });
+
+  it("links a concept it returns to its resource, once", async () => {
+    const r = (await client.callTool({ name: "mif_vault_get_concept", arguments: { concept: POLICY, include_body: false } })) as { content: Array<{ type: string; uri?: string; name?: string }> };
+    expect(r.content.filter((c) => c.type === "resource_link")).toEqual([{ type: "resource_link", uri: POLICY, name: "API Rate Limit Policy", mimeType: "text/markdown" }]);
+    const listed = (await client.callTool({ name: "mif_vault_list_relationships", arguments: { concept: POLICY } })) as { content: Array<{ type: string }> };
+    expect(listed.content.every((c) => c.type === "text")).toBe(true);
+  });
+
+  it("offers a usage guide and a recall prompt, and completes the recall prompt's filters", async () => {
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toEqual([...PROMPT_NAMES]);
+    expect(((await client.getPrompt({ name: "mif_vault_guide" })).messages[0]!.content as { text: string }).text).toContain('the Obsidian vault "test-vault"');
+    const recall = await client.getPrompt({ name: "mif_vault_recall", arguments: { topic: "rate limits", namespace: "_semantic/policies" } });
+    const text = (recall.messages[0]!.content as { text: string }).text;
+    expect(text).toContain("holds about: rate limits");
+    expect(text).toContain('Keep to namespace "_semantic/policies".');
+    expect(text).toContain("incoming as well as outgoing");
+    const done = await client.complete({ ref: { type: "ref/prompt", name: "mif_vault_recall" }, argument: { name: "namespace", value: "_sem" } });
+    expect(done.completion.values).toEqual(["_semantic/policies"]);
+    const all = await client.complete({ ref: { type: "ref/prompt", name: "mif_vault_recall" }, argument: { name: "namespace", value: "" } });
+    expect(all.completion.values).toEqual(["_semantic/policies", "_episodic/incidents", "_procedural/runbooks"]);
+  });
+
   it("cuts long text at max_chars and says so", async () => {
     const r = await call("mif_vault_get_concept", { concept: POLICY, max_chars: 200 });
     expect(r.structuredContent).toMatchObject({ truncated: true });
@@ -415,7 +599,7 @@ describe("the endpoint", () => {
 
   it("searches through the plugin's mif-cli bridge and weighs each hit", async () => {
     const r = await call("mif_vault_search_concepts", { query: "rate limits", entity_type: "how-to-guide", folder: "semantic" });
-    const search = calls.find((a) => a[0] === "search")!;
+    const search = calls.at(-1)!;
     expect(search.slice(0, 2)).toEqual(["search", "rate limits"]);
     expect(search).toEqual(expect.arrayContaining(["--entity-type", "how-to-guide", "--source-prefix", "semantic/"]));
     expect(search).not.toContain("semantic");
