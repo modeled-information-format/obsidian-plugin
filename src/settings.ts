@@ -1,7 +1,7 @@
 export type SyncMode = "observe" | "sync";
 
 export interface MifSettings {
-  /** Observe validates and fixes on request; Sync also stamps `modified` on save. */
+  /** Both stamp `modified` once you leave a concept you edited. Observe otherwise validates and fixes on request; Sync also keeps the mirrored sections in step. */
   mode: SyncMode;
   /** Vault-relative bundle roots; "" is the vault root. Longest match wins. */
   bundleRoots: string[];
@@ -34,6 +34,20 @@ export interface MifSettings {
   similarThreshold: number;
   /** Cosine similarity at or below which a typed relationship is reported as a possible mislink. */
   mislinkThreshold: number;
+  /** Desktop only: serve this vault's MIF graph to MCP clients on localhost. Off until turned on for this vault. */
+  mcpEnabled: boolean;
+  /** The localhost port this vault's MCP server listens on; each open vault needs its own. */
+  mcpPort: number;
+  /** Bearer token MCP clients must send; generated the first time the server is turned on. */
+  mcpToken: string;
+  /** One line telling an agent what this vault's memory is for. */
+  mcpPurpose: string;
+  /** Let MCP clients write: create and supersede concepts, change relationships, add citations and entities, ingest. Off until turned on. */
+  mcpAllowWrites: boolean;
+  /** Writes an MCP client may make within the window below; more are refused until the window moves on. */
+  mcpWriteLimit: number;
+  /** Length in minutes of the window the write limit counts over. */
+  mcpWriteWindowMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: MifSettings = {
@@ -54,6 +68,13 @@ export const DEFAULT_SETTINGS: MifSettings = {
   duplicateThreshold: 0.55,
   similarThreshold: 0.55,
   mislinkThreshold: 0.1,
+  mcpEnabled: false,
+  mcpPort: 27182,
+  mcpToken: "",
+  mcpPurpose: "",
+  mcpAllowWrites: false,
+  mcpWriteLimit: 30,
+  mcpWriteWindowMinutes: 10,
 };
 
 const clean = (p: string) => p.trim().replace(/^\/+|\/+$/g, "");

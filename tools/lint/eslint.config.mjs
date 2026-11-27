@@ -18,8 +18,8 @@ export default defineConfig([
     rules: {
       // MIF's own vocabulary keeps its casing in UI text.
       "obsidianmd/ui/sentence-case": ["warn", {
-        acronyms: ["MIF", "JSON-LD", "JSON", "ID", "IDs", "URN", "URI", "URL", "OKF", "TTL", "UUID", "YAML", "CRLF", "LF", "PROV", "SBOM", "L1", "L2", "L3", "CLI", "API"],
-        brands: ["Obsidian", "Hugging Face", "Dataview", "DataviewJS", "Bases", "mif-cli", "mif-spec.dev", "mif-rs", "Copier", "all-MiniLM-L6-v2"],
+        acronyms: ["MIF", "JSON-LD", "JSON", "ID", "IDs", "URN", "URI", "URL", "OKF", "TTL", "UUID", "YAML", "CRLF", "LF", "PROV", "SBOM", "L1", "L2", "L3", "CLI", "API", "MCP"],
+        brands: ["Obsidian", "Hugging Face", "Dataview", "DataviewJS", "Bases", "mif-cli", "mif-spec.dev", "mif-rs", "Copier", "all-MiniLM-L6-v2", "Claude Code"],
         // Placeholders and identifiers, not prose: ids and paths, ISO examples,
         // markdown headings, the .mif folder, sample names.
         ignoreRegex: ["^[a-z0-9-]+(/[a-z0-9-]+)*$", "^[0-9TZ:+-]+$", "^YYYY-MM-DD$", "^key: value$", "## ", "\\.mif\\b", "^Jane Doe$", "“New entity…”"],

@@ -9,6 +9,7 @@ import {
   loadedTraits,
   composeTraits,
   entityReference,
+  CORE_ENTITY_TYPES,
   entitySlug,
   entityUrn,
   visibleNamespaces,
@@ -274,10 +275,9 @@ class EntityPicker extends FuzzySuggestModal<EntityRecord | "new"> {
   }
 }
 
-const CORE_ENTITY_TYPES = ["Person", "Organization", "Technology", "Concept", "File"];
 
 export class NewEntityModal extends Modal {
-  private typeName = "Person";
+  private typeName: string = CORE_ENTITY_TYPES[0];
   private name = "";
   private role = "";
   constructor(app: App, private readonly onSubmit: (e: { urn: string; name: string; typeName: string; role?: string }) => Promise<void>) {

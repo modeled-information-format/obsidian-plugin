@@ -23,6 +23,8 @@ relationships:
 - type: relates-to
   target: tutorial/getting-started.md
 - type: relates-to
+  target: tutorial/agent-memory.md
+- type: relates-to
   target: how-to/fix-problems.md
 - type: relates-to
   target: how-to/relationships.md
@@ -37,6 +39,8 @@ relationships:
 - type: relates-to
   target: how-to/semantic-search.md
 - type: relates-to
+  target: how-to/mcp-server.md
+- type: relates-to
   target: how-to/migrate-from-0-1.md
 - type: relates-to
   target: how-to/instantiate-with-copier.md
@@ -49,13 +53,19 @@ relationships:
 - type: relates-to
   target: reference/api.md
 - type: relates-to
+  target: reference/mcp.md
+- type: relates-to
   target: reference/gates.md
 - type: relates-to
   target: explanation/how-the-plugin-reads-mif.md
 - type: relates-to
+  target: explanation/vault-as-agent-memory.md
+- type: relates-to
   target: explanation/attested-pipeline.md
 - type: relates-to
   target: adr/0001-engine-implementation.md
+- type: relates-to
+  target: adr/0002-mcp-server.md
 citations:
 - "@type": Citation
   citationType: specification
@@ -90,6 +100,8 @@ them as they are.
 
 - [Getting started](tutorial/getting-started.md) — first concept,
   relationships, Level 3, JSON-LD
+- [Your first session with an agent and your vault](tutorial/agent-memory.md) —
+  connect Claude Code, ask, capture, review
 
 ## How-to guides
 
@@ -100,6 +112,7 @@ them as they are.
 - [Cite sources and compress long concepts](how-to/citations-and-compression.md)
 - [Export JSON-LD and query MIF data](how-to/export-and-query.md)
 - [Search concepts by meaning with mif-cli](how-to/semantic-search.md)
+- [Give an AI agent your vault as memory over MCP](how-to/mcp-server.md)
 - [Migrate MIF 0.1 notes](how-to/migrate-from-0-1.md)
 - [Instantiate or update the release pipeline with Copier](how-to/instantiate-with-copier.md) (maintainers)
 
@@ -109,20 +122,24 @@ them as they are.
 - [Settings](reference/settings.md)
 - [Diagnostic codes](reference/diagnostics.md)
 - [Plugin API](reference/api.md)
+- [MCP server](reference/mcp.md)
 - [Quality gates and workflows](reference/gates.md) (maintainers)
 
 ## Explanation
 
 - [How the plugin reads MIF](explanation/how-the-plugin-reads-mif.md)
+- [A vault as an agent's memory](explanation/vault-as-agent-memory.md)
 - [The attested release pipeline](explanation/attested-pipeline.md) (maintainers)
 
 ## Decisions
 
 - [ADR-0001: engine implementation](adr/0001-engine-implementation.md)
+- [ADR-0002: an MCP server in the plugin](adr/0002-mcp-server.md)
 
 ## Relationships
 
 - relates-to [Getting started with MIF in Obsidian](tutorial/getting-started.md)
+- relates-to [Your first session with an agent and your vault](tutorial/agent-memory.md)
 - relates-to [Fix what the diagnostics report](how-to/fix-problems.md)
 - relates-to [Work with relationships](how-to/relationships.md)
 - relates-to [Use ontologies, namespaces, and entities](how-to/ontologies-and-entities.md)
@@ -130,13 +147,17 @@ them as they are.
 - relates-to [Cite sources and compress long concepts](how-to/citations-and-compression.md)
 - relates-to [Export JSON-LD and query MIF data](how-to/export-and-query.md)
 - relates-to [Search concepts by meaning with mif-cli](how-to/semantic-search.md)
+- relates-to [Give an AI agent your vault as memory over MCP](how-to/mcp-server.md)
 - relates-to [Migrate MIF 0.1 notes](how-to/migrate-from-0-1.md)
 - relates-to [Instantiate this template with Copier](how-to/instantiate-with-copier.md)
 - relates-to [Commands](reference/commands.md)
 - relates-to [Settings](reference/settings.md)
 - relates-to [Diagnostic codes](reference/diagnostics.md)
 - relates-to [Plugin API](reference/api.md)
+- relates-to [MCP server](reference/mcp.md)
 - relates-to [Quality gates and workflows](reference/gates.md)
 - relates-to [How the plugin reads MIF](explanation/how-the-plugin-reads-mif.md)
+- relates-to [A vault as an agent's memory](explanation/vault-as-agent-memory.md)
 - relates-to [The attested pipeline model](explanation/attested-pipeline.md)
 - relates-to [ADR-0001: MIF engine implementation for the Obsidian plugin](adr/0001-engine-implementation.md)
+- relates-to [ADR-0002: An MCP server in the plugin](adr/0002-mcp-server.md)

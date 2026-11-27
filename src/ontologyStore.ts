@@ -17,6 +17,8 @@ interface CatalogEntry {
   version: string;
   yaml: string;
   extends: string[];
+  /** The ontology's canonical address in the catalog, e.g. https://mif-spec.dev/ontologies/mif-base.ontology.jsonld. */
+  canonical?: string;
 }
 
 interface Catalog {
@@ -34,6 +36,7 @@ export interface StoreStatus {
 class SkipCatalog extends Error {}
 
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const sha256 = async (text: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
 
 export class OntologyStore {
   private downloaded: Corpus = new Map();
@@ -66,8 +69,10 @@ export class OntologyStore {
       }
     }
     for (const f of (await adapter.list(this.cacheDir)).files.filter((p) => p.endsWith(".ontology.yaml"))) {
-      const { def } = parseOntology(await adapter.read(f), `mif-spec.dev/${f.split("/").pop()}`);
+      const text = await adapter.read(f);
+      const { def } = parseOntology(text, `mif-spec.dev/${f.split("/").pop()}`);
       if (def) {
+        def.sha256 = await sha256(text);
         this.downloaded.set(def.id, def);
         this.status.cached.push(def.id);
       }
@@ -79,6 +84,44 @@ export class OntologyStore {
     return new Set(Object.keys(this.catalog?.ontologies ?? {}));
   }
 
+  /**
+   * The address the catalog gives an ontology, when the catalog is known,
+   * lists it, and the definition in hand is the one the catalog publishes:
+   * its text has the catalog's sha256. A bundle's own edited copy of a
+   * catalog ontology is not what that address names.
+   */
+  canonicalAddress(def: { id: string; sha256?: string }): string | undefined {
+    const entry = this.catalog?.ontologies[def.id];
+    if (!entry || !def.sha256 || entry.sha256 !== def.sha256) return undefined;
+    return typeof entry.canonical === "string" && entry.canonical ? entry.canonical : undefined;
+  }
+
+  /** Whether the catalog is known and lists this id, whatever the local text. */
+  inCatalog(id: string): boolean {
+    return !!this.catalog?.ontologies[id];
+  }
+
+  /**
+   * Fetch the catalog once per session and cache it, so catalog facts (which
+   * ids exist, each one's canonical address) are known even when every
+   * ontology a bundle needs is already local. Returns whether a catalog is
+   * known afterwards; a failed fetch keeps the cached one.
+   */
+  async refreshCatalog(): Promise<boolean> {
+    if (this.catalogFresh) return true;
+    try {
+      const res = await requestUrl({ url: CATALOG_URL });
+      this.catalog = res.json as Catalog;
+      this.status.catalogVersion = this.catalog.aliases?.latest;
+      await this.ensureDir();
+      await this.app.vault.adapter.write(`${this.cacheDir}/index.json`, JSON.stringify(this.catalog, null, 2));
+      this.catalogFresh = true;
+    } catch (err) {
+      this.status.errors.push(`catalog: ${(err as Error).message}`);
+    }
+    return this.catalog !== undefined;
+  }
+
   /** Bundle-local definitions from `<root>/.mif/ontologies/`. */
   async loadBundleLocal(root: string): Promise<{ defs: OntologyDef[]; errors: string[] }> {
     const dir = normalizePath(`${root ? `${root}/` : ""}.mif/ontologies`);
@@ -87,9 +130,13 @@ export class OntologyStore {
     const errors: string[] = [];
     if (!(await adapter.exists(dir))) return { defs, errors };
     for (const f of (await adapter.list(dir)).files.filter((p) => /\.ontology\.ya?ml$/.test(p))) {
-      const { def, errors: e } = parseOntology(await adapter.read(f), f);
+      const text = await adapter.read(f);
+      const { def, errors: e } = parseOntology(text, f);
       errors.push(...e);
-      if (def) defs.push(def);
+      if (def) {
+        def.sha256 = await sha256(text);
+        defs.push(def);
+      }
     }
     return { defs, errors };
   }
@@ -148,6 +195,7 @@ export class OntologyStore {
         const text = new TextDecoder().decode(res.arrayBuffer);
         const { def, errors } = parseOntology(text, `mif-spec.dev/${entry.file}`);
         if (!def) throw new Error(errors.join("; "));
+        def.sha256 = digest;
         await this.app.vault.adapter.write(`${this.cacheDir}/${entry.file}`, text);
         this.downloaded.set(def.id, def);
         if (!this.status.cached.includes(def.id)) this.status.cached.push(def.id);

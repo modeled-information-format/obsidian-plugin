@@ -61,8 +61,33 @@ coordinate a fix and disclosure timeline.
   downloaded-ontology folder.
 - **Network:** only when **Download ontologies from mif-spec.dev** is on: it
   fetches ontology files from `https://mif-spec.dev/ontologies/` and checks
-  each against the sha256 in the published catalog before use. Nothing about
-  your vault is sent.
+  each against the sha256 in the published catalog before use, and fetches
+  the catalog once when the MCP server starts. Nothing about your vault is
+  sent.
+- **A local port (desktop only):** only when you turn **MCP server** on for
+  a vault. The plugin then listens on `127.0.0.1` at that vault's port, and
+  nowhere else: it is not reachable from another computer. Every request
+  must carry the vault's token (256 bits, generated on your machine, stored
+  in the plugin's settings file, compared in constant time), and a request
+  whose `Host` or `Origin` is not this computer is refused before the token
+  is looked at, which stops a web page from reaching it through your
+  browser. A program running as you on this computer that can read the
+  vault's files can also read the token; the server is not a boundary
+  against it. An MCP client you connect reads what you ask it to read, and
+  what it then sends to its model provider is outside this plugin.
+- **Writes by an MCP client:** only when you also turn **Allow MCP writes**
+  on. They go through the same path as the plugin's own writes, never into a
+  note you are editing, and are limited to 30 in 10 minutes unless you
+  change that. A concept a client writes or edits is marked unverified with
+  the client's self-reported name until you review it; each write shows a
+  notice and is appended to `mcp-audit.log` in the plugin's folder.
+  Replacing a concept, and changing or removing a relationship, ask you
+  first when the client can show a question.
+- **Code written to disk (desktop only):** the first time the MCP server
+  starts, the plugin writes `mcp.cjs` into its own folder and loads it. That
+  file is the server's code, carried compressed inside `main.js` and checked
+  against a sha256 recorded there before it is written; a copy on disk that
+  differs is replaced. Nothing is downloaded for this.
 - **Local programs (desktop only):** only when you set a `mif-cli` path. The
   plugin runs that binary with an argument list (never through a shell). On
   first ingest `mif-cli` downloads its embedding model from Hugging Face.

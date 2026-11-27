@@ -68,6 +68,21 @@ export function conceptPath(folder: string, title: string, exists: (p: string) =
 }
 
 /**
+ * A free path for a new concept that keeps the title's capitals, as a vault whose own files are
+ * capitalised expects: "API-Rate-Limit-Policy.md", then "API-Rate-Limit-Policy-2.md", …
+ * `exists` is asked with the candidate path and should compare without case, since most
+ * file systems a vault lives on do.
+ */
+export function titledConceptPath(folder: string, title: string, exists: (p: string) => boolean): string {
+  const stem = title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
+  const base = `${folder ? `${folder}/` : ""}${stem}`;
+  for (let n = 1; ; n++) {
+    const candidate = `${base}${n > 1 ? `-${n}` : ""}.md`;
+    if (!exists(candidate)) return candidate;
+  }
+}
+
+/**
  * A new concept titled `next.title` that supersedes `old` (spec §8.2
  * Supersedes): same type and namespace, valid and recorded from `now`, with
  * a `supersedes` relationship (relative target) mirrored in its body.

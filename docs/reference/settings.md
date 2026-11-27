@@ -50,7 +50,7 @@ diataxis_type: reference
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| Mode | `mode` | Observe | Observe validates and fixes on request; Sync also updates `modified`, the `## Relationships` mirror, and an existing `## Citations` section of a concept you edited, once you leave it (never while you are typing in it) |
+| Mode | `mode` | Observe | Both modes update `modified` on a concept you edited, once you leave it (never while you are typing in it). Observe otherwise validates and fixes on request; Sync also updates the `## Relationships` mirror and an existing `## Citations` section then |
 | Bundle roots | `bundleRoots` | the whole vault | Folders that are MIF bundles, one per line; an empty line is the vault root; a note belongs to the deepest matching root |
 | Excluded folders | `excludedFolders` | `_spike`, `templates` | Folders never treated as MIF |
 | Download ontologies from mif-spec.dev | `downloadOntologies` | on | Fetch declared ontologies (and their `extends`), verified by sha256, cached in the plugin folder; the trash button clears the cache |
@@ -66,4 +66,11 @@ diataxis_type: reference
 | Duplicate threshold | `duplicateThreshold` | 0.55 | Cosine similarity at or above which a new concept is reported as a likely duplicate |
 | Similar threshold | `similarThreshold` | 0.55 | Cosine similarity at or above which two unrelated concepts are a relationship gap |
 | Mislink threshold | `mislinkThreshold` | 0.1 | Cosine similarity at or below which a typed relationship is reported as a possible mislink |
+| MCP server (desktop) | `mcpEnabled` | off | Serve this vault's MIF concepts, typed relationships, and semantic search to MCP clients on `127.0.0.1`. Read-only unless **Allow MCP writes** is on. Per vault; off until turned on |
+| MCP port | `mcpPort` | 27182 | The localhost port this vault's MCP server listens on. Each open vault needs its own. If the port is in use the server stays off and says so; it never moves to another port |
+| MCP token | `mcpToken` | generated | Bearer token an MCP client must send. Generated the first time the server is turned on; **Regenerate** replaces it at once |
+| Allow MCP writes | `mcpAllowWrites` | off | Let MCP clients create, edit, merge, and supersede concepts, and add, change, or remove typed relationships, citations, and entity references. A concept a client writes is marked `agent_inferred`, and one it writes, edits, or merges has trust `uncertain` until reviewed in the agent review panel. Every write shows a notice and is logged to `mcp-audit.log` in the plugin folder. A note with unsaved edits is never written |
+| MCP write limit | `mcpWriteLimit` | 30 | How many writes MCP clients may make within the write window. Past it a write is refused until earlier ones age out |
+| MCP write window | `mcpWriteWindowMinutes` | 10 | The length of the write window, in minutes |
+| Vault purpose | `mcpPurpose` | empty | One line telling an agent what this vault's memory is for |
 | Developer commands | `showDevCommands` | off | Show the spike commands and write a developer log to the plugin folder |

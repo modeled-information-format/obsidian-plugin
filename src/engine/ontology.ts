@@ -62,6 +62,8 @@ export interface OntologyDef {
   discovery: { enabled: boolean; threshold: number; patterns: DiscoveryPattern[] };
   /** Where it was loaded from, for messages. */
   source: string;
+  /** SHA-256 of the definition's text as loaded, hex; set by whoever read the file. */
+  sha256?: string;
 }
 
 export type Corpus = Map<string, OntologyDef>;

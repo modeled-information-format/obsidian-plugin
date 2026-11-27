@@ -310,6 +310,23 @@ export class MifManager extends Events {
     return [...missing];
   }
 
+  /** The mif-spec.dev catalog's canonical address for an ontology definition, when it is the one the catalog publishes. */
+  ontologyAddress(def: { id: string; sha256?: string }): string | undefined {
+    return this.store?.canonicalAddress(def);
+  }
+
+  /** Whether the known catalog lists an ontology id. */
+  ontologyInCatalog(id: string): boolean {
+    return this.store?.inCatalog(id) ?? false;
+  }
+
+  /** Learn the catalog (one request per session) when the download setting allows; the cached copy serves otherwise. */
+  async refreshOntologyCatalog(): Promise<void> {
+    if (!this.store || !this.settings().downloadOntologies) return;
+    const known = await this.store.refreshCatalog();
+    this.debug("ontology-catalog", { known, errors: this.store.status.errors });
+  }
+
   /** Download what concepts need, when the setting allows. */
   async ensureOntologies(): Promise<void> {
     if (!this.store || !this.settings().downloadOntologies) return;
@@ -533,6 +550,11 @@ export class MifManager extends Events {
     }
     this.bundleDiags = diags;
     this.trigger("changed", null);
+  }
+
+  /** The index of the bundle at `root`, once built. */
+  indexOfRoot(root: string): BundleIndex | undefined {
+    return this.bundles.get(root)?.index;
   }
 
   indexFor(path: string): { info: BundleInfo; index: BundleIndex; bundlePath: string } | undefined {
@@ -873,21 +895,24 @@ export class MifManager extends Events {
     if (repaired) new Notice(`MIF: repaired damaged relationship lines in ${repaired} note${repaired > 1 ? "s" : ""} after the move.`);
   }
 
-  // --- Sync mode --------------------------------------------------------------
+  // --- Stamping an edited note (both modes) and keeping its mirrors (Sync mode) ----
 
   markDirty(path: string): void {
-    if (this.settings().mode === "sync" && this.rootFor(path) !== null) this.dirty.add(path);
+    if (this.rootFor(path) !== null) this.dirty.add(path);
   }
 
   /**
-   * After a user edit is saved, stamp `modified` and resync the mirror. The
-   * stamp never writes into a note while it is being edited: Obsidian saves
+   * After a user edit is saved, stamp `modified`; in Sync mode, resync the
+   * mirrored sections as well. A concept's `modified` is a fact about the
+   * note, so it follows an edit in either mode: a date that stays put while
+   * the text changes misleads whoever reads it, a person or an MCP client.
+   * The stamp never writes into a note while it is being edited: Obsidian saves
    * while you type, and a plugin write landing between keystrokes races the
    * editor. It waits until the note is no longer the active editor and no
    * open editor holds unsaved text for it, then runs (flushPendingStamps).
    */
   scheduleStamp(file: TFile): void {
-    if (this.settings().mode !== "sync" || !this.dirty.has(file.path)) return;
+    if (!this.dirty.has(file.path)) return;
     window.clearTimeout(this.stampTimers.get(file.path));
     this.stampTimers.set(
       file.path,
@@ -925,7 +950,7 @@ export class MifManager extends Events {
   }
 
   /** True while the note is the active editor, or an open editor holds text not yet saved to disk. */
-  private async isBeingEdited(file: TFile): Promise<boolean> {
+  async isBeingEdited(file: TFile): Promise<boolean> {
     if (this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path) return true;
     return this.hasUnsavedText(file);
   }
@@ -952,6 +977,8 @@ export class MifManager extends Events {
       // Skip when the only change since the last stamp is `modified` itself.
       if (this.ownWrites.get(file.path)?.replace(/^modified:.*$/m, "") === text.replace(/^modified:.*$/m, "")) return text;
       let out = updateFrontmatter(text, { modified: isoSeconds(new Date()) });
+      // Observe mode stops here: it records that the note changed, and leaves the rest of it as written.
+      if (this.settings().mode !== "sync") return out;
       const concept = toBundleConcept(file.path, out);
       if (concept && mirrorDrift(concept.frontmatter, concept.body)) out = syncMirror(out, titleFor);
       // An existing ## Citations section follows frontmatter too (never created here).

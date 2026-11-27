@@ -1,6 +1,6 @@
 // MIF for Obsidian — authoring and Level 1 validation.
 
-import { MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { FileSystemAdapter, MarkdownRenderChild, normalizePath, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type App, type WorkspaceLeaf } from "obsidian";
 
 import { compressionState, hasCitationSection, newConceptText, promoteToConcept, updateFrontmatter, visibleNamespaces, visibleTypes, type BaseType, type Corpus, type OntologyDef } from "./engine";
 import { isFirstBodySection, renderCompressed } from "./compressionView";
@@ -22,6 +22,10 @@ import { ingestNotice, MifCli, problemText, SearchModal, type SearchFilters } fr
 import { COVERAGE_VIEW, CoverageView, GAPS_VIEW, GapsView } from "./storeViews";
 import { GRAPH_VIEW, GraphView } from "./graphView";
 import { JSONLD_VIEW, JsonLdView } from "./jsonldView";
+import { newToken } from "./mcp/guard";
+import { McpService, mcpServing, SwitchMirror, VaultMcpHost, type McpModule } from "./mcpHost";
+import { EMBEDDED_MCP, ensureMcpFile, type UnpackNode } from "./mcpUnpack";
+import { confirmReject, PromoteModal, REVIEW_VIEW, ReviewView } from "./reviewView";
 
 export default class MifPlugin extends Plugin {
   override settings: MifSettings = DEFAULT_SETTINGS;
@@ -30,7 +34,10 @@ export default class MifPlugin extends Plugin {
   /** Read-only API for other plugins and DataviewJS: app.plugins.plugins.mif.api */
   api!: MifApi;
   cli!: MifCli;
+  mcp!: McpService;
+  mcpHost!: VaultMcpHost;
   private statusEl?: HTMLElement;
+  private reviewEl?: HTMLElement;
 
   override async onload(): Promise<void> {
     // Views are registered before anything is awaited: Obsidian may restore
@@ -61,9 +68,22 @@ export default class MifPlugin extends Plugin {
     view(GRAPH_VIEW, (leaf) => new GraphView(leaf, this));
     view(COVERAGE_VIEW, (leaf) => new CoverageView(leaf, this));
     view(GAPS_VIEW, (leaf) => new GapsView(leaf, this));
+    view(REVIEW_VIEW, (leaf) => new ReviewView(leaf, this));
     this.api = new MifApi(this.manager);
     this.cli = new MifCli(this.app, this.manager, () => this.settings);
     this.register(() => this.cli.dispose());
+    // The MCP server: desktop only, off until this vault turns it on. Node's
+    // http is reached lazily, so the plugin still loads on mobile.
+    this.mcpHost = new VaultMcpHost(this.app, this.manager, this.cli, () => this.settings, this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`);
+    this.mcp = new McpService(
+      this.mcpHost,
+      () => this.settings,
+      () => (Platform.isDesktopApp ? (window.require("http") as typeof import("node:http")) : undefined),
+      () => this.loadMcp(),
+      this.manifest.version,
+      (event, detail) => this.manager.debug(event, detail),
+    );
+    this.register(() => void this.mcp.dispose());
     // Bases (Obsidian 1.10+): a "MIF table" view with level, freshness, trust.
     registerMifBasesView(this, this.api, this.manager);
 
@@ -73,6 +93,11 @@ export default class MifPlugin extends Plugin {
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("mif-status", "mod-clickable");
     this.statusEl.onclick = () => void this.revealView(DIAGNOSTICS_VIEW);
+    // How many agent-written concepts wait for review; hidden when none do.
+    this.reviewEl = this.addStatusBarItem();
+    this.reviewEl.addClass("mif-status", "mod-clickable");
+    this.reviewEl.onclick = () => void this.revealView(REVIEW_VIEW);
+    this.reviewEl.hide();
     this.register(() => this.manager.dispose());
 
     this.registerCommands();
@@ -86,6 +111,11 @@ export default class MifPlugin extends Plugin {
       void this.manager.ensureOntologies();
       this.registerVaultEvents();
       this.refreshStatus();
+      if (this.settings.mcpEnabled) {
+        void this.mcp.sync().then((status) => {
+          if (status.state === "failed") new Notice(`MIF: ${status.reason}`, 10_000);
+        });
+      }
       // Learn the mif-cli version once, so its commands can say when it is too old;
       // then catch up on what was added or changed while the plugin was not running.
       if (Platform.isDesktopApp && "bin" in this.cli.lookup()) {
@@ -100,6 +130,8 @@ export default class MifPlugin extends Plugin {
     const { vault, workspace } = this.app;
     this.registerEvent(this.manager.on("changed", () => {
       this.refreshStatus();
+      // Clients listening for changes are told which concepts changed.
+      this.mcp.changed();
       this.scheduleExplorer();
     }));
     this.registerEvent(workspace.on("file-open", (file) => {
@@ -107,7 +139,7 @@ export default class MifPlugin extends Plugin {
       if (file) void this.manager.trackAccess(file);
       void this.manager.flushPendingStamps();
     }));
-    // Sync mode stamps a note once you have left it (see MifManager.scheduleStamp).
+    // An edited note is stamped once you have left it (see MifManager.scheduleStamp).
     this.registerEvent(workspace.on("active-leaf-change", () => void this.manager.flushPendingStamps()));
     this.registerEvent(workspace.on("layout-change", () => {
       this.scheduleExplorer();
@@ -121,7 +153,9 @@ export default class MifPlugin extends Plugin {
     this.scheduleExplorer();
     this.registerEvent(
       workspace.on("editor-change", (_editor, info) => {
-        if (info.file) this.manager.markDirty(info.file.path);
+        // Only typing counts as an edit to stamp. Obsidian also fires this when it reloads a note that
+        // changed on disk (a sync, a git checkout) into an open tab; that note is not the one being typed in.
+        if (info.file && workspace.activeEditor?.file?.path === info.file.path) this.manager.markDirty(info.file.path);
       }),
     );
     this.registerEvent(this.app.metadataCache.on("changed", () => void this.manager.noteActivity()));
@@ -158,6 +192,34 @@ export default class MifPlugin extends Plugin {
     addEntityReference(this.app, this.manager, file);
   }
 
+  /**
+   * The MCP server's code is loaded only here: on desktop, when a vault turns
+   * the server on. It is carried inside main.js and written out as mcp.cjs
+   * beside it first (src/mcpUnpack.ts). Mobile never reads it.
+   * It is named .cjs because Node decides how to load a .js file from the
+   * nearest package.json above it, and a vault can sit inside a project whose
+   * package.json says "type": "module"; .cjs is CommonJS wherever it is.
+   */
+  private loadMcp(): McpModule | undefined {
+    const adapter = this.app.vault.adapter;
+    if (!Platform.isDesktopApp || !(adapter instanceof FileSystemAdapter)) return undefined;
+    try {
+      const path = window.require("path") as typeof import("node:path");
+      const file = path.join(adapter.getBasePath(), this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`, "mcp.cjs");
+      const node = { fs: window.require("fs") as UnpackNode["fs"], zlib: window.require("zlib") as UnpackNode["zlib"], crypto: window.require("crypto") as UnpackNode["crypto"], Buffer: (window.require("buffer") as { Buffer: UnpackNode["Buffer"] }).Buffer };
+      const unpacked = ensureMcpFile(file, EMBEDDED_MCP, node);
+      if (unpacked !== "present") this.manager.debug("mcp-unpack", { result: unpacked });
+      // A reloaded plugin must get the file now on disk, not the copy Node cached at the last load.
+      const load = window.require;
+      delete load.cache[load.resolve(file)];
+      const mod = load(file) as Partial<McpModule>;
+      return typeof mod.startEndpoint === "function" ? (mod as McpModule) : undefined;
+    } catch (err) {
+      this.manager.debug("mcp-load-failed", { message: (err as Error).message });
+      return undefined;
+    }
+  }
+
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
   }
@@ -172,7 +234,20 @@ export default class MifPlugin extends Plugin {
     }, 300);
   }
 
+  private refreshReview(): void {
+    const el = this.reviewEl;
+    if (!el) return;
+    const n = this.mcpHost.reviewQueue().length;
+    el.empty();
+    if (!n) return void el.hide();
+    el.show();
+    el.createSpan({ cls: "mif-warning-text", text: `MIF review ${n}` });
+    el.setAttr("aria-label", `${n} concept${n === 1 ? "" : "s"} an MCP client wrote or edited, to review — open the review panel`);
+    el.setAttr("data-tooltip-position", "top");
+  }
+
   private refreshStatus(): void {
+    this.refreshReview();
     const el = this.statusEl;
     if (!el) return;
     el.empty();
@@ -292,6 +367,30 @@ export default class MifPlugin extends Plugin {
     this.addCommand({ id: "open-ontology", name: "Open ontology panel", callback: () => void this.revealView(ONTOLOGY_VIEW) });
     this.addCommand({ id: "open-properties", name: "Open properties panel", callback: () => void this.revealView(PROPERTIES_VIEW) });
     this.addCommand({ id: "open-freshness", name: "Open freshness panel", callback: () => void this.revealView(FRESHNESS_VIEW) });
+    this.addCommand({ id: "open-review", name: "Open agent review panel", callback: () => void this.revealView(REVIEW_VIEW) });
+    // Offered only on a note that is waiting for review.
+    const awaiting = () => {
+      const file = this.app.workspace.getActiveFile();
+      return file ? this.mcpHost.reviewQueue().find((r) => r.path === file.path) : undefined;
+    };
+    this.addCommand({
+      id: "review-promote",
+      name: "Promote agent-written concept",
+      checkCallback: (checking) => {
+        const ref = awaiting();
+        if (ref && !checking) new PromoteModal(this.app, this, ref.path, ref.title).open();
+        return !!ref;
+      },
+    });
+    this.addCommand({
+      id: "review-reject",
+      name: "Reject agent-written concept",
+      checkCallback: (checking) => {
+        const ref = awaiting();
+        if (ref && !checking) confirmReject(this.app, this, ref.path, ref.title);
+        return !!ref;
+      },
+    });
     this.addCommand({ id: "open-entities", name: "Open entities panel", callback: () => void this.revealView(ENTITIES_VIEW) });
     this.addCommand({
       id: "add-entity-reference",
@@ -685,7 +784,7 @@ class MifSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Mode")
-      .setDesc("Observe validates and offers fixes. Sync also updates `modified`, the ## Relationships mirror, and an existing ## Citations section of a concept you edited, once you leave it.")
+      .setDesc("Both modes update `modified` on a concept you edited, once you leave it. Observe otherwise validates and offers fixes. Sync also updates the ## Relationships mirror and an existing ## Citations section then.")
       .addDropdown((d) =>
         d.addOptions({ observe: "Observe", sync: "Sync" }).setValue(s.mode).onChange(async (value) => {
           s.mode = value as SyncMode;
@@ -869,6 +968,101 @@ class MifSettingTab extends PluginSettingTab {
     threshold("Duplicate threshold", "Cosine similarity, 0 to 1, at or above which a new concept is reported as a likely duplicate of an existing one.", "duplicateThreshold");
     threshold("Similar threshold", "Cosine similarity at or above which two concepts with no typed relationship appear in the relationship gap report and the related panel offers to link them.", "similarThreshold");
     threshold("Mislink threshold", "Cosine similarity at or below which a typed relationship appears in the gap report as a possible mislink.", "mislinkThreshold");
+
+    const mcpStatus = () => {
+      const st = this.plugin.mcp.status;
+      return st.state === "running" ? `Running at ${st.url}.` : st.state === "failed" ? st.reason : "Off.";
+    };
+    const mcpDesc = () => `Serve this vault's concepts, typed relationships, and semantic search to MCP clients on this computer only (127.0.0.1). ${s.mcpAllowWrites ? "Clients may read and write." : "Read-only."} Each vault has its own port and token. ${mcpStatus()}`;
+    const mcpApply = async () => {
+      await this.plugin.saveSettings();
+      const status = await this.plugin.mcp.sync();
+      if (status.state === "failed") new Notice(`MIF: ${status.reason}`, 10_000);
+      mcpSetting.setDesc(mcpDesc());
+      showMcpToggle();
+    };
+    // The switch shows whether the server is serving, not only whether it is
+    // wanted: after a start that failed (a port in use) it reads off, and the
+    // description says why. The setting stays on, so a free port, or the
+    // switch, starts it.
+    const serving = () => mcpServing(s.mcpEnabled, this.plugin.mcp.status);
+    let mcpSwitch: SwitchMirror | undefined;
+    const showMcpToggle = () => mcpSwitch?.show(serving());
+    const mcpSetting = new Setting(containerEl)
+      .setName("MCP server (desktop)")
+      .setDesc(mcpDesc())
+      .addToggle((t) => {
+        mcpSwitch = new SwitchMirror(t);
+        t.setValue(serving()).onChange(async (v) => {
+          if (mcpSwitch?.showing) return;
+          s.mcpEnabled = v;
+          if (v && !s.mcpToken) s.mcpToken = newToken();
+          await mcpApply();
+        });
+      });
+    if (!Platform.isDesktopApp) mcpSetting.setDisabled(true);
+    new Setting(containerEl)
+      .setName("MCP port")
+      .setDesc("The port this vault's MCP server listens on. Two open vaults need two different ports. If the port is in use, the server stays off.")
+      .addText((t) => {
+        t.setValue(String(s.mcpPort));
+        t.inputEl.addEventListener("blur", () => {
+          const n = Number(t.getValue());
+          if (!Number.isInteger(n) || n < 1024 || n > 65535 || n === s.mcpPort) return void t.setValue(String(s.mcpPort));
+          s.mcpPort = n;
+          void mcpApply();
+        });
+      });
+    new Setting(containerEl)
+      .setName("MCP token")
+      .setDesc("An MCP client must send this token. Regenerate replaces it at once; clients using the old one stop working.")
+      .addButton((b) =>
+        b.setButtonText("Copy client command").onClick(async () => {
+          if (!s.mcpToken) return void new Notice("MIF: turn the MCP server on first; that creates the token.");
+          const name = `mif-vault-${slugify(this.app.vault.getName()) || "vault"}`;
+          await navigator.clipboard.writeText(`claude mcp add --transport http ${name} http://127.0.0.1:${s.mcpPort}/mcp --header "Authorization: Bearer ${s.mcpToken}"`);
+          new Notice("MIF: copied the command that adds this vault to Claude Code. It contains the token.");
+        }),
+      )
+      .addButton((b) =>
+        b.setButtonText("Regenerate").onClick(async () => {
+          s.mcpToken = newToken();
+          await mcpApply();
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Allow MCP writes")
+      .setDesc("Let MCP clients create, edit, merge, and supersede concepts, and change relationships, citations, and entity references. Off by default. A concept a client writes or edits is marked with trust \"uncertain\" until you review it in the agent review panel; every write shows a notice and is logged to mcp-audit.log in the plugin folder.")
+      .addToggle((t) =>
+        t.setValue(s.mcpAllowWrites).onChange(async (v) => {
+          s.mcpAllowWrites = v;
+          await mcpApply();
+        }),
+      );
+    const whole = (name: string, desc: string, key: "mcpWriteLimit" | "mcpWriteWindowMinutes", max: number) =>
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(desc)
+        .addText((t) => {
+          t.setValue(String(s[key]));
+          t.inputEl.addEventListener("blur", () => {
+            const n = Number(t.getValue());
+            if (!Number.isInteger(n) || n < 1 || n > max || n === s[key]) return void t.setValue(String(s[key]));
+            s[key] = n;
+            void this.plugin.saveSettings();
+          });
+        });
+    whole("MCP write limit", "How many writes MCP clients may make within the write window. Past it, a write is refused until earlier ones age out.", "mcpWriteLimit", 10_000);
+    whole("MCP write window", "The length of the write window, in minutes.", "mcpWriteWindowMinutes", 1_440);
+    new Setting(containerEl)
+      .setName("Vault purpose")
+      .setDesc("One line telling an agent what this vault's memory is for, so it can choose between vaults.")
+      .addText((t) =>
+        t.setValue(s.mcpPurpose).onChange(async (v) => {
+          s.mcpPurpose = v;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName("Developer commands")

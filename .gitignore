@@ -1,5 +1,6 @@
 node_modules/
 main.js
+mcp.cjs
 *.js.map
 data.json
 test-vault/.obsidian/
@@ -12,3 +13,4 @@ spikes/mif-wasm/Cargo.lock
 src/engine/generated/
 test-vault/.mif/
 test-vault/dist/
+evals/mcp-client/results/

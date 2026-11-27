@@ -193,3 +193,8 @@
 .mif-store-line { display: flex; flex-wrap: wrap; gap: var(--size-2-1); align-items: baseline; }
 .mif-gap-row { flex-wrap: wrap; }
 .mif-row-actions a.mif-suggested { color: var(--mif-human); }
+
+/* Agent review panel: one block per concept, so it fits a narrow sidebar. */
+.mif-review-item { padding: var(--size-4-2) 0; border-bottom: 1px solid var(--background-modifier-border); font-size: var(--font-ui-small); }
+.mif-review-item a { color: var(--mif-machine); font-weight: var(--font-semibold); }
+.mif-review-actions { display: flex; flex-wrap: wrap; gap: var(--size-4-2); align-items: center; margin-top: var(--size-4-2); }

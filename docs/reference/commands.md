@@ -75,6 +75,9 @@ fails if this list and the source disagree.
 | Open ontology panel | Ontology chain, namespaces, entity types, suggestions |
 | Open entities panel | Every entity and the notes that reference it |
 | Open freshness panel | Concepts that are expired, stale, ageing, or not yet valid |
+| Open agent review panel | Concepts an MCP client wrote or edited that are not yet reviewed: promote one to a trust level, or reject it to the trash |
+| Promote agent-written concept | On a note waiting for review: choose the trust level to give it ("user stated" by default). Who wrote it stays on record |
+| Reject agent-written concept | On a note waiting for review: move it to the trash, after confirming. A concept it superseded becomes valid again |
 | Open bundle report | Every note's level and issues, with filters |
 | Open JSON-LD panel | The open note's JSON-LD projection and round trip |
 | Open typed relationship graph | Relationships coloured by type |

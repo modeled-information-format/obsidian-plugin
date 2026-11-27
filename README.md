@@ -63,7 +63,8 @@ mif-rs.
 
 ## Network use
 
-The plugin works offline. One optional feature uses the network: when
+The plugin works offline, and sends nothing about your vault anywhere. One
+optional feature uses the network: when
 **Settings → MIF → Download ontologies from mif-spec.dev** is on (the
 default), and a concept declares an ontology the vault does not have, the
 plugin downloads it, and the ontologies it extends, from
@@ -72,6 +73,18 @@ in the published catalog (`index.json`) before use and is cached in the
 plugin folder. Nothing about your vault is sent. Turn the setting off to
 never contact the network; ontologies in a bundle's `.mif/ontologies/`
 folder always work offline.
+
+The optional **MCP server** (desktop only, off until you turn it on for a
+vault) lets an AI agent on the same computer, such as Claude Code, read the
+vault's concepts and, if you also turn on **Allow MCP writes**, write to it.
+It listens on `127.0.0.1` only, so nothing outside your computer can reach
+it, and every request must carry the vault's token. What the agent does with
+what it reads, including sending it to its own model provider, is that
+agent's doing and is governed by its settings, not by this plugin. When the
+server starts and **Download ontologies from mif-spec.dev** is on, the
+plugin fetches the ontology catalog once to learn where ontologies are
+published. See
+[Give an AI agent your vault as memory over MCP](docs/how-to/mcp-server.md).
 
 The optional **mif-cli bridge** (desktop only, off until `mif-cli` is found
 on `PATH`, in a usual install folder, or at **Settings → MIF → mif-cli

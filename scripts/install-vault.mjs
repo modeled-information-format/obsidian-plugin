@@ -11,7 +11,9 @@ const pluginDir = join(vault, ".obsidian", "plugins", "mif");
 
 if (!existsSync(join(root, "main.js"))) throw new Error("main.js missing: run `npm run build` first");
 mkdirSync(pluginDir, { recursive: true });
-for (const f of ["main.js", "manifest.json", "styles.css"]) cpSync(join(root, f), join(pluginDir, f));
+if (!existsSync(join(root, "mcp.cjs"))) throw new Error("mcp.cjs missing: run `npm run build` first");
+// mcp.cjs is the MCP server code; desktop loads it from the plugin folder when a vault turns the server on.
+for (const f of ["main.js", "mcp.cjs", "manifest.json", "styles.css"]) cpSync(join(root, f), join(pluginDir, f));
 
 // Enable the plugin and its developer commands on first open.
 writeFileSync(join(vault, ".obsidian", "community-plugins.json"), JSON.stringify(["mif"]) + "\n");
