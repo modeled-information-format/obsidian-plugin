@@ -993,7 +993,7 @@ export const cases = [
     { operation: "add_citation", concept: RUNBOOK, citation: { title: "Busy probe", url: "https://example.test/busy" } },
     (v) => {
       ok(v);
-      v.check("the citation was written", (v.note(RUNBOOK) ?? "").includes("https://example.test/busy"));
+      v.check("the citation was written", /^\s*url: https:\/\/example\.test\/busy$/m.test(v.note(RUNBOOK) ?? ""));
     },
     { writes: true },
   ),
