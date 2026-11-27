@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: consults-the-vault-for-a-general-sounding-question
+expected_outcome: |
+  The question does not mention the vault or 'our' records, but it falls inside the connected vault's stated purpose. The agent looks in the vault first, reports what the owner's records say (the 600 per minute policy and the incident behind it) with the concept named, and keeps any general advice clearly apart from what came from the vault.

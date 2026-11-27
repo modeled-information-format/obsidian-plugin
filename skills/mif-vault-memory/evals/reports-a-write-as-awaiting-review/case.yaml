@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: reports-a-write-as-awaiting-review
+expected_outcome: |
+  The agent creates one concept for the decision, linked to the January rate spike incident in the same call, and tells the user what it wrote, where, and that it is saved as unverified and waits for their review in Obsidian.

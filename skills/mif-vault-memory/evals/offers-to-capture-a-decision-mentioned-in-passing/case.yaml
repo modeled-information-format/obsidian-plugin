@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: offers-to-capture-a-decision-mentioned-in-passing
+expected_outcome: |
+  The agent answers the question about p99. The decision mentioned in passing is durable and inside the vault's purpose, so the agent offers, briefly, to record it in the vault. It does not write it without being asked, and it does not ignore it.

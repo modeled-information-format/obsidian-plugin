@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: supersedes-a-changed-fact-and-asks
+expected_outcome: |
+  The agent finds the existing rate limit policy, treats the change as a superseded claim (not an edit of the old note), and does not supply the user's agreement itself. Where the client cannot show the vault's confirmation question, nothing is written, and the agent says so and puts the question to the user.
