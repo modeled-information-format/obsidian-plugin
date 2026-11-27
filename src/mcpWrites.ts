@@ -249,7 +249,7 @@ export class VaultWrites {
     return ok ? { urn, created: true } : refuse(`The entity ${urn} could not be created.`);
   }
 
-  async createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef } | Refused> {
+  async createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef; carried: number } | Refused> {
     const old = input.supersedes === undefined ? undefined : this.manager.get(input.supersedes);
     const oldFile = input.supersedes === undefined ? undefined : this.file(input.supersedes);
     if (input.supersedes !== undefined && (!old?.isConcept || !oldFile)) return refuse(`No concept at ${input.supersedes} to supersede.`);
@@ -274,6 +274,7 @@ export class VaultWrites {
     const stamp = isoSeconds(now);
 
     let text: string;
+    let carried = 0;
     try {
       text = newConceptText({ id: crypto.randomUUID(), type: type as BaseType, title, ...(namespace ? { namespace } : {}), created: now });
       // The body is the agent's whole text; a first-level heading of its own replaces the default one.
@@ -298,11 +299,34 @@ export class VaultWrites {
         titles.set(target, typeof oldFm.title === "string" ? oldFm.title : oldBundlePath);
         text = addRelationshipText(text, { type: "supersedes", target }, titleFor);
       }
+      const declared = new Set<string>();
       for (const rel of input.relationships) {
         const target = this.target(path, rel.target);
         if (typeof target !== "string") return target;
         titles.set(target, this.ref(rel.target)?.title ?? rel.target);
+        declared.add(`${rel.type}|${target}`);
         text = addRelationshipText(text, { type: rel.type, target, ...(rel.strength === undefined ? {} : { strength: rel.strength }) }, titleFor);
+      }
+      // A superseding concept takes over what the old one declared, so the graph around it still holds:
+      // every relationship but the old one's own "supersedes", and not one the new concept already declares.
+      const oldCtx = input.supersedes === undefined ? undefined : this.manager.indexFor(input.supersedes);
+      for (const e of oldCtx?.index.outgoing.get(oldCtx.bundlePath) ?? []) {
+        if (e.type === "supersedes") continue;
+        let target: string | undefined;
+        if (e.resolved !== undefined) {
+          const to = this.manager.toVaultPath(oldCtx!.info.root, e.resolved);
+          const t = this.target(path, to);
+          if (typeof t === "string") {
+            target = t;
+            titles.set(t, this.ref(to)?.title ?? to);
+          }
+        } else if (/^(\/|urn:)/.test(e.target)) {
+          target = e.target;
+        }
+        if (target === undefined || declared.has(`${e.type}|${target}`)) continue;
+        declared.add(`${e.type}|${target}`);
+        text = addRelationshipText(text, { type: e.type, target, ...(e.strength === undefined ? {} : { strength: e.strength }) }, titleFor);
+        carried++;
       }
       if (input.citations.length) text = syncCitations(text, { create: true });
     } catch (err) {
@@ -326,7 +350,7 @@ export class VaultWrites {
     }
     this.manager.rebuildIndexes();
     this.record(author, oldFile ? "supersede-concept" : "create-concept", path, "done", oldFile ? `created ${title}, which supersedes ${typeof oldFm.title === "string" ? oldFm.title : input.supersedes}` : `created ${title}`);
-    return { concept: this.ref(path)! };
+    return { concept: this.ref(path)!, carried };
   }
 
   /** A concept's provenance once an agent has changed its text: back to "uncertain", with the client on record. Its sourceType is kept. */

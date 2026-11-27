@@ -152,6 +152,7 @@ export class VaultMcpHost implements McpHost {
     const raw = ref.trim();
     const uuid = raw.replace(/^urn:mif:/i, "");
     let paths: string[] = [];
+    let byName = false;
     if (UUID.test(uuid)) {
       // Every note is checked, not the bundle's id index: that index keeps one path per id, so it
       // cannot show two notes carrying the same id. Two matches are ambiguous, never a silent pick.
@@ -161,9 +162,22 @@ export class VaultMcpHost implements McpHost {
       const p = raw.replace(/^\/+/, "");
       if (this.manager.get(p)?.isConcept) paths = [p];
       else paths = this.manager.bundleRoots().map((root) => this.manager.toVaultPath(root, p)).filter((v) => this.manager.get(v)?.isConcept);
-      if (paths.length === 0) paths = this.byTitle(raw);
+      if (paths.length === 0) {
+        paths = this.byTitle(raw);
+        byName = true;
+      }
     }
     paths = [...new Set(paths)].sort();
+    // A superseded concept and the one that replaced it usually share a title. When exactly one of
+    // the concepts a title names is valid at the time asked about, that one is meant; the others are
+    // named in the answer, never dropped silently. An id or a path is never resolved this way.
+    if (paths.length > 1 && byName) {
+      const valid = paths.filter((p) => !["expired", "not-yet-valid"].includes(this.manager.freshnessOf(p, asOf)?.state ?? ""));
+      if (valid.length === 1) {
+        const concept = this.view(valid[0]!, asOf);
+        if (concept) return { concept: { ...concept, set_aside: paths.filter((p) => p !== valid[0]) } };
+      }
+    }
     if (paths.length > 1) return { ambiguous: paths.slice(0, 12).map((v) => `${v} — ${this.ref(v)?.title ?? ""}`) };
     const concept = paths[0] === undefined ? undefined : this.view(paths[0], asOf);
     return concept ? { concept } : { missing: true };
@@ -212,6 +226,24 @@ export class VaultMcpHost implements McpHost {
       ...(ctx.index.outgoing.get(ctx.bundlePath) ?? []).map((e) => edge("outgoing", e, e.resolved)),
       ...(ctx.index.incoming.get(ctx.bundlePath) ?? []).map((e) => edge("incoming", e, e.from)),
     ];
+  }
+
+  signatures(): Map<string, string> {
+    // A short hash is enough: a collision only means one change goes untold.
+    const hash = (text: string) => {
+      let h = 5381;
+      for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+      return `${text.length}:${h}`;
+    };
+    const out = new Map<string, string>();
+    for (const a of this.manager.all()) {
+      const id = a.isConcept ? this.ref(a.path)?.id : undefined;
+      // A duplicated id is not resolvable to one note; the first note stands for it here.
+      if (id && !out.has(id)) out.set(id, hash(`${a.path}\n${JSON.stringify(a.frontmatter ?? {})}\n${a.body ?? ""}`));
+    }
+    for (const e of this.entities()) out.set(e.urn, hash(JSON.stringify([e.name, e.type, e.aliases, e.recorded, e.references.map((r) => [r.concept.path, r.role])])));
+    for (const o of this.ontologies()) out.set(o.uri, hash(JSON.stringify([o.id, o.version, o.entity_types, o.namespaces])));
+    return out;
   }
 
   concepts(): ConceptSummary[] {
@@ -510,6 +542,9 @@ export class McpService {
   private endpoint?: McpEndpoint;
   private running?: { port: number; writes: boolean };
   private queue: Promise<unknown> = Promise.resolve();
+  /** The resources as last told to clients, to work out what changed since. */
+  private told?: Map<string, string>;
+  private pending?: number;
   status: McpStatus = { state: "off" };
 
   constructor(
@@ -537,6 +572,7 @@ export class McpService {
       await this.endpoint.close();
       this.endpoint = undefined;
       this.running = undefined;
+      this.told = undefined;
       this.log("mcp-stopped");
     }
     if (!want) return (this.status = { state: "off" });
@@ -544,7 +580,9 @@ export class McpService {
       // The write tools come and go with the setting: tell clients that are listening for list changes.
       if (this.running && this.running.writes !== s.mcpAllowWrites) {
         this.running.writes = s.mcpAllowWrites;
+        // The write tools and the write prompts come and go together.
         this.endpoint.toolsChanged();
+        this.endpoint.promptsChanged();
         this.log("mcp-tools-changed", { writes: s.mcpAllowWrites });
       }
       return this.status;
@@ -565,6 +603,7 @@ export class McpService {
         onError: (error) => this.log("mcp-error", { message: error.message }),
       });
       this.running = { port: s.mcpPort, writes: s.mcpAllowWrites };
+      this.told = this.host.signatures();
       this.log("mcp-started", { port: s.mcpPort });
       return (this.status = { state: "running", url: this.endpoint.url });
     } catch (err) {
@@ -575,7 +614,34 @@ export class McpService {
     }
   }
 
+  /**
+   * The vault changed: after a pause, tell listening clients which resources changed, and whether
+   * the set of resources did. Called on the plugin's own change event, after analysis.
+   */
+  changed(delay = 1_000): void {
+    if (!this.endpoint) return;
+    if (this.pending !== undefined) window.clearTimeout(this.pending);
+    this.pending = window.setTimeout(() => {
+      this.pending = undefined;
+      this.announce();
+    }, delay);
+  }
+
+  private announce(): void {
+    if (!this.endpoint) return;
+    const now = this.host.signatures();
+    const before = this.told ?? new Map<string, string>();
+    this.told = now;
+    const updated = [...now].filter(([uri, sig]) => before.has(uri) && before.get(uri) !== sig).map(([uri]) => uri);
+    const listChanged = now.size !== before.size || [...now.keys()].some((uri) => !before.has(uri));
+    for (const uri of updated) this.endpoint.resourceUpdated(uri);
+    if (listChanged) this.endpoint.resourcesChanged();
+    if (updated.length || listChanged) this.log("mcp-resources-changed", { updated: updated.length, listChanged });
+  }
+
   async dispose(): Promise<void> {
+    if (this.pending !== undefined) window.clearTimeout(this.pending);
+    this.pending = undefined;
     await this.queue;
     await this.endpoint?.close();
     this.endpoint = undefined;

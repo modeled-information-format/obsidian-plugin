@@ -17,7 +17,7 @@ import { fail, finish, refSchema, resolveOrFail, responseFormat, suggest, TOOL_N
 
 /** The write tools, in the order `tools/list` returns them after the read tools. */
 export const WRITE_TOOL_NAMES = ["mif_vault_write_concept", "mif_vault_write_relationship", "mif_vault_write_reference", "mif_vault_ingest_concepts", "mif_vault_edit_concept"] as const;
-export const WRITE_PROMPT_NAMES = ["mif_vault_capture"] as const;
+export const WRITE_PROMPT_NAMES = ["mif_vault_capture", "mif_vault_review_stale", "mif_vault_curate_links", "mif_vault_consolidate"] as const;
 
 const conceptArg = (what: string) => z.string().min(1).describe(`${what}: its vault path, its id ("urn:mif:<uuid>"), or its title or a code in its title.`);
 const confirmArg = z.boolean().optional().describe("Set true only after the user has agreed to this change in the conversation. Needed when the client cannot ask the user itself; a client that can ask is asked directly.");
@@ -105,7 +105,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
       title: "Write a MIF concept",
       description:
         "Add to this vault's memory: operation \"create\" writes a new concept; \"supersede\" writes one that replaces an existing concept, " +
-        "which stays in the vault with its validity ended, so history is kept. Supersede when what the vault holds is no longer right; to correct or extend a concept's text, use " + editConcept + ". " +
+        "which stays in the vault with its validity ended, so history is kept, and whose relationships the new concept takes over. Supersede when what the vault holds is no longer right; to correct or extend a concept's text, use " + editConcept + ". " +
         "Give the whole text as markdown in body, and declare the concept's relationships, citations and entity references in the same call so it does not arrive unlinked. " +
         "Before creating, the vault is checked for a near-duplicate; if one is found the user is asked whether to keep both, merge into it, supersede it, or stop. " +
         "What you write is saved as agent-written and unverified (freshness and trust are stated to whoever recalls it) until the user reviews it in Obsidian, and your client's name is recorded. " +
@@ -238,7 +238,7 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
         [
           old ? `Created ${r.concept.title} [${r.concept.path}], which supersedes ${old.title} [${old.path}]. ${old.title} is kept, with its validity ended now.` : `Created ${r.concept.title} [${r.concept.path}].`,
           `It is saved as written by ${author.agent} and unverified, and waits in the user's review queue in Obsidian. Until they review it, recall states it as trust: uncertain.`,
-          relationships.length ? `It declares ${relationships.length} relationship(s).` : `It declares no relationships; add some with ${writeRelationship} so it can be found from related concepts.`,
+          r.carried ? `It took over ${r.carried} relationship(s) that ${old?.title ?? "the old concept"} declared${relationships.length ? `, and declares the ${relationships.length} you gave` : ""}. Relationships that other concepts declare to the old one still point at it.` : relationships.length ? `It declares ${relationships.length} relationship(s).` : `It declares no relationships; add some with ${writeRelationship} so it can be found from related concepts.`,
           ...warnings,
         ],
         args.response_format,
@@ -511,5 +511,79 @@ export function registerWriteTools(server: McpServer, host: McpHost): void {
         },
       ],
     }),
+  );
+
+  // The curation workflows (plan: Memory workflows). Each is a prompt over the tools above; none needs a tool of its own.
+  const [search, getConcept, listRelationships, listConcepts, , status] = TOOL_NAMES;
+  const say = (lines: string[]) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text: lines.join("\n") } }] });
+  const closing = "Everything you write, edit or merge goes to the user's review queue in Obsidian as unverified. End by listing what you changed, by title and path, and what you left alone and why.";
+
+  server.registerPrompt(
+    WRITE_PROMPT_NAMES[1],
+    {
+      title: "Review stale and expiring concepts",
+      description: "Walk through the vault's stale, ageing and expired concepts with the user: reaffirm each, supersede it, or leave it.",
+      argsSchema: z.object({
+        namespace: z.string().optional().describe("Only concepts in this namespace."),
+        limit: z.string().optional().describe("How many concepts to go through; 10 when omitted."),
+      }),
+    },
+    ({ namespace, limit }) =>
+      say([
+        `Review the concepts of the vault "${host.vault().name}" that are going out of date${namespace ? `, in the namespace ${namespace}` : ""}.`,
+        "",
+        `1. Find them: ${listConcepts} with freshness: ["expired", "stale", "ageing"]${namespace ? `, namespace: "${namespace}"` : ""}, include_expired: true, limit: ${Number(limit) > 0 ? Number(limit) : 10}. ${status} gives the totals.`,
+        `2. Take them one at a time. Read each with ${getConcept}, and look at what relies on it with ${listRelationships} (direction: "incoming").`,
+        "3. For each, tell the user in two or three sentences what it says, how old it is, and what relies on it; then ask what to do. Do not decide for them whether something is still true.",
+        `   - Still true as written: say so, and leave the note alone. Renewing its dates is done in Obsidian's freshness panel, not here.`,
+        `   - Still true but its text needs correcting or extending: ${editConcept}, operation "edit".`,
+        `   - No longer true, or replaced: ${writeConcept}, operation "supersede", with the current statement as the new concept. The old one is kept with its validity ended.`,
+        "   - The user does not know: leave it, and say so in your summary.",
+        `4. ${closing}`,
+      ]),
+  );
+
+  server.registerPrompt(
+    WRITE_PROMPT_NAMES[2],
+    {
+      title: "Curate typed relationships",
+      description: "Work through the relationship-gap report: add typed relationships between similar concepts that have none, and look again at relationships whose ends are unalike.",
+      argsSchema: z.object({
+        bundle: z.string().optional().describe("The bundle to work on, when the vault has several."),
+        entity_type: z.string().optional().describe("Only gaps among concepts of this entity type."),
+      }),
+    },
+    ({ bundle, entity_type }) =>
+      say([
+        `Turn similarity into structure in the vault "${host.vault().name}": find concepts that are alike but not linked, and link the ones that should be.`,
+        "",
+        `1. Get the gap report: ${status} with report: "gaps"${bundle !== undefined ? `, bundle: "${bundle}"` : ""}${entity_type ? `, scope: { entity_type: "${entity_type}" }` : ""}. It needs the vector store; if it says the store is missing or out of date, ${ingest} brings it up to date. It can take a while on a large bundle.`,
+        `2. For each unlinked pair, most similar first: read both with ${getConcept}. Similar wording is not a relationship. Decide whether one really bears on the other, and how.`,
+        `3. Where it does, add the relationship with ${writeRelationship}, operation "add", from the concept that depends on, derives from or refers to the other. Use a type the vault already uses when one fits; the tool's schema lists them. If no type fits or you are unsure, leave type out and the user is asked.`,
+        `4. Where the two say the same thing, do not link them: tell the user, and offer to merge them with ${editConcept}, operation "merge".`,
+        "5. Where there is no real relationship, add nothing and move on. Say in your summary which pairs you judged unrelated, so the user need not look again.",
+        `6. For each reported mislink (a typed relationship whose ends are unalike): read both ends and tell the user what you find. Changing or removing a relationship needs their agreement; ${writeRelationship} asks for it.`,
+        `7. ${closing}`,
+      ]),
+  );
+
+  server.registerPrompt(
+    WRITE_PROMPT_NAMES[3],
+    {
+      title: "Consolidate episodic concepts",
+      description: "Turn several episodic concepts on one subject into one semantic concept that states what they add up to and links back to each.",
+      argsSchema: z.object({ topic: z.string().min(1).describe("The subject to consolidate, in a few words.") }),
+    },
+    ({ topic }) =>
+      say([
+        `Consolidate what the vault "${host.vault().name}" has recorded about: ${topic}`,
+        "",
+        `1. Find the events: ${search} for the topic, keeping the episodic concepts among the results, and ${listConcepts} with type: "episodic" and title_contains for a word of the topic. Read each candidate with ${getConcept}. Drop the ones that are not about this subject.`,
+        `2. Check what the vault already concludes: among the same search results, and with ${listConcepts} with type: "semantic", look for a semantic concept that already states the conclusion. If there is one, extend it with ${editConcept} instead of writing a second one.`,
+        "3. Tell the user which episodic concepts you will draw on, with each one's date and freshness, and what you take them to add up to. An expired or low-trust record weighs less; say where you relied on one. Wait for their agreement before writing.",
+        `4. Write one semantic concept with ${writeConcept}, operation "create": the general statement, in your own words, complete enough to stand alone, with a derived-from relationship to each episodic concept it rests on. Cite what they cite.`,
+        "5. Leave the episodic concepts as they are. They are the record of what happened; the new concept is what was learned from them.",
+        `6. ${closing}`,
+      ]),
   );
 }

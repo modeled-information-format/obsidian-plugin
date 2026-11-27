@@ -11,6 +11,7 @@
 
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { McpHost } from "./host";
+import { TaskStore } from "./tasks";
 import { createServer } from "./tools";
 
 // Types only; nothing is imported from Node when this module loads.
@@ -58,6 +59,11 @@ export interface McpEndpoint {
   url: string;
   /** Tell clients listening for list changes that the tools on offer have changed. */
   toolsChanged(): void;
+  promptsChanged(): void;
+  /** The set of resources changed: one was added or removed. */
+  resourcesChanged(): void;
+  /** One resource's content changed; told to clients subscribed to that uri. */
+  resourceUpdated(uri: string): void;
   close(): Promise<void>;
 }
 
@@ -75,7 +81,9 @@ export interface EndpointOptions {
  * (for example EADDRINUSE); it never falls back to another port.
  */
 export function startEndpoint(http: Http, opts: EndpointOptions): Promise<McpEndpoint> {
-  const handler = createMcpHandler(() => createServer(opts.host, opts.version), { onerror: opts.onError });
+  // Tasks outlive the request that starts them, so their store belongs to the endpoint, not to the per-request server.
+  const tasks = new TaskStore();
+  const handler = createMcpHandler(() => createServer(opts.host, opts.version, tasks), { onerror: opts.onError });
   const server: Server = http.createServer((req, res) => {
     void serve(req, res).catch((err: unknown) => {
       opts.onError?.(err instanceof Error ? err : new Error(String(err)));
@@ -132,6 +140,9 @@ export function startEndpoint(http: Http, opts: EndpointOptions): Promise<McpEnd
         port,
         url: `http://${LOOPBACK}:${port}${MCP_PATH}`,
         toolsChanged: () => handler.notify.toolsChanged(),
+        promptsChanged: () => handler.notify.promptsChanged(),
+        resourcesChanged: () => handler.notify.resourcesChanged(),
+        resourceUpdated: (uri) => handler.notify.resourceUpdated(uri),
         close: () =>
           new Promise<void>((done) => {
             server.close(() => done());

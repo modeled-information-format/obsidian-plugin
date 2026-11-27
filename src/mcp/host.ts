@@ -36,6 +36,11 @@ export interface ConceptView extends ConceptRef {
   weighing: Weighing;
   frontmatter: Record<string, unknown>;
   body: string;
+  /**
+   * Set when the reference was a title or code that several concepts carry and this is the only one
+   * valid at the time asked about: the vault paths of the others, which are expired or not yet valid.
+   */
+  set_aside?: string[];
 }
 
 /** A concept as it appears in a listing: identity plus what it can be filtered by. */
@@ -242,6 +247,11 @@ export interface McpHost {
   prepare?(): Promise<void>;
   vault(): { name: string; purpose: string; bundles: string[] };
   /**
+   * Every resource's uri with a signature that changes when its content does: what change
+   * notifications are worked out from. Concepts without a valid id are not resources and are left out.
+   */
+  signatures(): Map<string, string>;
+  /**
    * A concept by urn:mif:<uuid>, bare uuid, vault path, bundle path
    * ("/semantic/x.md"), or title: the whole title, a code that stands as a
    * word in exactly one title ("CON-P-92"), or text only one title contains.
@@ -283,7 +293,8 @@ export interface McpHost {
   writes(): { allowed: boolean; limit: number; window_minutes: number };
   /** Count one write against the limit; refused once the window is full. */
   admit(): Refused | undefined;
-  createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef } | Refused>;
+  /** `carried`: for a superseding concept, how many relationships it took over from the one it replaces. */
+  createConcept(input: NewConceptInput, author: Author): Promise<{ concept: ConceptRef; carried: number } | Refused>;
   addRelationship(path: string, rel: RelationshipWrite, author: Author): Promise<{ concept: ConceptRef } | Refused>;
   /** Change the type or strength of the relationship `path` declares to `match.target`. */
   updateRelationship(path: string, match: { type: string; target: string }, next: { type?: string; strength?: number }, author: Author): Promise<{ concept: ConceptRef } | Refused>;

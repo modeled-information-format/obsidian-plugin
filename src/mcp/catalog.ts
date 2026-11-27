@@ -7,7 +7,8 @@
 // tools.ts, so nothing here may use those helpers at module load: all use
 // is inside registerCatalogTools.
 
-import type { McpServer } from "@modelcontextprotocol/server";
+import { CLIENT_CAPABILITIES_META_KEY, type McpServer } from "@modelcontextprotocol/server";
+import { TASKS_EXTENSION, type TaskStore } from "./tasks";
 import * as z from "zod/v4";
 import type { ConceptSummary, EdgeView, McpHost, Weighing } from "./host";
 import { asOf, cautious, detail, fail, finish, fit, hidden, page, parseAsOf, READ_ONLY, refLine, resolveOrFail, responseFormat, suggest, TOOL_NAMES, unknownValue, weighingLine, weighingSchema, withLinks, type ToolResult } from "./tools";
@@ -25,7 +26,7 @@ const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.inde
 
 const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-export function registerCatalogTools(server: McpServer, host: McpHost): void {
+export function registerCatalogTools(server: McpServer, host: McpHost, tasks?: TaskStore): void {
   const vocab = host.vocabulary();
   const matching = (edges: EdgeView[], want: { type?: string; direction: "both" | "outgoing" | "incoming" }) =>
     edges.filter((e) => (want.direction === "both" || e.direction === want.direction) && (!want.type || e.type === want.type)).length;
@@ -275,7 +276,7 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         "Report on this vault's MIF memory as a whole. report \"graph\": how many concepts, relationships and entities there are, by type, " +
         "how many concepts have no typed relationship, how many relationship targets do not resolve, and how fresh and trusted the concepts are. " +
         "report \"store\": whether semantic search covers the notes: concepts never ingested, changed since they were ingested, or refused. " +
-        "report \"gaps\": pairs of similar concepts with no typed relationship, and typed relationships whose two ends are unalike; it compares every concept of a bundle, so pass scope to report on one kind of concept (an entity type, a namespace, a folder). " +
+        "report \"gaps\": pairs of similar concepts with no typed relationship, and typed relationships whose two ends are unalike; it compares every concept of a bundle, so pass scope to report on one kind of concept (an entity type, a namespace, a folder). It reports progress, and a client that declares the Tasks extension gets it as a task to poll. " +
         `Use it to judge how far to rely on the vault before answering from it, and as evidence when you report on its health. List concepts behind a number with ${TOOL_NAMES[3]}.`,
       inputSchema: z.object({
         report: z.enum(["graph", "store", "gaps"]).default("graph").describe('"graph" for counts and health, "store" for vector store coverage, "gaps" for missing and doubtful relationships (slow).'),
@@ -445,12 +446,13 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
       if (targets.length !== 1) return fail(`The gap report compares one bundle at a time. Pass bundle; this vault has: ${bundles.map((b) => `"${b}"`).join(", ")}.`);
       // The comparison is one mif-cli run per concept: report progress to a caller that asked for it.
       const token = ctx.mcpReq._meta?.progressToken;
-      const report =
+      const notify =
         token === undefined
           ? undefined
           : (done: number, total: number) => {
               if (done === total || done % 10 === 0) void ctx.mcpReq.notify({ method: "notifications/progress", params: { progressToken: token, progress: done, total, message: `Compared ${done} of ${total} concepts` } }).catch(() => undefined);
             };
+      const run = async (report?: (done: number, total: number) => void): Promise<ToolResult> => {
       const g = await host.gaps(targets[0]!, report);
       if ("unavailable" in g) return fail(`The gap report is unavailable. ${g.unavailable} ${TOOL_NAMES[0]} with similar_to gives the neighbours of one concept.`);
       const name = (c: { title: string } | undefined) => c?.title ?? "(not in the vault)";
@@ -509,6 +511,12 @@ export function registerCatalogTools(server: McpServer, host: McpHost): void {
         .filter(Boolean)
         .join("\n");
       return finish({ data: { report: "gaps", gaps, problems }, text }, args.response_format);
+      };
+      // A client that declares the Tasks extension gets a task at once and polls for the report; any other waits on this request.
+      const declared = (ctx.mcpReq.envelope as Record<string, unknown> | undefined)?.[CLIENT_CAPABILITIES_META_KEY] as { extensions?: Record<string, unknown> } | undefined;
+      const task = tasks && declared?.extensions?.[TASKS_EXTENSION] ? tasks.start((say) => run((done, total) => say(`Compared ${done} of ${total} concepts`))) : undefined;
+      if (task) return { resultType: "task", ...task } as unknown as ToolResult;
+      return run(notify);
     },
   );
 

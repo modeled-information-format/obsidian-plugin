@@ -14,9 +14,10 @@
 // relationships point at it without listing them. Concepts a result names
 // are also returned as resource links to their canonical ids (plan M16).
 
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { registerCatalogTools } from "./catalog";
+import { TASKS_EXTENSION, type TaskStore } from "./tasks";
 import { registerExtras } from "./extras";
 import { registerWriteTools } from "./write";
 import type { ConceptRef, ConceptView, EdgeView, McpHost, SearchHit, Weighing } from "./host";
@@ -226,13 +227,43 @@ export function instructions(host: McpHost): string {
   ].join(" ");
 }
 
-export function createServer(host: McpHost, version: string): McpServer {
+/** `tasks`, when given, lets a client that declares the Tasks extension run the gap report as a task. */
+export function createServer(host: McpHost, version: string, tasks?: TaskStore): McpServer {
   // Lists are the same for every client and change only with the plugin's settings; a concept changes whenever its note is saved.
   const steady = { ttlMs: 60_000, cacheScope: "private" as const };
   const server = new McpServer(
     { name: SERVER_NAME, version },
-    { instructions: instructions(host), cacheHints: { "tools/list": steady, "prompts/list": steady, "resources/templates/list": steady, "server/discover": steady, "resources/list": { ttlMs: 5_000, cacheScope: "private" } } },
+    {
+      instructions: instructions(host),
+      // Clients may listen for changes (subscriptions/listen): to the lists, and to resources they name.
+      capabilities: { tools: { listChanged: true }, prompts: { listChanged: true }, resources: { subscribe: true, listChanged: true }, ...(tasks ? { extensions: { [TASKS_EXTENSION]: {} } } : {}) },
+      cacheHints: { "tools/list": steady, "prompts/list": steady, "resources/templates/list": steady, "server/discover": steady, "resources/list": { ttlMs: 5_000, cacheScope: "private" } },
+    },
   );
+  if (tasks) {
+    // A tool with an output schema must return structured content, and the SDK (2.4.0) knows no task result:
+    // let one through unchecked. This leans on an SDK method that is not part of its documented surface;
+    // the task test fails if a release changes it.
+    const checked = server as unknown as { validateToolOutput(tool: unknown, result: unknown, name: string): Promise<void> };
+    const validate = checked.validateToolOutput.bind(server);
+    checked.validateToolOutput = async (tool, result, name) => {
+      if ((result as { resultType?: unknown } | undefined)?.resultType === "task") return;
+      return validate(tool, result, name);
+    };
+    // The Tasks extension's own methods. There is no tasks/list (the extension has none), and no tasks/update: no task here asks for input.
+    const params = z.object({ taskId: z.string().min(1) }).loose();
+    const result = z.object({}).loose();
+    const unknown = () => new ProtocolError(ProtocolErrorCode.InvalidParams, "Unknown or expired task.");
+    server.server.setRequestHandler("tasks/get", { params, result }, (p) => {
+      const task = tasks.get(p.taskId);
+      if (!task) throw unknown();
+      return { ...task };
+    });
+    server.server.setRequestHandler("tasks/cancel", { params, result }, (p) => {
+      if (!tasks.cancel(p.taskId)) throw unknown();
+      return {};
+    });
+  }
   const vocab = host.vocabulary();
 
   server.registerTool(
@@ -399,6 +430,8 @@ export function createServer(host: McpHost, version: string): McpServer {
         entity_type: z.string().optional(),
         weighing: weighingSchema,
         relationship_counts: countsSchema,
+        /** Other concepts that carry the title or code asked for and are expired or not yet valid at the time asked about. */
+        set_aside: z.array(z.string()).optional(),
         headings: z.array(z.string()),
         section: z.string().optional(),
         text: z.string().optional(),
@@ -454,6 +487,7 @@ export function createServer(host: McpHost, version: string): McpServer {
         ...(c.entity_type ? { entity_type: c.entity_type } : {}),
         weighing: c.weighing,
         relationship_counts: counts,
+        ...(c.set_aside?.length ? { set_aside: c.set_aside } : {}),
         headings,
         ...(args.section === undefined ? {} : { section: args.section }),
         ...(text === undefined ? {} : { text }),
@@ -465,6 +499,7 @@ export function createServer(host: McpHost, version: string): McpServer {
         `${c.id ?? "no id"} · ${c.path}${c.type ? ` · ${c.type}` : ""}${c.namespace ? ` · ${c.namespace}` : ""}${c.entity_type ? ` · ${c.entity_type}` : ""}`,
         weighingLine(c.weighing),
         countsLine(counts),
+        c.set_aside?.length ? `${c.set_aside.length} other concept(s) carry this title or code and are expired or not yet valid at the time asked about, so this one was taken as meant: ${c.set_aside.join(", ")}. Pass as_of to ask about an earlier date, or a path to read one of them.` : "",
         ...sourceLines,
         c.id ? "" : "This note has no valid id, so it can only be addressed by its path.",
         args.include_frontmatter ? `Frontmatter:\n${JSON.stringify(c.frontmatter, null, 2)}` : "",
@@ -739,7 +774,7 @@ export function createServer(host: McpHost, version: string): McpServer {
     },
   );
 
-  registerCatalogTools(server, host);
+  registerCatalogTools(server, host, tasks);
   registerExtras(server, host);
   // The write tools and the capture prompt exist only while the vault allows writes; the lists are the same for every client either way.
   if (host.writes().allowed) registerWriteTools(server, host);

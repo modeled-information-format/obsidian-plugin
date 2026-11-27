@@ -17,6 +17,7 @@ import { MifManager } from "../src/manager";
 import { MAX_BODY, newToken, refusal, sameToken, startEndpoint, type McpEndpoint } from "../src/mcp/http";
 import { guide, PROMPT_NAMES, RESOURCE_PAGE, RESOURCE_TEMPLATE } from "../src/mcp/extras";
 import { WRITE_PROMPT_NAMES, WRITE_TOOL_NAMES } from "../src/mcp/write";
+import { TaskStore } from "../src/mcp/tasks";
 import { AUDIT_LOG } from "../src/mcpWrites";
 import { CHARACTER_LIMIT, countEdges, countsLine, sectionOf, TOOL_NAMES } from "../src/mcp/tools";
 import { McpService, mcpServing, SwitchMirror, VaultMcpHost } from "../src/mcpHost";
@@ -1225,6 +1226,11 @@ describe("writes", () => {
     expect(path).toBe("semantic/api-rate-limit-policy-v2.md");
     expect(v.mem.texts.get(path)).toMatch(/type: supersedes\n\s+target: \.?\/?(semantic\/)?rate-limit-policy\.md|type: supersedes/);
     expect(v.mem.texts.get(path)).toMatch(/type: semantic/);
+    // It takes over what the old concept declared, with strength, and says so.
+    expect(textOf(r)).toMatch(/took over \d+ relationship\(s\) that API Rate Limit Policy declared/);
+    expect(v.mem.texts.get(path)).toMatch(/type: derived-from\n\s+target: \/episodic\/incident-2026-01-rate-spike\.md\n\s+strength: 0\.9/);
+    expect(v.mem.texts.get(path)).toContain("- derived-from [Rate Spike Incident 2026-01]");
+    expect(v.mem.texts.get(path)!.match(/type: supersedes/g)).toHaveLength(1);
     expect(v.mem.texts.get(POLICY_PATH)).toMatch(/validUntil: /);
     const old = await c.call("mif_vault_get_concept", { concept: POLICY_PATH });
     expect(textOf(old)).toMatch(/expired/i);
@@ -1232,6 +1238,30 @@ describe("writes", () => {
     expect(await v.host.reject(path)).toBe(true);
     expect(v.mem.trashed).toContain(path);
     expect(v.mem.texts.get(POLICY_PATH)).not.toMatch(/validUntil/);
+    await c.close();
+  });
+
+  it("reads a superseded title as the concept that is valid now, names the one set aside, and reads the old one at an earlier date", async () => {
+    const v = await on();
+    const c = await connect(v);
+    // The replacement keeps the title, as a record that keeps its code would.
+    const r = await c.call(W_CONCEPT, { operation: "supersede", supersedes: POLICY, title: "API Rate Limit Policy", body: "200 per minute.", confirm: true });
+    const fresh = (r.structuredContent as { concept: { path: string } }).concept.path;
+    const now = await c.call("mif_vault_get_concept", { concept: "API Rate Limit Policy" });
+    expect(now.isError).toBeFalsy();
+    expect(now.structuredContent).toMatchObject({ concept: { path: fresh }, set_aside: [POLICY_PATH] });
+    expect(textOf(now)).toContain("1 other concept(s) carry this title or code and are expired");
+    expect(textOf(now)).toContain(POLICY_PATH);
+    // A path or an id always names its own note.
+    expect((await c.call("mif_vault_get_concept", { concept: POLICY_PATH })).structuredContent).toMatchObject({ concept: { path: POLICY_PATH } });
+    expect((await c.call("mif_vault_get_concept", { concept: POLICY })).structuredContent).not.toHaveProperty("set_aside");
+    // Before the replacement existed, the title means the old one.
+    const then = await c.call("mif_vault_get_concept", { concept: "API Rate Limit Policy", as_of: "2026-03-01" });
+    expect(then.structuredContent).toMatchObject({ concept: { path: POLICY_PATH }, set_aside: [fresh] });
+    // Two concepts of one title that are both valid stay ambiguous.
+    await c.call(W_CONCEPT, { operation: "create", title: "API Rate Limit Policy", type: "semantic", body: "A third.", on_duplicate: "create" });
+    const both = await c.call("mif_vault_get_concept", { concept: "API Rate Limit Policy" });
+    expect(both.isError).toBe(true);
     await c.close();
   });
 
@@ -1463,5 +1493,188 @@ describe("writes", () => {
     expect(v.host.reviewQueue()).toEqual([]);
     expect(await v.host.promote("plain.md", "verified")).toBe(false);
     expect(await v.host.promote("semantic/old-limit.md", "uncertain" as never)).toBe(false);
+  });
+});
+
+// --- Phase 3: live updates, curation prompts, tasks ---------------------------------------
+
+/** Open a subscriptions/listen stream and collect what arrives on it. */
+async function listen(port: number, notifications: Record<string, unknown>) {
+  const m = modern("subscriptions/listen", { notifications });
+  const seen: Array<{ method?: string; params?: Record<string, unknown> }> = [];
+  const req = http.request({ host: "127.0.0.1", port, method: "POST", path: "/mcp", headers: m.headers });
+  const opened = new Promise<number>((resolve, reject) => {
+    req.on("error", reject);
+    req.on("response", (res) => {
+      res.setEncoding("utf8");
+      let buffer = "";
+      res.on("data", (chunk: string) => {
+        buffer += chunk;
+        for (;;) {
+          const end = buffer.indexOf("\n\n");
+          if (end < 0) break;
+          const data = buffer.slice(0, end).split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+          buffer = buffer.slice(end + 2);
+          if (data) seen.push(JSON.parse(data) as { method?: string });
+        }
+      });
+      res.on("error", () => undefined);
+      resolve(res.statusCode ?? 0);
+    });
+  });
+  req.end(m.body);
+  return { status: await opened, seen, methods: () => seen.map((s) => s.method), close: () => req.destroy() };
+}
+
+describe("live updates", () => {
+  it("advertises that clients may listen for list changes and subscribe to resources", async () => {
+    const v = await vault();
+    const c = await connect(v);
+    const d = await c.client.discover();
+    expect(d.capabilities).toMatchObject({ tools: { listChanged: true }, prompts: { listChanged: true }, resources: { subscribe: true, listChanged: true } });
+    await c.close();
+  });
+
+  it("tells a listening client which concept changed, when the set of resources changes, and when writes are switched", async () => {
+    const v = await vault();
+    const settings = Object.assign(v.settings, { mcpEnabled: true, mcpToken: TOKEN, mcpPort: 0 });
+    const free = await startEndpoint(http, { host: v.host, port: 0, token: () => TOKEN, version: "0" });
+    settings.mcpPort = free.port;
+    await free.close();
+    const service = new McpService(v.host, () => settings, () => http, () => ({ startEndpoint }), "0.0.1");
+    expect((await service.sync()).state).toBe("running");
+    const stream = await listen(settings.mcpPort, { toolsListChanged: true, promptsListChanged: true, resourcesListChanged: true, resourceSubscriptions: [POLICY] });
+    expect(stream.status).toBe(200);
+    await vi.waitFor(() => expect(stream.methods()).toContain("notifications/subscriptions/acknowledged"));
+
+    // An edit to the subscribed concept; an edit to another concept is not told to this client.
+    const edit = async (path: string, from: string, to: string) => {
+      await v.mem.app.vault.process(v.mem.files.get(path)!, (t: string) => t.replace(from, to));
+      await v.manager.analyzeFile(v.mem.files.get(path)! as never, { quiet: true });
+      v.manager.rebuildIndexes();
+      service.changed(0);
+    };
+    await edit(RUNBOOK_PATH, "Issue a replacement key", "Issue a new key");
+    await edit(POLICY_PATH, "# API Rate Limit Policy\n", "# API Rate Limit Policy\n\nChanged.\n");
+    await vi.waitFor(() => expect(stream.seen.filter((s) => s.method === "notifications/resources/updated").map((s) => s.params?.uri)).toEqual([POLICY]));
+    expect(stream.methods()).not.toContain("notifications/resources/list_changed");
+
+    // A new concept: the set of resources changed.
+    const created = await v.mem.app.vault.create("semantic/new-one.md", note(77));
+    await v.manager.analyzeFile(created as never, { quiet: true });
+    v.manager.rebuildIndexes();
+    service.changed(0);
+    await vi.waitFor(() => expect(stream.methods()).toContain("notifications/resources/list_changed"));
+    // Nothing changed: nothing is told.
+    const count = stream.seen.length;
+    service.changed(0);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(stream.seen.length).toBe(count);
+
+    // The write switch: the tool list and the prompt list both change.
+    settings.mcpAllowWrites = true;
+    await service.sync();
+    await vi.waitFor(() => expect(stream.methods()).toEqual(expect.arrayContaining(["notifications/tools/list_changed", "notifications/prompts/list_changed"])));
+    stream.close();
+    await service.dispose();
+  });
+});
+
+describe("curation prompts", () => {
+  it("are offered only while the vault allows writes, and name only tools that exist", async () => {
+    const off = await connect(await vault());
+    expect((await off.client.listPrompts()).prompts.map((p) => p.name)).toEqual([...PROMPT_NAMES]);
+    await off.close();
+    const c = await connect(await vault({ settings: { mcpAllowWrites: true } }));
+    expect((await c.client.listPrompts()).prompts.map((p) => p.name)).toEqual([...PROMPT_NAMES, ...WRITE_PROMPT_NAMES]);
+    expect(WRITE_PROMPT_NAMES).toEqual(["mif_vault_capture", "mif_vault_review_stale", "mif_vault_curate_links", "mif_vault_consolidate"]);
+    const names = new Set<string>([...TOOL_NAMES, ...WRITE_TOOL_NAMES, ...PROMPT_NAMES, ...WRITE_PROMPT_NAMES]);
+    const text = async (name: string, args: Record<string, string>) => JSON.stringify((await c.client.getPrompt({ name, arguments: args })).messages);
+    const stale = await text("mif_vault_review_stale", { namespace: "_semantic/policies", limit: "3" });
+    expect(stale).toContain("mif_vault_list_concepts");
+    expect(stale).toContain("_semantic/policies");
+    expect(stale).toContain("limit: 3");
+    expect(stale).toMatch(/supersede/);
+    const links = await text("mif_vault_curate_links", { entity_type: "how-to-guide" });
+    expect(links).toMatch(/report: \\"gaps\\"/);
+    expect(links).toContain("how-to-guide");
+    expect(links).toContain("mif_vault_write_relationship");
+    const consolidate = await text("mif_vault_consolidate", { topic: "rate limiting incidents" });
+    expect(consolidate).toContain("rate limiting incidents");
+    expect(consolidate).toContain("derived-from");
+    for (const body of [stale, links, consolidate]) {
+      expect(body).toContain("review queue");
+      for (const mentioned of body.match(/mif_vault_[a-z_]+/g) ?? []) expect(names.has(mentioned), mentioned).toBe(true);
+    }
+    await c.close();
+  });
+});
+
+describe("the gap report as a task", () => {
+  const TASKS = "io.modelcontextprotocol/tasks";
+  const post = async (port: number, method: string, params: Record<string, unknown>, name: string | undefined, caps: Record<string, unknown>) => {
+    const m = modern(method, params, name);
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { ...META, "io.modelcontextprotocol/clientCapabilities": caps } } });
+    const r = await raw(port, { headers: m.headers, body });
+    const data = r.body.startsWith("{") ? r.body : r.body.split("\n").find((l) => l.startsWith("data:"))!.slice(5);
+    return JSON.parse(data) as { result?: Record<string, unknown>; error?: { code: number; message: string } };
+  };
+
+  it("gives a client that declares the Tasks extension a task at once, and the report when it polls", async () => {
+    const v = await vault();
+    const c = await connect(v);
+    const port = c.endpoint.port;
+    expect((await c.client.discover()).capabilities).toMatchObject({ extensions: { [TASKS]: {} } });
+    const args = { name: "mif_vault_get_status", arguments: { report: "gaps" } };
+    // A client that does not declare it waits on the request, as before.
+    const plain = await post(port, "tools/call", args, "mif_vault_get_status", {});
+    expect(plain.result).toMatchObject({ resultType: "complete", structuredContent: { report: "gaps" } });
+
+    const started = await post(port, "tools/call", args, "mif_vault_get_status", { extensions: { [TASKS]: {} } });
+    expect(started.result).toMatchObject({ resultType: "task", status: "working", ttlMs: 600_000, pollIntervalMs: 1_000 });
+    const taskId = started.result!.taskId as string;
+    expect(taskId).toMatch(/^[0-9a-f]{64}$/);
+    expect(started.result!.createdAt).toMatch(/^\d{4}-\d\d-\d\dT/);
+    let got = await post(port, "tasks/get", { taskId }, taskId, {});
+    await vi.waitFor(async () => {
+      got = await post(port, "tasks/get", { taskId }, taskId, {});
+      expect(got.result).toMatchObject({ status: "completed" });
+    });
+    expect(got.result).toMatchObject({ taskId, resultType: "complete", result: { structuredContent: { report: "gaps", gaps: plain.result!.structuredContent && (plain.result!.structuredContent as { gaps: unknown }).gaps } } });
+    // Cancelling a finished task leaves it as it is; an unknown id is an invalid-params error for both methods.
+    expect((await post(port, "tasks/cancel", { taskId }, taskId, {})).result).toMatchObject({ resultType: "complete" });
+    expect((await post(port, "tasks/get", { taskId }, taskId, {})).result).toMatchObject({ status: "completed" });
+    const unknown = "0".repeat(64);
+    expect((await post(port, "tasks/get", { taskId: unknown }, unknown, {})).error).toMatchObject({ code: -32602 });
+    expect((await post(port, "tasks/cancel", { taskId: unknown }, unknown, {})).error).toMatchObject({ code: -32602 });
+    // The other reports, and other tools, never become tasks.
+    expect((await post(port, "tools/call", { name: "mif_vault_get_status", arguments: {} }, "mif_vault_get_status", { extensions: { [TASKS]: {} } })).result).toMatchObject({ resultType: "complete" });
+    await c.close();
+  });
+
+  it("keeps a task for its lifetime only, drops the result of a cancelled one, and declines when too many are working", async () => {
+    let now = 1_000_000;
+    const store = new TaskStore(60_000, 500, 2, () => now);
+    let finish: (v: unknown) => void = () => undefined;
+    const slow = store.start((say) => {
+      say("Compared 1 of 3 concepts");
+      return new Promise((resolve) => (finish = resolve));
+    })!;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(store.get(slow.taskId)).toMatchObject({ status: "working", statusMessage: "Compared 1 of 3 concepts", ttlMs: 60_000, pollIntervalMs: 500 });
+    expect(store.start(() => new Promise(() => undefined))).toBeDefined();
+    expect(store.start(() => Promise.resolve(1))).toBeUndefined();
+    expect(store.cancel(slow.taskId)).toBe(true);
+    finish({ content: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.get(slow.taskId)).toMatchObject({ status: "cancelled" });
+    expect(store.get(slow.taskId)).not.toHaveProperty("result");
+    const failed = store.start(() => Promise.reject(new Error("mif-cli went away")))!;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.get(failed.taskId)).toMatchObject({ status: "failed", error: { code: -32603, message: "mif-cli went away" } });
+    now += 60_001;
+    expect(store.get(failed.taskId)).toBeUndefined();
+    expect(store.cancel(slow.taskId)).toBe(false);
   });
 });

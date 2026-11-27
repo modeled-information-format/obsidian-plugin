@@ -129,6 +129,8 @@ export default class MifPlugin extends Plugin {
     const { vault, workspace } = this.app;
     this.registerEvent(this.manager.on("changed", () => {
       this.refreshStatus();
+      // Clients listening for changes are told which concepts changed.
+      this.mcp.changed();
       this.scheduleExplorer();
     }));
     this.registerEvent(workspace.on("file-open", (file) => {
