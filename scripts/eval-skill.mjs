@@ -1,7 +1,7 @@
 // Runs the mif-vault-memory skill's test cases through Claude Code, each with
 // and without the skill, against a fresh in-memory vault per run.
 //   node scripts/eval-skill.mjs [--iteration N] [--only case,case] [--model id] [--concurrency N]
-//   node scripts/eval-skill.mjs --live <vault folder> --cases-file <json>
+//   node scripts/eval-skill.mjs --live <vault folder> --cases-file <json> [--config-dir name]
 //     reads only: runs cases from a JSON file ([{name, prompt, assertions}]) against the server of a
 //     vault that is open in Obsidian, offering the run the read tools and nothing else.
 // Output: skills/mif-vault-memory-workspace/iteration-N/<case>/<with_skill|without_skill>/
@@ -29,6 +29,8 @@ const model = flag("--model");
 const concurrency = Math.max(1, Number(flag("--concurrency") ?? 4) || 4);
 const work = join(repo, `skills/${SKILL_NAME}-workspace`, `iteration-${iteration}`);
 const live = flag("--live");
+// The vault's configuration folder, for a vault that does not use Obsidian's default name.
+const configDir = flag("--config-dir") ?? ".obsidian";
 const casesFile = flag("--cases-file");
 if (live && !casesFile) {
   // The built-in cases write to the vault and seed notes into it; a live vault gets neither.
@@ -59,11 +61,22 @@ const cases = casesFile
         return { name: e.name, prompt, assertions, seed };
       });
 
+// Results are written, and an earlier run's folder deleted, under a path made of these names:
+// each must be one plain folder name, so nothing outside the results folder is ever touched.
+const plain = (s) => typeof s === "string" && /^[\w.-]+$/.test(s) && s !== "." && s !== "..";
+const unsafe = [iteration, ...cases.map((c) => c.name)].filter((s) => !plain(s));
+if (unsafe.length) {
+  console.error(`Not a plain name (letters, digits, dot, dash, underscore): ${unsafe.map((s) => JSON.stringify(s)).join(", ")}`);
+  process.exit(2);
+}
 const unknown = (only ?? []).filter((n) => !cases.some((c) => c.name === n));
 if (unknown.length || !cases.length) {
   console.error(unknown.length ? `No such case: ${unknown.join(", ")}` : "No cases to run.");
   process.exit(2);
 }
+
+// Claude Code processes in flight, ended if the script is interrupted.
+const children = new Set();
 
 /** Run Claude Code once. Resolves with its output, its exit code, and the reason it could not run, if any. */
 function claude(cwd, prompt, config) {
@@ -72,6 +85,7 @@ function claude(cwd, prompt, config) {
     // the user cannot reach the run that is meant to go without it.
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--setting-sources", "project,local", "--mcp-config", config, "--strict-mcp-config", "--allowedTools", live ? [...READ_TOOLS, "Skill"].join(",") : `mcp__${SERVER},Skill,Read,Glob,Grep`, "--max-turns", "25", ...(model ? ["--model", model] : [])];
     const child = spawn("claude", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    children.add(child);
     let out = "";
     let problem;
     child.stdout.on("data", (d) => (out += d));
@@ -82,10 +96,12 @@ function claude(cwd, prompt, config) {
     }, 600_000);
     child.on("error", (e) => {
       clearTimeout(timer);
+      children.delete(child);
       resolve({ out, code: null, problem: `claude could not be started: ${e.message}` });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      children.delete(child);
       resolve({ out, code, problem });
     });
   });
@@ -100,8 +116,9 @@ function failure(config, ran, events, result, calls) {
   if (ran.code !== 0) return `claude exited with code ${ran.code}`;
   const init = events.find((e) => e.type === "system" && e.subtype === "init");
   // Without the vault's server a run answers from general knowledge, cheaply, and measures nothing.
+  // A server still connecting when the run began counts if the run went on to call it.
   const server = (init?.mcp_servers ?? []).find((s) => s.name === SERVER);
-  if (server?.status !== "connected") return `the vault's server was not connected (${server?.status ?? "not listed"})`;
+  if (server?.status !== "connected" && !calls.some((k) => k.tool.startsWith("mif_vault_"))) return `the vault's server was not connected (${server?.status ?? "not listed"})`;
   const has = (init?.skills ?? []).includes(SKILL_NAME);
   if (config === "with_skill" && !has) return "the skill was not offered to the run that should have it";
   if (config === "without_skill" && (has || calls.some((k) => k.tool === "Skill" && k.input?.skill === SKILL_NAME))) return "the skill reached the run that should go without it";
@@ -110,10 +127,11 @@ function failure(config, ran, events, result, calls) {
 
 // Project folders in use, each holding a server token: removed when a run ends, and when the script is interrupted.
 const projects = new Set();
-for (const signal of ["SIGINT", "SIGTERM"]) {
+for (const [signal, status] of [["SIGINT", 130], ["SIGTERM", 143]]) {
   process.on(signal, () => {
+    for (const child of children) child.kill("SIGKILL");
     for (const p of projects) rmSync(p, { recursive: true, force: true });
-    process.exit(130);
+    process.exit(status);
   });
 }
 
@@ -134,7 +152,7 @@ async function run(c, config) {
   let project;
   try {
     if (live) {
-      const d = JSON.parse(readFileSync(join(live, ".obsidian/plugins/mif/data.json"), "utf8"));
+      const d = JSON.parse(readFileSync(join(live, configDir, "plugins/mif/data.json"), "utf8"));
       vault = { port: d.mcpPort, token: d.mcpToken, paths: () => [], read: () => undefined };
     } else {
       vault = await startMemory({ mcpAllowWrites: true, mcpWriteLimit: 500, mcpPurpose: "API gateway operations: rate limits, incidents and runbooks" });
