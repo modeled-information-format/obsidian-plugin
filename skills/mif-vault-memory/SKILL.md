@@ -1,6 +1,6 @@
 ---
 name: mif-vault-memory
-description: Playbooks for orchestrating the mif_vault_* tools of a MIF Obsidian vault (MCP servers named mif-vault or mif-vault-<name>) so that a question is answered from the knowledge graph in the fewest calls and tokens, and so that what you add makes the graph richer and better linked. Use it whenever such a server is connected and you are about to look something up, answer a "what do we know / what depends on / how are these related / what changed" question, trace or compare concepts, or capture, link, enrich, consolidate, de-duplicate or tidy the vault. Load it before your first mif_vault_* call in a session.
+description: Playbooks for orchestrating the mif_vault_* tools of a MIF Obsidian vault (MCP servers named mif-vault, or mif-vault- followed by a vault's name) so that a question is answered from the knowledge graph in the fewest calls and tokens, and so that what you add makes the graph richer and better linked. Use it whenever such a server is connected and you are about to look something up, answer a "what do we know / what depends on / how are these related / what changed" question, trace or compare concepts, or capture, link, enrich, consolidate, de-duplicate or tidy the vault. Load it before your first mif_vault_* call in a session.
 ---
 
 # Orchestrating a MIF vault
@@ -29,9 +29,10 @@ at the bottom rung and climb only if the answer is not there yet.
 
 Habits that waste the most, all seen in real sessions:
 
-- `detail: "full"` on lists and searches. Compact already flags any concept
-  that calls for caution. Ask for full only for the one or two concepts
-  whose weighing you will quote.
+- `detail: "full"` on lists and searches. Compact already marks a concept
+  that is stale or expired; it does not show trust. Ask for full only for
+  the one or two concepts whose weighing you will quote (see the trust
+  rule at the end of the next section).
 - `include_expired: true` by reflex. Use it for history questions only.
 - `include_frontmatter`, and `include: [citations, provenance, entities]`,
   on every read. Ask for the one you need, on the concept you will cite.

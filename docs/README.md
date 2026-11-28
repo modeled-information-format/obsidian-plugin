@@ -2,7 +2,7 @@
 id: 7293619c-c184-5265-af9f-043fd575672f
 type: semantic
 created: 2026-10-08T15:18:08Z
-modified: 2026-10-08T15:18:08Z
+modified: 2026-11-28T00:39:07Z
 namespace: _semantic/reference
 title: Documentation
 tags:
@@ -40,6 +40,8 @@ relationships:
   target: how-to/semantic-search.md
 - type: relates-to
   target: how-to/mcp-server.md
+- type: relates-to
+  target: how-to/agent-skill.md
 - type: relates-to
   target: how-to/migrate-from-0-1.md
 - type: relates-to
@@ -113,6 +115,7 @@ them as they are.
 - [Export JSON-LD and query MIF data](how-to/export-and-query.md)
 - [Search concepts by meaning with mif-cli](how-to/semantic-search.md)
 - [Give an AI agent your vault as memory over MCP](how-to/mcp-server.md)
+- [Install the vault memory skill for Claude Code and run its test cases](how-to/agent-skill.md)
 - [Migrate MIF 0.1 notes](how-to/migrate-from-0-1.md)
 - [Instantiate or update the release pipeline with Copier](how-to/instantiate-with-copier.md) (maintainers)
 
@@ -148,6 +151,7 @@ them as they are.
 - relates-to [Export JSON-LD and query MIF data](how-to/export-and-query.md)
 - relates-to [Search concepts by meaning with mif-cli](how-to/semantic-search.md)
 - relates-to [Give an AI agent your vault as memory over MCP](how-to/mcp-server.md)
+- relates-to [Install the vault memory skill for Claude Code and run its test cases](how-to/agent-skill.md)
 - relates-to [Migrate MIF 0.1 notes](how-to/migrate-from-0-1.md)
 - relates-to [Instantiate this template with Copier](how-to/instantiate-with-copier.md)
 - relates-to [Commands](reference/commands.md)
