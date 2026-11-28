@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: uses-incoming-relationships-for-impact
+expected_outcome: |
+  The agent reads the rate limit policy's relationships in the incoming direction as well as outgoing, and reports the concepts that point at it by title or path, with how fresh or trusted each is where that matters.

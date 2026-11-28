@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: splits-two-claims-into-two-concepts
+expected_outcome: |
+  The two decisions are separate claims, so two concepts are created, one each. The key rotation decision is linked to the Rotate API Keys runbook; neither concept is left without a relationship.

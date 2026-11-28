@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: consolidates-episodes-into-one-concept
+expected_outcome: |
+  The agent finds the incident records, and creates one semantic concept stating the pattern they share (a single batch client's unthrottled job saturating the gateway until throttled at the edge), with a derived-from relationship to each of the four incidents. The incident records are kept and not edited.

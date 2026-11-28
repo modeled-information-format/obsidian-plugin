@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: captures-one-fact-fully-linked
+expected_outcome: |
+  One concept is created for the decision, complete on arrival: a summary, a relationship to the January incident of a specific type, Dana Reyes as an entity reference, and the minutes as a citation. It is not created bare and linked afterwards.

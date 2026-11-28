@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: connects-an-orphan-without-editing-it
+expected_outcome: |
+  The orphan gains typed relationships to the January incident and to the rate limit policy. Its text is left alone, so it is not sent back to review as an edited concept.
