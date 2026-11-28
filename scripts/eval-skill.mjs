@@ -5,7 +5,9 @@
 //     reads only: runs cases from a JSON file ([{name, prompt, assertions}]) against the server of a
 //     vault that is open in Obsidian, offering the run the read tools and nothing else.
 // Output: skills/mif-vault-memory-workspace/iteration-N/<case>/<with_skill|without_skill>/
-// Exits 1 when any run failed; a failed run's timing.json says why in "failed".
+// Exits 1 when any run failed; a failed run's timing.json says why in "failed" and has null measures.
+// Runs load project settings only, so the model is Claude Code's default unless --model names one;
+// timing.json records the model each run used.
 
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -57,6 +59,12 @@ const cases = casesFile
         return { name: e.name, prompt, assertions, seed };
       });
 
+const unknown = (only ?? []).filter((n) => !cases.some((c) => c.name === n));
+if (unknown.length || !cases.length) {
+  console.error(unknown.length ? `No such case: ${unknown.join(", ")}` : "No cases to run.");
+  process.exit(2);
+}
+
 /** Run Claude Code once. Resolves with its output, its exit code, and the reason it could not run, if any. */
 function claude(cwd, prompt, config) {
   return new Promise((resolve) => {
@@ -90,15 +98,38 @@ function failure(config, ran, events, result, calls) {
   if (result.subtype !== "success") return `claude reported ${result.subtype ?? "an error"}`;
   if (result.is_error) return `claude reported an error: ${String(result.result ?? "").slice(0, 160)}`;
   if (ran.code !== 0) return `claude exited with code ${ran.code}`;
-  const offered = events.find((e) => e.type === "system" && e.subtype === "init")?.skills ?? [];
-  const has = offered.includes(SKILL_NAME);
+  const init = events.find((e) => e.type === "system" && e.subtype === "init");
+  // Without the vault's server a run answers from general knowledge, cheaply, and measures nothing.
+  const server = (init?.mcp_servers ?? []).find((s) => s.name === SERVER);
+  if (server?.status !== "connected") return `the vault's server was not connected (${server?.status ?? "not listed"})`;
+  const has = (init?.skills ?? []).includes(SKILL_NAME);
   if (config === "with_skill" && !has) return "the skill was not offered to the run that should have it";
   if (config === "without_skill" && (has || calls.some((k) => k.tool === "Skill" && k.input?.skill === SKILL_NAME))) return "the skill reached the run that should go without it";
   return undefined;
 }
 
+// Project folders in use, each holding a server token: removed when a run ends, and when the script is interrupted.
+const projects = new Set();
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    for (const p of projects) rmSync(p, { recursive: true, force: true });
+    process.exit(130);
+  });
+}
+
+/** Record a run that produced nothing usable, so no earlier result is left standing in its place. */
+function recordFailure(c, config, reason) {
+  const dir = join(work, c.name, config);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "timing.json"), JSON.stringify({ failed: reason, total_tokens: null, duration_ms: null, total_duration_seconds: null, cost_usd: null, tool_calls: null, turns: null, tool_result_chars: null }, null, 2));
+  console.log(`${c.name} · ${config}: FAILED (${reason})`);
+}
+
 async function run(c, config) {
   const started = Date.now();
+  const dir = join(work, c.name, config);
+  // Start clean: a result from an earlier run of this iteration must not be read as this run's.
+  rmSync(dir, { recursive: true, force: true });
   let vault;
   let project;
   try {
@@ -114,6 +145,7 @@ async function run(c, config) {
     // A project folder of its own, readable by this user only: the skill is there for one
     // configuration and absent for the other, and the server's token is in its mcp.json.
     project = mkdtempSync(join(tmpdir(), "mif-skill-eval-"));
+    projects.add(project);
     if (config === "with_skill") cpSync(skill, join(project, ".claude/skills", SKILL_NAME), { recursive: true, filter: (p) => relative(skill, p).split(sep)[0] !== "evals" });
     const mcp = join(project, "mcp.json");
     writeFileSync(mcp, JSON.stringify({ mcpServers: { [SERVER]: { type: "http", url: `http://127.0.0.1:${vault.port}/mcp`, headers: { Authorization: `Bearer ${vault.token}` } } } }), { mode: 0o600 });
@@ -132,7 +164,6 @@ async function run(c, config) {
     const after = snapshot();
     const changed = Object.fromEntries(Object.entries(after).filter(([p, t]) => before[p] !== t));
 
-    const dir = join(work, c.name, config);
     mkdirSync(join(dir, "outputs"), { recursive: true });
     writeFileSync(join(dir, "outputs/answer.md"), `${result?.result ?? "(no final message)"}\n`);
     writeFileSync(join(dir, "outputs/tool-calls.md"), `${calls.map((k, i) => `${i + 1}. \`${k.tool}\` ${JSON.stringify(k.input)}`).join("\n") || "(no tool calls)"}\n`);
@@ -142,12 +173,22 @@ async function run(c, config) {
     const tokens = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
     const ms = Date.now() - started;
     const vaultCalls = calls.filter((k) => k.tool.startsWith("mif_vault_")).length;
-    // A failed run keeps what it produced for reading, and "failed" tells a reader to leave its numbers out of any total.
-    writeFileSync(join(dir, "timing.json"), JSON.stringify({ failed: failed ?? null, total_tokens: tokens, duration_ms: ms, total_duration_seconds: Math.round(ms / 100) / 10, cost_usd: result?.total_cost_usd, tool_calls: vaultCalls, turns: result?.num_turns, tool_result_chars: returned }, null, 2));
-    console.log(`${c.name} · ${config}: ${failed ? `FAILED (${failed})` : `${vaultCalls} vault call(s), ${Object.keys(changed).length} note(s) changed, ${Math.round(ms / 1000)}s`}`);
-    return !failed;
+    const measured = { total_tokens: tokens, duration_ms: ms, total_duration_seconds: Math.round(ms / 100) / 10, cost_usd: result?.total_cost_usd, tool_calls: vaultCalls, turns: result?.num_turns, tool_result_chars: returned };
+    const usedModel = events.find((e) => e.type === "system" && e.subtype === "init")?.model ?? null;
+    if (failed) {
+      // A failed run keeps what it produced for reading, under "partial"; its measures are null so nothing totals them.
+      recordFailure(c, config, failed);
+      writeFileSync(join(dir, "timing.json"), JSON.stringify({ failed, model: usedModel, ...Object.fromEntries(Object.keys(measured).map((k) => [k, null])), partial: measured }, null, 2));
+      return false;
+    }
+    writeFileSync(join(dir, "timing.json"), JSON.stringify({ failed: null, model: usedModel, ...measured }, null, 2));
+    console.log(`${c.name} · ${config}: ${vaultCalls} vault call(s), ${Object.keys(changed).length} note(s) changed, ${Math.round(ms / 1000)}s`);
+    return true;
   } finally {
-    if (project) rmSync(project, { recursive: true, force: true });
+    if (project) {
+      rmSync(project, { recursive: true, force: true });
+      projects.delete(project);
+    }
     await vault?.close?.();
   }
 }
@@ -163,7 +204,7 @@ await Promise.all(
   Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     for (let job = queue.shift(); job; job = queue.shift()) {
       const ok = await run(...job).catch((e) => {
-        console.log(`${job[0].name} · ${job[1]}: FAILED (${e.message})`);
+        recordFailure(...job, e.message);
         return false;
       });
       if (!ok) failures += 1;

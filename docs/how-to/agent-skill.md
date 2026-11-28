@@ -84,16 +84,22 @@ holds one checkable statement per file.
 
    Each run gets its own in-memory vault, so no vault of yours is read or
    changed. To run some cases only, add `--only` with their folder names,
-   separated by commas.
+   separated by commas. Use this command and not `claude plugin eval`,
+   which does not start a vault server for the cases.
+
+   The runs ignore your personal Claude Code settings and skills, so the
+   model is Claude Code's default; add `--model` with a model's id to
+   choose one.
 
 3. Read the results under
    `skills/mif-vault-memory-workspace/iteration-1/<case>/<with_skill|without_skill>/`:
    `outputs/answer.md`, `outputs/tool-calls.md`, `outputs/notes-changed.md`,
-   and `timing.json` (tokens, cost, vault calls). Git ignores this folder.
+   and `timing.json` (model, tokens, cost, vault calls). Git ignores this
+   folder.
 
 The command prints one line per run and exits with status 1 if any run
 failed. A failed run has its reason in the `failed` field of its
-`timing.json`; leave its numbers out of any total.
+`timing.json`, and its measures are null.
 
 ## Relationships
 
